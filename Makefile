@@ -1,4 +1,4 @@
-source_directories:=src src/x86_32
+source_directories:=src src/arch/x86_32 src/library
 c_sources:=$(foreach directory, $(source_directories), $(wildcard $(directory)/*.c))
 s_sources:=$(foreach directory, $(source_directories), $(wildcard $(directory)/*.s))
 objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
@@ -9,7 +9,7 @@ ISO:=os.iso
 GRUB:=tmp/iso/boot/grub/stage2_eltorito
 
 CC:=i686-elf-gcc
-CFLAGS:=-ffreestanding -O2 -g
+CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu99 -I src/library
 
 AS:=i686-elf-as
 ASFLAGS:=
@@ -45,7 +45,7 @@ tmp/%.o : %.c
 
 $(KERNEL): linking.ld $(objects)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -lgcc -nostdlib -T $^ -o $@
+	$(CC) $(CFLAGS) -T $^ -o $@
 
 .PHONY: run
 run:

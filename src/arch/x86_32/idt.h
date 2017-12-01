@@ -1,7 +1,7 @@
 #ifndef X86_IDT_HEADER
 #define X86_IDT_HEADER
 
-#include <stdint.h>
+#include <library.h>
 
 /* 
  * Interrupt Descriptor Table
@@ -13,18 +13,18 @@
 
 // Entries
 struct idt_entry_struct {
-	uint16_t base_low;
-	uint16_t select;
-	uint8_t zero;
-	uint8_t flags;
-    uint16_t base_high;
+	u16 base_low;
+	u16 select;
+	u8 zero;
+	u8 flags;
+    u16 base_high;
 } __attribute__((packed));
 typedef struct idt_entry_struct idt_entry_t;
 
 // Pointer
 struct idt_pointer_struct {
-	uint16_t limit;
-	uint32_t base;
+	u16 limit;
+	u32 base;
 } __attribute__((packed));
 typedef struct idt_pointer_struct idt_pointer_t;
 
@@ -34,7 +34,7 @@ idt_pointer_t idt_pointer;
 
 // Functions
 extern void idt_load();
-void idt_set(uint8_t index, uint32_t base, uint16_t select, uint8_t flags);
+void idt_set(u8 index, u32 base, u16 select, u8 flags);
 void idt_initialize();
 
 // x86 Exception Handlers
@@ -72,15 +72,15 @@ extern void ih_30();
 extern void ih_31();
 
 typedef struct x86_exception_struct {
-   uint32_t ss, gs, fs, es, ds; // Pushed
+   u32 ss, gs, fs, es, ds; // Pushed
 /*
-   uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
+   u32 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
 */
-   uint32_t idt_index; // Pushed by us
-   uint32_t error_code; // Pushed by us if the CPU didn't push one
+   u32 idt_index; // Pushed by us
+   u32 error_code; // Pushed by us if the CPU didn't push one
 /*
    // Pushed by the processor automatically
-   uint32_t eip, cs, eflags, old_esp, old_ss;
+   u32 eip, cs, eflags, old_esp, old_ss;
 */
 } __attribute__((packed));
 typedef struct x86_exception_struct x86_exception_t;
