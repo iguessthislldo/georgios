@@ -34,11 +34,5 @@ void fb_set_color(fb_color_t fg, fb_color_t bg);
 void fb_cursor(u32 x, u32 y);
 void fb_place_char(char c, fb_color_t color, u32 x, u32 y);
 void fb_print_char(char c);
-void fb_print_nstring(const char * string, u32 size);
-void fb_print_string(const char * string);
-void fb_print_uint(u32 value);
-void fb_print_int(i32 value);
-void fb_print_hex(u32 value);
-void fb_print_byte(u8 value);
 
 #endif

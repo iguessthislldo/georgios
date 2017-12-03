@@ -9,8 +9,6 @@
 
 #define IDT_SIZE 256
 
-#define halt() __asm__ ("cli;hlt\n\t");
-
 // Entries
 struct idt_entry_struct {
 	u16 base_low;
@@ -71,7 +69,7 @@ extern void ih_29();
 extern void ih_30();
 extern void ih_31();
 
-typedef struct x86_exception_struct {
+struct x86_exception_struct {
    u32 ss, gs, fs, es, ds; // Pushed
 /*
    u32 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha

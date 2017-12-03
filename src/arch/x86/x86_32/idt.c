@@ -1,5 +1,6 @@
 #include "idt.h"
-#include "fb.h"
+
+#include <print.h>
 
 void idt_set(u8 index, u32 base, u16 select, u8 flags) {
     idt[index].base_low = base & 0xFFFF;
@@ -89,14 +90,14 @@ BOCHS_BREAK
 */
 
 void x86_exception_handler(x86_exception_t e) {
-    fb_print_string("<Interrupt ");
-    fb_print_uint(e.idt_index);
-    fb_print_string(": \"");
+    print_string("<Interrupt ");
+    print_uint(e.idt_index);
+    print_string(": \"");
     if (e.idt_index < 32) {
-        fb_print_string(x86_exception_messages[e.idt_index]);
+        print_string(x86_exception_messages[e.idt_index]);
     } else {
-        fb_print_string("No message found for this exception");
+        print_string("No message found for this exception");
     }
-    fb_print_string("\">\n");
+    print_string("\">\n");
     halt();
 }

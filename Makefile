@@ -1,15 +1,15 @@
-source_directories:=src src/arch/x86_32 src/library
-c_sources:=$(foreach directory, $(source_directories), $(wildcard $(directory)/*.c))
-s_sources:=$(foreach directory, $(source_directories), $(wildcard $(directory)/*.s))
+rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
+
+c_sources:=$(call rwildcard, src/, *.c)
+s_sources:=$(call rwildcard, src/, *.s)
 objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
-VPATH:=src:src/x86_32
 
 KERNEL:=tmp/iso/boot/kernel
 ISO:=os.iso
 GRUB:=tmp/iso/boot/grub/stage2_eltorito
 
 CC:=i686-elf-gcc
-CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu99 -I src/library
+CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu99 -I src/library -I src/arch
 
 AS:=i686-elf-as
 ASFLAGS:=

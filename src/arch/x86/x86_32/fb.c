@@ -27,6 +27,7 @@ void fb_initialize(void) {
 			fb_buffer[index] = fb_color_char(' ', fb_color);
 		}
 	}
+    fb_cursor(0, 0);
 }
  
 void fb_cursor(u32 x, u32 y) {
@@ -76,68 +77,4 @@ void fb_print_char(char c) {
         fb_cursor(fb_column + 1, fb_row);
     }
 }
- 
-void fb_print_nstring(const char * string, u32 size) {
-	for (u32 i = 0; i < size; i++) {
-		fb_print_char(string[i]);
-    }
-}
- 
-void fb_print_string(const char * string) {
-	fb_print_nstring(string, strlen(string));
-}
 
-void fb_print_int_recurse(u32 value) {
-    if (value) {
-        u8 digit = value % 10;
-        fb_print_int_recurse(value / 10);
-        fb_print_char('0' + digit);
-    }
-}
-
-void fb_print_uint(u32 value) {
-    if (!value) {
-        fb_print_char('0');
-        return;
-    }
-    fb_print_int_recurse(value);
-}
-
-void fb_print_int(i32 value) {
-    if (value < 0) {
-        fb_print_char('-');
-        value = -value;
-    }
-    fb_print_uint(value);
-}
-
-void fb_print_nibble(u8 value) {
-    value = value % 16;
-    if (value < 10) {
-        fb_print_char('0' + value);
-    } else {
-        fb_print_char('A' + value - 10);
-    }
-}
-
-void fb_print_hex_recurse(u32 value) {
-    if (value) {
-        fb_print_hex_recurse(value / 16);
-        fb_print_nibble(value);
-    }
-}
-
-void fb_print_hex(u32 value) {
-    fb_print_char('0');
-    fb_print_char('x');
-    if (!value) {
-        fb_print_char('0');
-        return;
-    }
-    fb_print_hex_recurse(value);
-}
-
-void fb_print_byte(u8 value) {
-    fb_print_nibble(value >> 4);
-    fb_print_nibble(value);
-}
