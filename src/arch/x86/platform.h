@@ -16,15 +16,6 @@
 #define x86
 #define halt() __asm__ ("cli;hlt\n\t");
 
-/*
- * Varargs
- */
-typedef void * va_list;
-#define va_start(list, preargument) \
-    (list = ((va_list) &preargument) + sizeof(preargument))
-#define va_arg(list , type) \
-    (*(type*)((list += sizeof(type)) - sizeof(type)))
-
 #endif
 #endif
 #endif

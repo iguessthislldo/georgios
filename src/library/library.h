@@ -4,12 +4,12 @@
 /*
  * Integer Types
  */
-typedef char i8;
-typedef unsigned char u8;
-typedef short i16;
-typedef unsigned short u16;
-typedef int i32;
-typedef unsigned int u32;
+typedef char i1;
+typedef unsigned char u1;
+typedef short i2;
+typedef unsigned short u2;
+typedef int i4;
+typedef unsigned int u4;
 
 /*
  * Floating Point Types
@@ -20,14 +20,14 @@ typedef double f64;
 /*
  * Boolean Type
  */
-typedef u8 bool;
+typedef u1 bool;
 #define true 1
 #define false 0
 
 /*
  * Utility Functions
  */
-u32 strlen(const char * string);
-void * memset(void * pointer, i8 value, u32 number);
+u4 strlen(const char * string);
+void * memset(void * pointer, i1 value, u4 number);
 
 #endif

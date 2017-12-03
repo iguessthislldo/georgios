@@ -3,12 +3,12 @@
 
 #include <library.h>
 
-static const u32 FB_WIDTH = 80;
-static const u32 FB_HEIGHT = 25;
-static const u16 FB_COMMAND_PORT = 0x3D4;
-static const u16 FB_DATA_PORT = 0x3D5;
-static const u8 FB_HIGH_BYTE_COMMAND = 14;
-static const u8 FB_LOW_BYTE_COMMAND = 15;
+static const u4 FB_WIDTH = 80;
+static const u4 FB_HEIGHT = 25;
+static const u2 FB_COMMAND_PORT = 0x3D4;
+static const u2 FB_DATA_PORT = 0x3D5;
+static const u1 FB_HIGH_BYTE_COMMAND = 14;
+static const u1 FB_LOW_BYTE_COMMAND = 15;
 
 typedef enum fb_color_t_enum {
 	FB_COLOR_BLACK = 0,
@@ -31,8 +31,8 @@ typedef enum fb_color_t_enum {
  
 void fb_initialize();
 void fb_set_color(fb_color_t fg, fb_color_t bg);
-void fb_cursor(u32 x, u32 y);
-void fb_place_char(char c, fb_color_t color, u32 x, u32 y);
+void fb_cursor(u4 x, u4 y);
+void fb_place_char(char c, fb_color_t color, u4 x, u4 y);
 void fb_print_char(char c);
 
 #endif
