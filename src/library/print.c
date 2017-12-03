@@ -9,7 +9,10 @@ void print_nstring(const char * string, u32 size) {
 }
  
 void print_string(const char * string) {
-	print_nstring(string, strlen(string));
+    u32 i = 0;
+	for (char c = string[i]; c; c = string[++i]) {
+		print_char(c);
+    }
 }
 
 void print_int_recurse(u32 value) {
@@ -67,47 +70,84 @@ void print_byte(u8 value) {
     print_nibble(value);
 }
 
-void printf(const char * format, ...) {
+void print_format(const char * format, ...) {
     va_list args;
     va_start(args, format);
     bool escape = false;
+    char size = 'l';
     u32 i = 0;
 
     for (char c = format[i]; c != '\0'; c = format[++i]) {
         if (escape) {
             switch (c) {
 
+            // Size
+            case 'b':
+            case 'h':
+            case 'l':
+                size = c;
+                break;
+
             // Signed Ints
             case 'd':
-                print_int(va_arg(args, i32));
+                if (size == 'b') {
+                    print_int(va_arg(args, i8));
+                } else if (size == 's') {
+                    print_int(va_arg(args, i16));
+                } else {
+                    print_int(va_arg(args, i32));
+                }
+                escape = false;
                 break;
 
             // Unsigned Ints
             case 'u':
-                print_uint(va_arg(args, u32));
+                if (size == 'b') {
+                    print_uint(va_arg(args, u8));
+                } else if (size == 's') {
+                    print_uint(va_arg(args, u16));
+                } else {
+                    print_uint(va_arg(args, u32));
+                }
+                escape = false;
+                break;
+
+            // Hex
+            case 'x':
+                if (size == 'b') {
+                    print_hex(va_arg(args, u8));
+                } else if (size == 's') {
+                    print_hex(va_arg(args, u16));
+                } else {
+                    print_hex(va_arg(args, u32));
+                }
+                escape = false;
                 break;
 
             // Characters 
             case 'c':
                 print_char(va_arg(args, char));
+                escape = false;
                 break;
 
             // Strings
             case 's':
                 print_string(va_arg(args, char*));
+                escape = false;
                 break;
 
             // Percent Sign
             case '%':
                 print_char('%');
+                escape = false;
                 break;
 
             // Print the pair if we don't know
             default:
                 print_char('%');
                 print_char(c);
+                escape = false;
             }
-            escape = false;
         } else if (c == '%') {
             escape = true;
         } else {

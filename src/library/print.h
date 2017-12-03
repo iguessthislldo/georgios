@@ -6,5 +6,5 @@ void print_uint(u32 value);
 void print_int(i32 value);
 void print_hex(u32 value);
 void print_byte(u8 value);
-void printf(const char * format, ...);
+void print_format(const char * format, ...);
 

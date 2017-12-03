@@ -24,7 +24,7 @@ void kernel_main() {
     }
     print_string("Kernal Loaded\n");
 
-    printf("Page Directory: %u\n", &page_directory);
+    print_format("Page Directory: %u\n", &page_directory);
 
     print_string("Kernal Done\n");
     halt();
