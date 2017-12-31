@@ -24,8 +24,6 @@ void kernel_main() {
     }
     print_string("Kernal Loaded\n");
 
-
-
     print_string("Kernal Done\n");
     halt();
 }

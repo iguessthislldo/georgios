@@ -39,6 +39,13 @@ void print_int(i4 value) {
     print_uint(value);
 }
 
+void print_int_sign(i4 value, bool show_positive) {
+    if (value > 0 && show_positive) {
+        print_char('+');
+    }
+    print_int(value);
+}
+
 void print_nibble(u1 value) {
     value = value % 16;
     if (value < 10) {
@@ -48,7 +55,7 @@ void print_nibble(u1 value) {
     }
 }
 
-void print_hex_recurse(u4 value) {
+inline void print_hex_recurse(u4 value) {
     if (value) {
         print_hex_recurse(value / 16);
         print_nibble(value);
@@ -77,6 +84,8 @@ void print_format(const char * format, ...) {
     u1 size = 0;
     char type = 0;
     bool is_signed = false;
+    bool show_positive = false;
+    bool reset = false;
     u4 i = 0;
 
     for (char c = format[i]; c != '\0'; c = format[++i]) {
@@ -88,11 +97,11 @@ void print_format(const char * format, ...) {
                 case 'd':
                     if (is_signed) {
                         if (size == 1) {
-                            print_int(va_arg(args, i1));
+                            print_int_sign(va_arg(args, i1), show_positive);
                         } else if (size == 2) {
-                            print_int(va_arg(args, i2));
+                            print_int_sign(va_arg(args, i2), show_positive);
                         } else {
-                            print_int(va_arg(args, i4));
+                            print_int_sign(va_arg(args, i4), show_positive);
                         }
                     } else {
                         if (size == 1) {
@@ -129,7 +138,7 @@ void print_format(const char * format, ...) {
                 default: // Nothing ...
                     break;
                 }
-                escape = false;
+                reset = true;
             } else switch (c) {
             case 'd':
             case 'x':
@@ -138,6 +147,8 @@ void print_format(const char * format, ...) {
                 type = c;
                 break;
 
+            case '+':
+                show_positive = true;
             case '-':
                 is_signed = true;
                 break;
@@ -150,18 +161,25 @@ void print_format(const char * format, ...) {
 
             case '{':
                 print_char('{');
-                escape = false;
+                reset = true;
                 break;
 
             default:
-                escape = false;
+                reset = true;
             }
         } else if (c == '{') {
             escape = true;
-            size = 0;
-            type = 0;
         } else {
             print_char(c);
+        }
+
+        if (reset) {
+            escape = false;
+            type = 0;
+            size = 0;
+            is_signed = false;
+            show_positive = false;
+            reset = false;
         }
     }
 }
