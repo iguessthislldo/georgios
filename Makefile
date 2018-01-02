@@ -57,6 +57,7 @@ tmp/%.o : %.c
 $(KERNEL): linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
+	objdump -S $(KERNEL) > tmp/annotated_kernel
 
 .PHONY: run
 run:

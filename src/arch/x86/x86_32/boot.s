@@ -30,7 +30,7 @@ System V ABI standard and de-facto extensions. The compiler will assume the
 stack is properly aligned and failure to align the stack will result in
 undefined behavior.
 */
-.section .bs
+.section .bss
 .align 16
 stack_bottom:
 .skip 16384 # 16 KiB
@@ -39,7 +39,7 @@ stack_top:
 /*
  * PAGE DIRECTORY
  */
-.section .bs
+.section .bss
 .global page_directory
 .align 4096 // Align to Page Size
 page_directory:

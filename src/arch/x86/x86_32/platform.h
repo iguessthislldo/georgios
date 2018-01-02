@@ -16,12 +16,5 @@
 // Connect the print library to x86 framebuffer
 #define print_char fb_print_char
 
-/*
- * Varargs
- */
-typedef void * va_list;
-#define va_start(list, preargument) list = ((va_list) &preargument) + sizeof(preargument)
-#define va_arg(list , type) *((type*)((list += sizeof(type)) - sizeof(type)))
-
 #endif
 #endif

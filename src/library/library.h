@@ -30,4 +30,17 @@ typedef u1 bool;
 u4 strlen(const char * string);
 void * memset(void * pointer, i1 value, u4 number);
 
+/*
+ * Varargs
+ */
+#if defined(__GNUC__)
+typedef __builtin_va_list va_list;
+#define va_start(list, preargument) __builtin_va_start(list, preargument)
+#define va_arg(list, type) __builtin_va_arg(list, type)
+#else
+typedef void * va_list;
+#define va_start(list, preargument) list = ((va_list) &preargument) + sizeof(preargument)
+#define va_arg(list , type) *((type*)((list += sizeof(type)) - sizeof(type)))
+#endif
+
 #endif
