@@ -2,6 +2,16 @@
 #include <print.h>
 #include <platform.h>
 
+#include "frame.h"
+
+#define FRAME_LEVELS 12 // 4096 * 4KiB Frames = 16MiB
+#define FRAMES 1 << FRAME_LEVELS
+Frame_Context fctx;
+u1 frame_info[FRAMES];
+
+extern u4 start_of_kernel;
+extern u4 end_of_kernel;
+
 #define TEST_RESULT(result)\
     print_string((result) ? "OK\n" : "FAILED\n");\
     if (!(result)) { return false; }
@@ -33,10 +43,6 @@ void page_directory_print(u4 index) {
     }
 }
 
-void direct_paging(u4 address, u4 ammount) {
-    
-}
-
 // Bochs i386 32 MiB Usable Memory
 // 0 -> 0x9f000 - 1
 // 0x100000 -> 0x100000 + 0x1ef0000 - 1
@@ -48,16 +54,16 @@ void kernel_main() {
     }
     print_string("Kernel Loaded\n");
 
-    print_hex(&page_directory[0]);
-    print_char('\n');
+    print_format("Start of kernel: {x}\n", &start_of_kernel);
+    print_format("End of kernel: {x}\n", &end_of_kernel);
 
-    page_directory_t v;
-    v.address = 0xABCDEF11;
-    v.present = true;
-    page_directory_set(32, v);
+    fctx.max_level = FRAME_LEVELS;
+    fctx.frame_count = FRAMES;
+    fctx.frame_size = 4 * 1024; // 4 KiB
+    fctx.frame_info = &frame_info[0];
+    fctx.begin = &end_of_kernel;
 
-    enable_paging();
-    disable_paging();
+    u4 * page_table = allocate_frames(fctx, 1);
 
     print_string("Kernel Done\n");
     halt();

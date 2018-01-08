@@ -127,7 +127,7 @@ void print_format(const char * format, ...) {
 
                 // Characters 
                 case 'c':
-                    print_char(va_arg(args, char));
+                    print_char(va_arg(args, u4));
                     break;
 
                 // Strings

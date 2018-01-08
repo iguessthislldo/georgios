@@ -12,3 +12,4 @@ void * memset(void * pointer, i1 value, u4 number) {
     }
     return pointer;
 }
+

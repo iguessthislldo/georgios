@@ -14,8 +14,8 @@ typedef unsigned int u4;
 /*
  * Floating Point Types
  */
-typedef float f32;
-typedef double f64;
+typedef float f4;
+typedef double f8;
 
 /*
  * Boolean Type
@@ -29,6 +29,21 @@ typedef u1 bool;
  */
 u4 strlen(const char * string);
 void * memset(void * pointer, i1 value, u4 number);
+
+/*
+ * Bit Operations
+ */
+#define GET_BIT(value, n) ((value) & (1 << (n)))
+#define SET_BIT(var, n, value) \
+    ((value) ? ((var) | (1 << (n))) : ((var) & ~(1 << (n))))
+#define BIT_ROUND_MASK(N) ((1 << (N)) - 1)
+#define BIT_ROUND_DOWN(VALUE, N) ((VALUE) & ~BIT_ROUND_MASK((N)))
+#define BIT_ROUND_UP(VALUE, N) ( \
+    ((VALUE) & BIT_ROUND_MASK((N))) ? \
+        ((BIT_ROUND_DOWN((VALUE), (N)) >> (N)) + 1) << (N) \
+    : \
+        BIT_ROUND_DOWN((VALUE), (N)) \
+)
 
 /*
  * Varargs
