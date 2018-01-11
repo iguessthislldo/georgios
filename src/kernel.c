@@ -4,11 +4,6 @@
 
 #include "frame.h"
 
-#define FRAME_LEVELS 12 // 4096 * 4KiB Frames = 16MiB
-#define FRAMES 1 << FRAME_LEVELS
-Frame_Context fctx;
-u1 frame_info[FRAMES];
-
 extern u4 start_of_kernel;
 extern u4 end_of_kernel;
 
@@ -55,7 +50,7 @@ void kernel_main() {
     print_string("Kernel Loaded\n");
 
     print_format("Start of kernel: {x}\n", &start_of_kernel);
-    print_format("End of kernel: {x}\n", &end_of_kernel);
+    print_format("End of kernel/Start of Heap: {x}\n", &end_of_kernel);
 
     fctx.max_level = FRAME_LEVELS;
     fctx.frame_count = FRAMES;
@@ -63,7 +58,10 @@ void kernel_main() {
     fctx.frame_info = &frame_info[0];
     fctx.begin = &end_of_kernel;
 
-    u4 * page_table = allocate_frames(fctx, 1);
+    print_format("End of Heap: {x}\n", fctx.begin + fctx.frame_size * fctx.frame_count);
+
+    identity_map(0, 0x120a000);
+    enable_paging();
 
     print_string("Kernel Done\n");
     halt();

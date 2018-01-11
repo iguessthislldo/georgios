@@ -1,4 +1,6 @@
 #include "paging.h"
+#include <frame.h>
+#include <print.h>
 
 const u4 address_mask = 0xFFFFF000;
 
@@ -36,4 +38,31 @@ page_directory_t page_directory_get(u4 index) {
     }
 
     return pd;
+}
+
+#define GET_DIRECTORY_INDEX(address) ((((u4) address) & 0xFFC00000) >> 22)
+#define GET_TABLE_INDEX(address) ((((u4) address) & 0x003FF000) >> 12)
+#define GET_PAGE_INDEX(address) (((u4) address) & 0x00000FFF)
+void identity_map(void * start, u4 ammount) {
+    void * end = start + ammount;
+    const u4 dstart = GET_DIRECTORY_INDEX(start);
+    const u4 dend = GET_DIRECTORY_INDEX(end);
+    u4 ntables = dend - dstart;
+
+    // Allocate Tables
+    u4 * page_tables = allocate_frames(fctx, ntables);
+
+    // Update Page Directory
+    for (u2 i = dstart; i < dend; i++) {
+        page_directory[i] = (((u4) page_tables) + i * 4096) | 1;
+        print_format("PD[{d}] = {x}\n", i, page_directory[i]);
+    }
+
+    // Populate Tables
+    u4 npages = ntables * 1024;
+    u4 * p = (u4*) start;
+    for (u4 i = 0; i < npages; i++) {
+        page_tables[i] = (u4) p | 1;
+        p += 1024;
+    }
 }
