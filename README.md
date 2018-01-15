@@ -15,6 +15,8 @@ that once the possible of implementing a file system comes into view.
 - [The little book about OS development](https://littleosbook.github.io/)
     - Polished, but limited intro into x86 OS development. Provided me with
       the initial start.
+- [Intel x86 Software Development Mannuals](https://software.intel.com/en-us/articles/intel-sdm)
+- [The Design and Implementation of the 4.4 BSD Operating System](https://www.amazon.com/Implementation-Operating-paperback-Addison-wesley-Systems/dp/0132317923)
 
 ## Tasks
 
@@ -24,13 +26,11 @@ that once the possible of implementing a file system comes into view.
 - Basic Interrupts (like divide by zero) can be handled.
 - Printing to the screen in Real Mode graphics including a printf like
   function.
+- [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
 
 ### In Progress
 
-- Memory:
-    - Paging
-    - [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
-    - malloc/free functionality
+- malloc/free functionality
 - Time related functions like timer interrupts.
 
 ### Future
