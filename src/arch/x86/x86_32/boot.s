@@ -1,4 +1,8 @@
 /*
+    xchg %bx, %bx
+*/
+
+/*
  * MULTIBOOT HEADER
  */
 
@@ -94,8 +98,6 @@ _start:
     cmp %ecx, %ebx
     jl kernel_page_table_fill_loop
 
-    xchg %bx, %bx
-
     // Enable Paging
     mov $page_directory, %eax
     sub $KERNEL_OFFSET, %eax
@@ -104,8 +106,18 @@ _start:
     or $0x80000000, %eax
     mov %eax, %cr0
 
+    // Jump to Higher Kernel
+    movl $higher_kernel, %eax
+    jmp %eax
+higher_kernel:
+    //   And Unmap kernel_page_table from 0x0
+    movl $0, page_directory
+
     // Set Stack Location
 	mov $stack_top, %esp
+
+    // Rest of Platform Setup
+    call platform_init
 
     // Start Main Part of Kernel
 	call kernel_main

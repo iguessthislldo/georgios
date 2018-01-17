@@ -2,13 +2,8 @@
 #include <print.h>
 #include <platform.h>
 
+#include "kernel.h"
 #include "frame.h"
-
-extern u4 KERNEL_LOW_START;
-extern u4 KERNEL_LOW_END;
-extern u4 KERNEL_OFFSET;
-extern u4 KERNEL_HIGH_START;
-extern u4 KERNEL_HIGH_END;
 
 #define TEST_RESULT(result)\
     print_string((result) ? "OK\n" : "FAILED\n");\
@@ -18,9 +13,11 @@ bool initialize() {
     bool r;
 
     // Platform
+    /*
     r = platform_init();
     print_string("Initialized Platform... ");
     TEST_RESULT(r);
+    */
 
     return true;
 }
@@ -34,10 +31,13 @@ void kernel_main() {
         print_string("Kernel Failed to Initialize\n");
         halt();
     }
-    print_string("Kernel Loaded\n");
+    print_string("Kernel Start\n");
 
     print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
     print_format("End of kernel/Start of Heap: {x}\n", &KERNEL_HIGH_END);
+    print_format("Offset: {x}\n", &KERNEL_OFFSET);
+    print_format("FB: {x}\n", 0xB8000);
+    print_format("Offset + FB: {x}\n", kernel_offset(0xB8000));
 
     fctx.max_level = FRAME_LEVELS;
     fctx.frame_count = FRAMES;

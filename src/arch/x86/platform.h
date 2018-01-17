@@ -14,9 +14,11 @@
 
 #ifdef PLATFORM_SUPPORTED
 #define x86
-#define halt() __asm__("cli;hlt\n\t")
-#define breakpoint(); __asm__("xchgw %bx, %bx")
+#endif
 
 #endif
-#endif
+
+#define halt() __asm__("cli;hlt\n\t")
+#define breakpoint() __asm__("xchgw %bx, %bx")
+
 #endif

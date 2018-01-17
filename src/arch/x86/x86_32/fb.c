@@ -1,4 +1,5 @@
 #include <library.h>
+#include <kernel.h>
 
 #include "fb.h"
 #include "io.h"
@@ -20,7 +21,7 @@ void fb_initialize(void) {
 	fb_row = 0;
 	fb_column = 0;
 	fb_set_color(FB_COLOR_LIGHT_GREY, FB_COLOR_BLACK);
-	fb_buffer = (u2*) 0xB8000;
+	fb_buffer = (u2*) kernel_offset(0xB8000);
 	for (u4 y = 0; y < FB_HEIGHT; y++) {
 		for (u4 x = 0; x < FB_WIDTH; x++) {
 			const u4 index = y * FB_WIDTH + x;
@@ -32,10 +33,10 @@ void fb_initialize(void) {
  
 void fb_cursor(u4 x, u4 y) {
 	const u4 index = y * FB_WIDTH + x;
-    out8(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
-    out8(FB_DATA_PORT, ((index >> 8) & 0x00FF));
-    out8(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
-    out8(FB_DATA_PORT, index & 0x00FF);
+    out1(FB_COMMAND_PORT, FB_HIGH_BYTE_COMMAND);
+    out1(FB_DATA_PORT, ((index >> 8) & 0x00FF));
+    out1(FB_COMMAND_PORT, FB_LOW_BYTE_COMMAND);
+    out1(FB_DATA_PORT, index & 0x00FF);
 }
 
 void fb_place_char(char c, fb_color_t color, u4 x, u4 y) {
