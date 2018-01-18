@@ -19,7 +19,7 @@ ISO_GRUB:=$(ISO_DIR)/$(GRUB)
 ISO_GRUB_BIN:=$(ISO_DIR)/$(GRUB_BIN)
 
 CC:=i686-elf-gcc
-CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu11 -pedantic -Wno-pointer-arith -I src/library -I src/arch -I src
+CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu11 -pedantic -Wno-pointer-arith -I src/library -I src/platform -I src
 
 AS:=i686-elf-as
 ASFLAGS:=
