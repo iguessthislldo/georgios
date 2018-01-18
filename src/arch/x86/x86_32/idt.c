@@ -46,6 +46,7 @@ void idt_initialize() {
     idt_set(29, (u4) ih_29, 0x08, 0x8E);
     idt_set(30, (u4) ih_30, 0x08, 0x8E);
     idt_set(31, (u4) ih_31, 0x08, 0x8E);
+    idt_set(32, (u4) ih_pic, 0x08, 0x8E);
     asm volatile ("lidt (%0)" : : "r" (&idt_pointer));
 }
 
@@ -81,23 +82,35 @@ const char * x86_exception_messages[] = {
     "Reserved",
     "Reserved",
     "Security Exception",
-    "Reserved"
+    "Reserved",
+    "PIC!"
 };
 
 /*
-#define BOCHS_BREAK asm("xchgw %bx, %bx");
-BOCHS_BREAK
 */
+#define BOCHS_BREAK asm("xchgw %bx, %bx");
 
-void x86_exception_handler(x86_exception_t e) {
+void x86_exception_handler(
+   u4 ss, u4 gs, u4 fs, u4 es, u4 ds, u4 idt_index, u4 error_code
+) {
     print_string("<Interrupt ");
-    print_uint(e.idt_index);
-    print_string(": \"");
-    if (e.idt_index < 32) {
-        print_string(x86_exception_messages[e.idt_index]);
+    print_uint(idt_index);
+    print_char("(");
+    print_uint(error_code);
+    print_string("): \"");
+    if (idt_index < 32) {
+        print_string(x86_exception_messages[idt_index]);
     } else {
         print_string("No message found for this exception");
     }
+    if (idt_index == 32) {
+        out1(PIT_0_7_COMMAND, PIT_RESET);
+    }
     print_string("\">\n");
-    halt();
 }
+
+void irq0_handle() {
+    print_string("You did it!\n");
+    pit_reset(0);
+}
+

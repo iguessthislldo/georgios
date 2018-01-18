@@ -68,6 +68,7 @@ extern void ih_28();
 extern void ih_29();
 extern void ih_30();
 extern void ih_31();
+extern void ih_pic();
 
 struct x86_exception_struct {
    u4 ss, gs, fs, es, ds; // Pushed
@@ -83,6 +84,11 @@ struct x86_exception_struct {
 } __attribute__((packed));
 typedef struct x86_exception_struct x86_exception_t;
 
-void x86_exception_handler(x86_exception_t e);
+//void x86_exception_handler(x86_exception_t e);
+void x86_exception_handler(
+   u4 ss, u4 gs, u4 fs, u4 es, u4 ds, u4 idt_index, u4 error_code
+);
+
+void irq0_handle();
 
 #endif

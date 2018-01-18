@@ -119,6 +119,9 @@ higher_kernel:
     // Rest of Platform Setup
     call platform_init
 
+    // Enable Interrupts
+    sti
+
     // Start Main Part of Kernel
 	call kernel_main
 
