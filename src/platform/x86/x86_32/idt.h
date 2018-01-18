@@ -31,9 +31,10 @@ idt_entry_t idt[IDT_SIZE];
 idt_pointer_t idt_pointer;
 
 // Functions
-extern void idt_load();
+#define idt_load() asm volatile ("lidt (%0)" : : "r" (&idt_pointer))
 void idt_set(u1 index, u4 base, u2 select, u1 flags);
 void idt_initialize();
+void idt_set_handler(u1 index, void (*handler)());
 
 // x86 Exception Handlers
 extern void ih_0();
@@ -88,7 +89,5 @@ typedef struct x86_exception_struct x86_exception_t;
 void x86_exception_handler(
    u4 ss, u4 gs, u4 fs, u4 es, u4 ds, u4 idt_index, u4 error_code
 );
-
-void irq0_handle();
 
 #endif

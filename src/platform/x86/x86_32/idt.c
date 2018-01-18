@@ -46,8 +46,12 @@ void idt_initialize() {
     idt_set(29, (u4) ih_29, 0x08, 0x8E);
     idt_set(30, (u4) ih_30, 0x08, 0x8E);
     idt_set(31, (u4) ih_31, 0x08, 0x8E);
-    idt_set(32, (u4) ih_pic, 0x08, 0x8E);
-    asm volatile ("lidt (%0)" : : "r" (&idt_pointer));
+    idt_load();
+}
+
+void idt_set_handler(u1 index, void (*handler)()) {
+    idt_set(index, (u4) handler, 0x08, 0x8E);
+    idt_load();
 }
 
 const char * x86_exception_messages[] = {
@@ -83,7 +87,6 @@ const char * x86_exception_messages[] = {
     "Reserved",
     "Security Exception",
     "Reserved",
-    "PIC!"
 };
 
 /*
@@ -107,10 +110,5 @@ void x86_exception_handler(
         out1(PIT_0_7_COMMAND, PIT_RESET);
     }
     print_string("\">\n");
-}
-
-void irq0_handle() {
-    print_string("You did it!\n");
-    pit_reset(0);
 }
 

@@ -87,13 +87,3 @@ IH_NO_CODE 29
 IH_NO_CODE 30
 IH_NO_CODE 31
 
-.global ih_pic
-.type ih_pic, @function
-ih_pic:
-    cli
-    pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
-    call irq0_handle
-    popal
-    sti
-    iret 
-
