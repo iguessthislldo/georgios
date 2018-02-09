@@ -63,10 +63,10 @@ gdt_load:
 gdt_complete_load:
     ret
 
+// Context * setup_process(u4 eip, u4 esp)
 .section .text
 .global setup_process
 .type setup_process, @function
-// Context * setup_process(u4 eip, u4 esp)
 setup_process:
     pushl %ebx // Save ebx
 
@@ -81,9 +81,11 @@ setup_process:
     movl %ebx, %esp
 
     // Create Inital Process Stack
+    // for iret
     pushl %ecx // eflags
     pushl %cs // cs
     pushl %eax // eip
+    // for popa
     pushl $0 // eax
     pushl $0 // ecx
     pushl $0 // edx
@@ -92,6 +94,7 @@ setup_process:
     pushl %ebx // ebp
     pushl $0 // esi
     pushl $0 // edi
+    // for context_switch
     pushl $irq0_return
     pushl %ebx // ebp
     pushl $0 // ebx
@@ -105,31 +108,31 @@ setup_process:
     popl %ebx // Restore ebx
     ret
 
+// void context_switch(Context ** old, Context * new);
 .section .text
 .global context_switch
 .type context_switch, @function
-// void swtch(Context **old, Context *new);
 context_switch:
-    // Load Arguments
-    movl 4(%esp), %eax
-    movl 8(%esp), %edx
+    movl 4(%esp), %eax // old context
+    movl 8(%esp), %edx // new context
 
-    # Save old callee-save registers
+    // Save old registers
     pushl %ebp
     pushl %ebx
     pushl %esi
     pushl %edi
 
-    # Switch stacks
+    // Switch to new stack
     movl %esp, (%eax)
     movl %edx, %esp
 
-    # Load new callee-save registers
+    // Load new registers
     popl %edi
     popl %esi
     popl %ebx
     popl %ebp
-    ret
+
+    ret // Return to new context (hopefully)
 
 /*
  * Entry
