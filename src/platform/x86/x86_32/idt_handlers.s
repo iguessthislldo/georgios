@@ -1,38 +1,16 @@
 .section .text
+
 ih_common:
     //xchgw %bx, %bx
     // Push General Registers
     pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
 
-    /*
-    // Push Segments
-    pushl %ds
-    pushl %es
-    pushl %fs
-    pushl %gs
-    pushl %ss
-    movw $0x10, %ax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
-    movw %ax, %ss
-    */
-
     // The stack should now be equivalent to x86_exception_t
-    call x86_exception_handler
+    call x86_interrupt_handler
 
-    /*
-    addl $4, %esp
-    popl    %gs
-    popl    %fs
-    popl    %es
-    popl    %ds
-    */
-    popal
-    addl $8, %esp
-    
-    sti
+    popal // Restore Registers
+    addl $8, %esp // Error Code
+    sti // Enable Interrupts
     iret 
 
 .macro IH_NO_CODE value

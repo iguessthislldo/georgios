@@ -11,4 +11,22 @@ extern u4 KERNEL_HIGH_END;
 
 #define kernel_offset(a) ((void*) ((a) + (u4) &KERNEL_OFFSET))
 
+struct Context_struct {
+    u4 edi, esi, ebx, ebp, eip;
+};
+typedef struct Context_struct Context;
+
+struct Process_struct {
+    u1 id;
+    bool running;
+    Context * context;
+    void * stack;
+};
+typedef struct Process_struct Process;
+
+extern void context_switch(Context ** old, Context * new);
+void scheduler();
+Context * schedulerc;
+Process * currentp;
+
 #endif

@@ -1,3 +1,6 @@
+#include <kernel.h>
+#include <print.h>
+
 #include "irq.h"
 #include "idt.h"
 
@@ -40,6 +43,7 @@ void irq_initialize() {
 }
 
 void irq0_handle() {
-    print_string("You did it!\n");
     pit_reset(0);
+    print_char('I');
+    context_switch(&currentp->context, schedulerc);
 }

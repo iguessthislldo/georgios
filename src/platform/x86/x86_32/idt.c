@@ -54,7 +54,7 @@ void idt_set_handler(u1 index, void (*handler)()) {
     idt_load();
 }
 
-const char * x86_exception_messages[] = {
+const char * x86_interrupt_messages[] = {
     "Divide by Zero Fault",
     "Debug Trap",
     "Nonmaskable Interrupt",
@@ -89,25 +89,16 @@ const char * x86_exception_messages[] = {
     "Reserved",
 };
 
-/*
-*/
-#define BOCHS_BREAK asm("xchgw %bx, %bx");
-
-void x86_exception_handler(
-   u4 ss, u4 gs, u4 fs, u4 es, u4 ds, u4 idt_index, u4 error_code
-) {
+void x86_interrupt_handler(x86_interrupt_t stack_frame) {
     print_string("<Interrupt ");
-    print_uint(idt_index);
+    print_uint(stack_frame.idt_index);
     print_char("(");
-    print_uint(error_code);
+    print_uint(stack_frame.error_code);
     print_string("): \"");
-    if (idt_index < 32) {
-        print_string(x86_exception_messages[idt_index]);
+    if (stack_frame.idt_index < 32) {
+        print_string(x86_interrupt_messages[stack_frame.idt_index]);
     } else {
         print_string("No message found for this exception");
-    }
-    if (idt_index == 32) {
-        out1(PIT_0_7_COMMAND, PIT_RESET);
     }
     print_string("\">\n");
 }

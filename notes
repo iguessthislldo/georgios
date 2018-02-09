@@ -3,14 +3,27 @@ These are general things that I might need reminding of.
 ===============================================================================
 CDEL
 -------------------------------------------------------------------------------
+
+The order is:
     Push Last Argument,
     ...
     Push Second Argument,
     Push First Argument,
     Push Return Address
     
-    If function is f(int32_t a, int32_t b, int32_t c), then
+If function is f(int32_t a, int32_t b, int32_t c), then
     a = 4(esp)
     b = 8(esp)
     b = 12(esp)
 
+===============================================================================
+Assembly
+-------------------------------------------------------------------------------
+
+Use pushf/popf to push/pop the flags register.
+
+===============================================================================
+Threads
+-------------------------------------------------------------------------------
+
+iret pops eip, cs, and eflags from the stack in that order.

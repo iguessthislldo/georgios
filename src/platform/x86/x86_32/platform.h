@@ -20,5 +20,8 @@
 // Connect the print library to x86 framebuffer
 #define print_char fb_print_char
 
+#define enable_interrupts() asm ("sti");
+#define disable_interrupts() asm ("cli");
+
 #endif
 #endif

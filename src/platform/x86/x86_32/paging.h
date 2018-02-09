@@ -11,11 +11,20 @@
 Frame_Context fctx;
 u1 frame_info[FRAMES];
 
+#define PAGING_ADDRESS_MASK = 0xFFFFF000;
+
+#define _pg_is_present(entry) ((entry) & 1)
+#define _pg_get_address(entry) (entry)
+
+#define GET_DIRECTORY_INDEX(address) ((((u4) address) & 0xFFC00000) >> 22)
+#define GET_TABLE_INDEX(address) ((((u4) address) & 0x003FF000) >> 12)
+#define GET_PAGE_INDEX(address) (((u4) address) & 0x00000FFF)
+/*
+ * Page Directory
+ */
 extern u4 page_directory[1024];
 
-/*
- * Used for easy access, not the final 4 byte entry
- */
+#if 0
 struct page_directory_struct {
     u4 address; // Page Table Address
     // 8, 9, 10, 11 are not used by the CPU
@@ -29,16 +38,6 @@ struct page_directory_struct {
     bool present; // 0 When not set, the rest of the entry is ignored by the CPU
 };
 typedef struct page_directory_struct page_directory_t;
-
-/* 
- * Convert page_directory_t to 4 byte entry and place in the directory
- */
-void page_directory_set(u4 index, page_directory_t pd);
-
-/*
- * Convert Page Directory Entry to page_directory_t
- */
-page_directory_t page_directory_get(u4 index);
 
 struct page_table_struct {
     u4 address; // Page Address (20 bits)
@@ -54,16 +53,8 @@ struct page_table_struct {
     bool present; // 0 When not set, the rest of the entry is ignored by the CPU
 };
 typedef struct page_table_struct page_table_t;
+#endif
 
-/* 
- * Convert page_table_t to 4 byte entry and place in a table
- */
-void page_table_set(page_table_t pt);
-
-/*
- * Get page_directory_t from address through the page tables
- */
-page_table_t page_table_get(void * address);
 
 void identity_map(void * start, u4 ammount);
 

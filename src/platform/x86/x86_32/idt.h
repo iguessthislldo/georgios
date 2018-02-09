@@ -71,23 +71,14 @@ extern void ih_30();
 extern void ih_31();
 extern void ih_pic();
 
-struct x86_exception_struct {
-   u4 ss, gs, fs, es, ds; // Pushed
-/*
-   u4 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
-*/
-   u4 idt_index; // Pushed by us
-   u4 error_code; // Pushed by us if the CPU didn't push one
-/*
-   // Pushed by the processor automatically
-   u4 eip, cs, eflags, old_esp, old_ss;
-*/
+struct x86_interrupt_struct {
+    u4 eflags, cs, eip; // Pushed by CPU
+    u4 error_code; // Pushed by us if the CPU didn't push one
+    u4 idt_index; // Pushed by us
+    u4 eax, ecx, edx, ebx, esp, ebp, esi, edi; // Pushed by us using pusha
 } __attribute__((packed));
-typedef struct x86_exception_struct x86_exception_t;
+typedef struct x86_interrupt_struct x86_interrupt_t;
 
-//void x86_exception_handler(x86_exception_t e);
-void x86_exception_handler(
-   u4 ss, u4 gs, u4 fs, u4 es, u4 ds, u4 idt_index, u4 error_code
-);
+void x86_interrupt_handler(x86_interrupt_t stack_frame);
 
 #endif
