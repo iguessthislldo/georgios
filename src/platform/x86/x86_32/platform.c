@@ -13,6 +13,7 @@ void platform_init(multiboot_info_t* mb) {
     // Check if Memory Map is in place
     if (mb->flags & 64) { // 6ith bit
         u4 memory = 0;
+        u4 pages = 0;
         print_string("Got Memory Map from multiboot\n");
         multiboot_memory_map_t * begin = kernel_offset(mb->mmap_addr);
         multiboot_memory_map_t * end = ((u1*) begin) + mb->mmap_length;
@@ -22,10 +23,12 @@ void platform_init(multiboot_info_t* mb) {
                 print_format(" - {d} (", e->addr);
                 print_format("{d})\n", e->len);
                 memory += e->len;
+                pages += e->len / PAGE_SIZE;
             }
         }
         print_format("Kernel has {d} bytes (", memory);
         print_format("{d} MiB) of memory available to it\n", memory >> 20);
+        print_format("  We can hold {d} pages (minus system)\n", pages);
     } else {
         print_string("Could not get memory map from multiboot!\n");
         halt();
