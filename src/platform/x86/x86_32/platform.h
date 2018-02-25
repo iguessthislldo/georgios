@@ -27,5 +27,8 @@
 
 void platform_init(multiboot_info_t* mbd);
 
+typedef u8 max_t; // Max Type
+typedef u4 mem_t; // Pointer Type
+
 #endif
 #endif
