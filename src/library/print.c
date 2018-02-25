@@ -55,7 +55,7 @@ void print_nibble(u1 value) {
     }
 }
 
-inline void print_hex_recurse(u4 value) {
+void print_hex_recurse(u4 value) {
     if (value) {
         print_hex_recurse(value / 16);
         print_nibble(value);

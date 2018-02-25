@@ -96,10 +96,6 @@ setup_process:
     pushl $0 // edi
     // for context_switch
     pushl $irq0_return
-    pushl %ebx // ebp
-    pushl $0 // ebx
-    pushl $0 // esi
-    pushl $0 // edi
 
     // Restore Stack
     movl %esp, %eax // Return Context
@@ -116,21 +112,9 @@ context_switch:
     movl 4(%esp), %eax // old context
     movl 8(%esp), %edx // new context
 
-    // Save old registers
-    pushl %ebp
-    pushl %ebx
-    pushl %esi
-    pushl %edi
-
     // Switch to new stack
     movl %esp, (%eax)
     movl %edx, %esp
-
-    // Load new registers
-    popl %edi
-    popl %esi
-    popl %ebx
-    popl %ebp
 
     ret // Return to new context (hopefully)
 

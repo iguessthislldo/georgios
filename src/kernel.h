@@ -11,10 +11,13 @@ extern u4 KERNEL_HIGH_END;
 
 #define kernel_offset(a) ((void*) ((a) + (u4) &KERNEL_OFFSET))
 
+/*
 struct Context_struct {
-    u4 edi, esi, ebx, ebp, eip;
+    u4 ebp, eip;
 };
 typedef struct Context_struct Context;
+*/
+typedef u1 Context;
 
 struct Process_struct {
     u1 id;
