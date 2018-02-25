@@ -7,6 +7,4 @@
 #error "Platform Not Supported"
 #endif
 
-void platform_init();
-
 #endif

@@ -61,13 +61,9 @@ void parent() {
 extern Context * setup_process(u4 eip, u4 esp);
 
 void kernel_main() {
-    print_string("Kernel Started\n");
 
     print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
     print_format("End of kernel/Start of Heap: {x}\n", &KERNEL_HIGH_END);
-    print_format("Offset: {x}\n", &KERNEL_OFFSET);
-    print_format("FB: {x}\n", 0xB8000);
-    print_format("Offset + FB: {x}\n", kernel_offset(0xB8000));
 
     fctx.max_level = FRAME_LEVELS;
     fctx.frame_count = FRAMES;
@@ -77,6 +73,7 @@ void kernel_main() {
 
     print_format("End of Heap: {x}\n", fctx.begin + fctx.frame_size * fctx.frame_count);
     
+    /*
     parentp.id = 0;
     parentp.running = 1;
     // parentp.stack = allocate_frames(fctx, 1) + fctx.frame_size - 1;
@@ -91,6 +88,7 @@ void kernel_main() {
 
     currentp = &parentp;
     scheduler();
+    */
 
     /*
     breakpoint();

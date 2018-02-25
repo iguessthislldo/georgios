@@ -72,6 +72,13 @@ gdt_complete_load:
 _start:
     cli
 
+    // Push Multiboot struct pointer on to the future kernel stack
+    mov $stack_top, %eax
+    sub $KERNEL_OFFSET, %eax // translate stack into a lower kernel address
+    sub $4, %eax
+    add $KERNEL_OFFSET, %ebx // translate pointer to higher kerne address
+    mov %ebx, (%eax)
+
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET
     //   At 0 and KERNEL_OFFSET
     //   First put the physical location of the Kernel Page Table in the page
@@ -116,6 +123,7 @@ higher_kernel:
 
     // Set Stack Location
     mov $stack_top, %esp
+    sub $4, %esp // Sub 4 bytes for Multiboot pointer
 
     // Rest of Platform Setup
     call platform_init

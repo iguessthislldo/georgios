@@ -17,11 +17,15 @@
 #include "io.h"
 #include "irq.h"
 
+#include "multiboot.h"
+
 // Connect the print library to x86 framebuffer
 #define print_char fb_print_char
 
 #define enable_interrupts() asm ("sti");
 #define disable_interrupts() asm ("cli");
+
+void platform_init(multiboot_info_t* mbd);
 
 #endif
 #endif
