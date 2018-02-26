@@ -6,7 +6,7 @@ I used xv6's `swtch()` as a guide for how it might work and filled in the gaps.
 
 ## Specific Reasources Used
 
-- ~~[https://alex.dzyoba.com/lib/os-interrupts/](Alex Dzoba OS Interrpts \(DEADLINK :()~~
+- [~~Alex Dzoba OS Interrpts~~](https://alex.dzyoba.com/lib/os-interrupts/) (PAGE HAS BEEN REMOVED)
 
 - [Stackoverflow Quesiton: Switching to User-mode using iret](https://stackoverflow.com/questions/6892421/switching-to-user-mode-using-iret)
 
