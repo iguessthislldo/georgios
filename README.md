@@ -1,4 +1,4 @@
-# Unnamed Hobby Operating System
+# Georgios
 
 My OS that I'm making for fun which currently targets i386/IA-32. Hopefully I
 will be able to target x86\_64/AMD64 in the future. The purposes of this OS are
