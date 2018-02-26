@@ -31,16 +31,17 @@ that once the possibility of implementing a file system comes into view.
 - [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
 - Primitive Kernel Space Context Switching
 
-### In Progress/Todo
+### In Progress/Fix
 
-- Fix Page Frame Allocator
 - malloc/free for kernel
-- Userland and System Calls
+- Paging Framework
 
 ### Future
 
-- Virtual File System
+- Simple File System
+- Userland and System Calls
 - ELF Loader
+- clib
 - Tag Based File System
-- Graphics?
+- Graphics
 
