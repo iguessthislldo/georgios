@@ -78,11 +78,13 @@ void kernel_main() {
     print_uint(memory_total >> 20);
     print_format(" MiB)\n    Lost {d} bytes to the kernel and Frame Block System\n", lost_total);
 
+    /*
     u4 i = 0;
     void * p;
     while ((p = allocate_frames(1))) {
         print_format("{d}\n", i++);
     }
+    */
 
     /*
     parentp.id = 0;

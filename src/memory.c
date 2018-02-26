@@ -208,13 +208,36 @@ void Frame_Block_deallocate(Frame_Block * fb, void * address) {
 
 void * allocate_frames(u2 n) {
     void * result;
+    u4 base = 0;
     for (u1 m = 0; m < memory_range_num; m++) {
         u4 blocks = memory_map[m].blocks;
         for (u4 i = 0; i < blocks; i++) {
-            if ((result = Frame_Block_allocate(&frame_blocks[i], n))) {
+            if ((result = Frame_Block_allocate(&frame_blocks[base + i], n))) {
                 return result;
             }
         }
+        base += blocks;
     }
     return 0;
+}
+
+void deallocate_frames(void * address) {
+    u4 base = 0;
+    for (u1 m = 0; m < memory_range_num; m++) {
+        if (
+            (address >= memory_map[m].start) &&
+            (address < memory_map[m].start + memory_map[m].size)
+        ) {
+            u4 blocks = memory_map[m].blocks;
+            for (u4 b = 0; b < blocks; b++) {
+                if (
+                    (address >= frame_blocks[base + b].address) &&
+                    (address < frame_blocks[base + b].address + FRAME_BLOCK_SIZE)
+                ) {
+                    Frame_Block_deallocate(&frame_blocks[base + b], address);
+                }
+            }
+            base += blocks;
+        }
+    }
 }
