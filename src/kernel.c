@@ -1,9 +1,9 @@
 #include <library.h>
 #include <print.h>
 #include <platform.h>
+#include <memory.h>
 
 #include "kernel.h"
-#include "frame.h"
 
 Process parentp;
 Process childp;
@@ -63,16 +63,27 @@ extern Context * setup_process(u4 eip, u4 esp);
 void kernel_main() {
 
     print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
-    print_format("End of kernel/Start of Heap: {x}\n", &KERNEL_HIGH_END);
+    print_format("End of kernel: {x}\n", &KERNEL_HIGH_END);
+    print_string("Size of kernel is ");
+    print_uint((mem_t) &KERNEL_SIZE);
+    print_string(" B (");
+    print_uint(((u4)&KERNEL_SIZE) >> 10);
+    print_string(" KiB)\n");
 
-    fctx.max_level = FRAME_LEVELS;
-    fctx.frame_count = FRAMES;
-    fctx.frame_size = 4 * 1024; // 4 KiB
-    fctx.frame_info = &frame_info[0];
-    fctx.begin = &KERNEL_HIGH_END;
+    memory_init();
 
-    print_format("End of Heap: {x}\n", fctx.begin + fctx.frame_size * fctx.frame_count);
-    
+    print_string("Memory available to the kernel is ");
+    print_uint(memory_total);
+    print_string(" B (");
+    print_uint(memory_total >> 20);
+    print_format(" MiB)\n    Lost {d} bytes to the kernel and Frame Block System\n", lost_total);
+
+    u4 i = 0;
+    void * p;
+    while ((p = allocate_frames(1))) {
+        print_format("{d}\n", i++);
+    }
+
     /*
     parentp.id = 0;
     parentp.running = 1;

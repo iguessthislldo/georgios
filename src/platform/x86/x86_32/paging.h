@@ -2,14 +2,6 @@
 #define X86_32_PAGING
 
 #include <library.h>
-#include <frame.h>
-
-#define PAGE_SIZE 4096
-#define TABLE_COVERS PAGE_SIZE * 1024
-#define FRAME_LEVELS 12 // 4096 * 4KiB Frames = 16MiB
-#define FRAMES 1 << FRAME_LEVELS
-Frame_Context fctx;
-u1 frame_info[FRAMES];
 
 #define PAGING_ADDRESS_MASK = 0xFFFFF000;
 
@@ -56,7 +48,7 @@ typedef struct page_table_struct page_table_t;
 #endif
 
 
-void identity_map(void * start, u4 ammount);
+//void identity_map(void * start, u4 ammount);
 
 inline void enable_paging() {
     asm(

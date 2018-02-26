@@ -1,7 +1,7 @@
 #include "paging.h"
-#include <frame.h>
 #include <print.h>
 
+/*
 void identity_map(void * start, u4 ammount) {
     void * end = start + ammount;
     const u4 dstart = GET_DIRECTORY_INDEX(start);
@@ -25,3 +25,4 @@ void identity_map(void * start, u4 ammount) {
         p += 1024;
     }
 }
+*/
