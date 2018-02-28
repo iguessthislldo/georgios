@@ -79,14 +79,6 @@ void kernel_main() {
     print_format(" MiB)\n    Lost {d} bytes to the kernel and Frame Block System\n", lost_total);
 
     /*
-    u4 i = 0;
-    void * p;
-    while ((p = allocate_frames(1))) {
-        print_format("{d}\n", i++);
-    }
-    */
-
-    /*
     parentp.id = 0;
     parentp.running = 1;
     // parentp.stack = allocate_frames(fctx, 1) + fctx.frame_size - 1;
@@ -100,16 +92,6 @@ void kernel_main() {
     childp.context = setup_process((u4) child, childp.stack);
 
     currentp = &parentp;
-    scheduler();
-    */
-
-    /*
-    breakpoint();
-
-    enable_interrupts();
-    while (true) {}
-    */
-    /*
     scheduler();
     */
 }

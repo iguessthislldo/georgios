@@ -1,36 +1,54 @@
-#include <kernel.h>
+/* ============================================================================
+ * System Wide Memory Management
+ * ============================================================================
+ * Interface for Managing System Memory
+ */
+
 #include <memory.h>
-#include <print.h>
+
+#include <platform.h> // FRAME_SIZE and FRAME_LEVELS
+#include <kernel.h> // Location of the kernel
+//#include <print.h> // Debug
+
+/*
+ * For x86_32
+ *     FRAME_SIZE is 4096
+ *     FRAME_LEVELS is 7
+ *     1<<7 = 128
+ *     128 * 4096 = 524288 B (1/2 MiB per Frame Block)
+ */
+#define FRAMES (1 << FRAME_LEVELS)
+#define FRAME_BLOCK_SIZE (FRAMES * FRAME_SIZE)
 
 mem_t memory_total = 0;
 mem_t lost_total = 0;
 mem_t blocks_total = 0;
+mem_t memory_used = 0;
 
 /* ============================================================================
  * Memory Map
  * ============================================================================
- * Represents contiguous memory sections that we can use
+ * Represents contiguous physical memory sections that we can use
  */
 
 typedef struct Memory_Range_struct Memory_Range;
 struct Memory_Range_struct {
     mem_t start;
     mem_t size;
+    mem_t blocks_start;
     mem_t blocks;
 };
 
-#define MEMORY_RANGE_MAX 16
+#define MEMORY_RANGE_MAX 64
 Memory_Range memory_map[MEMORY_RANGE_MAX];
 u1 memory_range_num = 0;
 
-/*
- * Add Range of Contiguous Memory, used when processing multiboot
- */
 void memory_range_add(mem_t start, mem_t size) {
     if (memory_range_num < MEMORY_RANGE_MAX) {
         memory_map[memory_range_num].start = start;
         memory_map[memory_range_num].size = size;
         mem_t blocks = size / FRAME_BLOCK_SIZE;
+        memory_map[memory_range_num].blocks_start = blocks_total;
         blocks_total += blocks;
         mem_t blocks_size = blocks * FRAME_BLOCK_SIZE;
         memory_map[memory_range_num].blocks = blocks;
@@ -100,6 +118,7 @@ void memory_init() {
 #define FRAME_MARK_USED(page) (fb->frames[page] |= 1)
 #define FRAME_IS_RIGHT(page) (page) % (1 << (FRAME_LEVELS - PAGE_LEVEL(page)))
 
+/* DEBUG FUNCTION
 void print_frames(Frame_Block * fb) {
     for (u4 i = 0; i < FRAMES; i++) {
         u1 f = fb->frames[i];
@@ -110,12 +129,15 @@ void print_frames(Frame_Block * fb) {
     }
     print_char('\n');
 }
+*/
 
-void * Frame_Block_allocate(Frame_Block * fb, u2 n) {
+// Return true if an error occurred
+bool Frame_Block_allocate(Frame_Block * fb, u2 frames, void ** address) {
+
     // Get Number of frames rounded to the next power of 2
     u4 level = 0;
     u4 rounded;
-    while ((rounded = (1 << level)) < n) {
+    while ((rounded = (1 << level)) < frames) {
         level++;
     }
     level = FRAME_LEVELS - level;
@@ -128,7 +150,8 @@ void * Frame_Block_allocate(Frame_Block * fb, u2 n) {
         if (FRAME_IS_FREE(f) && FRAME_LEVEL(f) == level) {
             //print_format(" - Found at: {d}\n", i);
             FRAME_MARK_USED(i);
-            return (void *) (fb->address + FRAME_SIZE * i);
+            *address = (void *) (fb->address + FRAME_SIZE * i);
+            return false;
         }
     }
 
@@ -154,7 +177,7 @@ void * Frame_Block_allocate(Frame_Block * fb, u2 n) {
     }
     if (!block_found) {
         //print_string("    Larger Block NOT Found, Error\n");
-        return 0;
+        return true;
     }
     //print_format("    Larger Block Found at: {d}\n - Split it\n", i);
 
@@ -169,10 +192,12 @@ void * Frame_Block_allocate(Frame_Block * fb, u2 n) {
     FRAME_MARK_USED(i);
     //print_frames(fb);
 
-    return (void *) (fb->address + FRAME_SIZE * i);
+    *address = (void *) (fb->address + FRAME_SIZE * i);
+    return false;
 }
 
-void Frame_Block_deallocate(Frame_Block * fb, void * address) {
+// Return true if an error occurred
+bool Frame_Block_deallocate(Frame_Block * fb, void * address) {
     u4 frame = (((u4) address) - ((u4) fb->address)) / FRAME_SIZE;
     FRAME_MARK_FREE(frame);
 
@@ -200,44 +225,51 @@ void Frame_Block_deallocate(Frame_Block * fb, void * address) {
         if (move_left) {
             frame = buddy_location;
         }
-        if (!level) break;
+        if (!level) { // No more siblings
+            break;
+        }
         level--;
     }
     fb->frames[frame] = level << 1;
+    return false;
 }
 
-void * allocate_frames(u2 n) {
-    void * result;
-    u4 base = 0;
-    for (u1 m = 0; m < memory_range_num; m++) {
-        u4 blocks = memory_map[m].blocks;
-        for (u4 i = 0; i < blocks; i++) {
-            if ((result = Frame_Block_allocate(&frame_blocks[base + i], n))) {
-                return result;
-            }
-        }
-        base += blocks;
+u1 apmem_range = 0;
+mem_t apmem_block = 0;
+bool allocate_pmem(mem_t amount, mem_t * got, void ** address) {
+    u1 old_apmem_range = apmem_range;
+    mem_t old_apmem_block = apmem_block++;
+    if (apmem_block == memory_map[apmem_range].blocks) {
+        apmem_block = 0;
+        apmem_range = (apmem_range + 1) / memory_range_num;
     }
-    return 0;
+    while (
+        (apmem_range != old_apmem_range) && (apmem_block != old_apmem_block)
+    ) {
+        if (Frame_Block_allocate(
+            &frame_blocks[memory_map[apmem_range].blocks_start + apmem_block],
+            (amount / FRAME_BLOCK_SIZE) + 1, address
+        )) return false;
+        apmem_block++;
+        if (apmem_block == memory_map[apmem_range].blocks) {
+            apmem_block = 0;
+            apmem_range = (apmem_range + 1) / memory_range_num;
+        }
+    }
+    return true;
 }
 
-void deallocate_frames(void * address) {
-    u4 base = 0;
+bool deallocate_pmem(void * address) {
+    mem_t base = 0;
     for (u1 m = 0; m < memory_range_num; m++) {
         if (
             (address >= memory_map[m].start) &&
             (address < memory_map[m].start + memory_map[m].size)
         ) {
-            u4 blocks = memory_map[m].blocks;
-            for (u4 b = 0; b < blocks; b++) {
-                if (
-                    (address >= frame_blocks[base + b].address) &&
-                    (address < frame_blocks[base + b].address + FRAME_BLOCK_SIZE)
-                ) {
-                    Frame_Block_deallocate(&frame_blocks[base + b], address);
-                }
-            }
-            base += blocks;
+            mem_t block =  ((mem_t) address - memory_map[m].start) / FRAME_BLOCK_SIZE;
+            return Frame_Block_deallocate(&frame_blocks[base + block], address);
         }
+        base += memory_map[m].blocks;
     }
+    return true;
 }
