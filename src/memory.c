@@ -68,18 +68,12 @@ void memory_range_add(mem_t start, mem_t size) {
 typedef struct Frame_Block_struct Frame_Block;
 struct Frame_Block_struct {
     mem_t address;
+    mem_t used, free;
     u1 frames[FRAMES];
 };
 
 Frame_Block * frame_blocks = (Frame_Block *) &KERNEL_HIGH_END;
 mem_t frame_blocks_size = 0;
-
-void Frame_Block_init(Frame_Block * fb, mem_t address) {
-    fb->address = address;
-    for (u4 i = 0; i < FRAMES; i++) {
-        fb->frames[i] = 0;
-    }
-}
 
 void memory_init() {
     // Calculate size of Frame Block Array
@@ -105,7 +99,13 @@ void memory_init() {
             blocks -= lost / FRAME_BLOCK_SIZE;
         }
         for (mem_t i = 0; i < blocks; i++) {
-            Frame_Block_init(b++, address);
+            b++;
+            b->address = address;
+            b->used = 0;
+            b->free = FRAME_BLOCK_SIZE;
+            for (u4 i = 0; i < FRAMES; i++) {
+                b->frames[i] = 0;
+            }
             address += FRAME_BLOCK_SIZE;
         }
     }
