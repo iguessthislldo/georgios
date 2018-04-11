@@ -16,6 +16,7 @@ If function is f(int32_t a, int32_t b, int32_t c), then
     b = 8(%esp)
     b = 12(%esp)
 
+%eax, %ecx, and %edx are the only registers saved by the caller
 return is %eax
 
 ===============================================================================
