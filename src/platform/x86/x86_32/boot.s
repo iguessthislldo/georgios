@@ -63,6 +63,65 @@ gdt_load:
 gdt_complete_load:
     ret
 
+// bool attempt_lock(lock_t * lock)
+.section .text
+.global attempt_lock
+.type attempt_lock, @function
+attempt_lock:
+    movl 4(%esp), %ecx // ecx = lock
+    movl (%ecx), %eax // eax = *lock
+    movl $1, %edx // edx = LOCKED
+
+    // Don't try if already locked
+    test %eax, %eax
+    jnz attempt_lock_failed
+
+    // (Atomically)
+    // if (*lock == eax) {
+    //     *lock = LOCKED
+    // } else { // Failed
+    //     eax = LOCKED
+    // }
+    lock cmpxchgl %edx, (%ecx)
+
+    // See if we succeeded
+    test %eax, %eax
+    jnz attempt_lock_failed
+
+    // Return Success
+    movl $0, %eax
+    ret
+
+attempt_lock_failed:
+    // Return Failure
+    movl $1, %eax
+    ret
+
+/*
+inline bool attempt_lock(lock_t * lock) {
+    u4 result;
+    u4 locked = LOCKED;
+    asm (
+        // eax = *lock
+        "movl (%1), %%eax\n\t"
+
+        "lock cmpxchgl %2, (%1)\n\t"
+
+        "movl %%eax, %0"
+
+        : // Output
+            "=r" (result) // %0
+
+        : // Input
+            "r" (lock), // %1
+            "r" (locked) // %2
+
+        : "%eax" // Clobbler
+    );
+    return result;
+}
+*/
+
 /*
  * Entry
  */

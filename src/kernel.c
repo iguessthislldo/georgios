@@ -23,15 +23,30 @@ void scheduler() {
     }
 }
 
+u4 x = 0;
+lock_t xlock = UNLOCKED;
+
 void child() {
+    enable_interrupts();
     // Child's work
-    u4 x = 0;
     while (true) {
-        disable_interrupts();
-        print_char('~');
-        enable_interrupts();
-        x++;
+        while (attempt_lock(&xlock)) {
+            print_char('_');
+            for (u4 i = 0; i < 0x658; i++) {
+                asm("nop");
+            }
+        }
+        print_char('C');
+        x = childp.id;
         for (u4 i = 0; i < 0xFFFF; i++) {
+            if (x != childp.id) {
+                print_char('~');
+                halt();
+            }
+        }
+        print_char('c');
+        release_lock(&xlock);
+        for (u4 i = 0; i < 0xFFFFF; i++) {
             asm("nop");
         }
     }
@@ -44,15 +59,27 @@ void parent() {
     enable_interrupts();
     */
     childp.running = 1;
+    enable_interrupts();
     
     // Parent's Work
-    u4 x = 0;
     while (true) {
-        disable_interrupts();
-        print_char('#');
-        enable_interrupts();
-        x++;
+        while (attempt_lock(&xlock)) {
+            print_char('=');
+            for (u4 i = 0; i < 0x400; i++) {
+                asm("nop");
+            }
+        }
+        print_char('P');
+        x = parentp.id;
         for (u4 i = 0; i < 0xFFFFF; i++) {
+            if (x != parentp.id) {
+                print_char('#');
+                halt();
+            }
+        }
+        print_char('p');
+        release_lock(&xlock);
+        for (u4 i = 0; i < 0xFFFFFF; i++) {
             asm("nop");
         }
     }
@@ -62,6 +89,7 @@ extern Context * setup_process(u4 eip, u4 esp);
 
 void kernel_main() {
 
+    /*
     print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
     print_format("End of kernel: {x}\n", &KERNEL_HIGH_END);
     print_string("Size of kernel is ");
@@ -77,8 +105,8 @@ void kernel_main() {
     print_string(" B (");
     print_uint(memory_total >> 20);
     print_format(" MiB)\n    Lost {d} bytes to the kernel and Frame Block System\n", lost_total);
+    */
 
-    /*
     parentp.id = 0;
     parentp.running = 1;
     // parentp.stack = allocate_frames(fctx, 1) + fctx.frame_size - 1;
@@ -93,6 +121,5 @@ void kernel_main() {
 
     currentp = &parentp;
     scheduler();
-    */
 }
 

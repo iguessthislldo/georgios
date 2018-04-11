@@ -30,5 +30,22 @@ void platform_init(multiboot_info_t* mbd);
 typedef u8 max_t; // Max Type
 typedef u4 mem_t; // Pointer Type
 
+typedef u4 lock_t;
+#define UNLOCKED 0
+#define LOCKED 1
+
+/*
+ * Try to atomically acquire the lock at the "lock" pointer.
+ * returns false if the lock is acquired, else true (designed for loops).
+ */
+extern bool attempt_lock(lock_t * lock);
+
+/*
+ * Release the lock
+ */
+inline void release_lock(lock_t * lock) {
+    *lock = UNLOCKED;
+}
+
 #endif
 #endif
