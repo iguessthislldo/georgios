@@ -70,11 +70,12 @@ gdt_complete_load:
 attempt_lock:
     movl 4(%esp), %ecx // ecx = lock
     movl (%ecx), %eax // eax = *lock
-    movl $1, %edx // edx = LOCKED
 
     // Don't try if already locked
     test %eax, %eax
     jnz attempt_lock_failed
+
+    movl $1, %edx // edx = LOCKED
 
     // (Atomically)
     // if (*lock == eax) {
@@ -96,31 +97,6 @@ attempt_lock_failed:
     // Return Failure
     movl $1, %eax
     ret
-
-/*
-inline bool attempt_lock(lock_t * lock) {
-    u4 result;
-    u4 locked = LOCKED;
-    asm (
-        // eax = *lock
-        "movl (%1), %%eax\n\t"
-
-        "lock cmpxchgl %2, (%1)\n\t"
-
-        "movl %%eax, %0"
-
-        : // Output
-            "=r" (result) // %0
-
-        : // Input
-            "r" (lock), // %1
-            "r" (locked) // %2
-
-        : "%eax" // Clobbler
-    );
-    return result;
-}
-*/
 
 /*
  * Entry
