@@ -9,7 +9,7 @@
 #include <library.h> // normal types
 
 // Values for use in memory.c
-#define FRAME_SIZE 4096
+#define FRAME_SIZE KiB(4)
 #define FRAME_LEVELS 7
 
 #define PAGING_ADDRESS_MASK = 0xFFFFF000;

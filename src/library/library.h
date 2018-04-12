@@ -60,4 +60,13 @@ typedef void * va_list;
 #define va_arg(list , type) *((type*)((list += sizeof(type)) - sizeof(type)))
 #endif
 
+/*
+ * IEC Data Size Types
+ */
+#define KiB(value) ((value) * (2 << 10))
+#define MiB(value) ((value) * (2 << 20))
+#define GiB(value) ((value) * (2 << 30))
+#define TiB(value) ((value) * (2 << 40))
+#define PiB(value) ((value) * (2 << 50))
+
 #endif
