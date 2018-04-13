@@ -31,7 +31,6 @@ void child() {
     // Child's work
     while (true) {
         while (attempt_lock(&xlock)) {
-            print_char('_');
             for (u4 i = 0; i < 0x658; i++) {
                 asm("nop");
             }
@@ -64,7 +63,6 @@ void parent() {
     // Parent's Work
     while (true) {
         while (attempt_lock(&xlock)) {
-            print_char('=');
             for (u4 i = 0; i < 0x400; i++) {
                 asm("nop");
             }

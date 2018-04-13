@@ -62,7 +62,7 @@ void scroll() {
 }
 
 void fb_print_char(char c) {
-    while (acquire_lock(&fb_lock)) {
+    while (attempt_lock(&fb_lock)) {
         // TODO: Sleep?
     }
     if (c == '\n') {
