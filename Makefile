@@ -54,7 +54,7 @@ tmp/%.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) -Wa,--32 $(CFLAGS) -Wall -Wextra -c $< -o $@
 
-$(KERNEL): linking.ld $(objects)
+$(KERNEL): src/platform/x86/x86_32/linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
 	objdump -S $(KERNEL) > tmp/annotated_kernel
