@@ -64,11 +64,11 @@ typedef void * va_list;
 /*
  * Math Macros
  */
-#define KiB(value) ((value) * (2 << 10))
-#define MiB(value) ((value) * (2 << 20))
-#define GiB(value) ((value) * (2 << 30))
-#define TiB(value) ((value) * (2 << 40))
-#define PiB(value) ((value) * (2 << 50))
+#define KiB(value) ((value) * (1 << 10))
+#define MiB(value) ((value) * (1 << 20))
+#define GiB(value) ((value) * (1 << 30))
+#define TiB(value) ((value) * (1 << 40))
+#define PiB(value) ((value) * (1 << 50))
 #define MOD(n, d) ((n) & ((d) - 1))
 #define ALIGN(value, alignment) (((value) + (alignment) - 1) & -(alignment))
 #define PADDING(value, alignment) (-(value) & ((alignment) - 1))
