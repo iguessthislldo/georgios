@@ -11,6 +11,16 @@ based file system (maybe more technically called a
 My plans for how this part will work are not yet concrete as I hope to work on
 that once the possibility of implementing a file system comes into view.
 
+## Building
+
+Building Georgios requires a Unix-like enviroment with:
+- `genisoimage`
+- A i686 GNU Toolchain (`i686-elf-gcc`, `i686-elf-as`, etc)
+
+Geogrios can be built as a bootable iso by running `make`.
+If you have bochs installed you can also run the testing/debuging setup by
+running `make run`.
+
 ## Resources Used
 
 - [OS Dev Wiki](http://wiki.osdev.org/)
