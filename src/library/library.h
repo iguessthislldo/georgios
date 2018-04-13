@@ -3,6 +3,7 @@
 
 /*
  * Integer Types
+ * TODO: Check/do based on Compiler
  */
 typedef char i1;
 typedef unsigned char u1;
@@ -61,12 +62,17 @@ typedef void * va_list;
 #endif
 
 /*
- * IEC Data Size Types
+ * Math Macros
  */
 #define KiB(value) ((value) * (2 << 10))
 #define MiB(value) ((value) * (2 << 20))
 #define GiB(value) ((value) * (2 << 30))
 #define TiB(value) ((value) * (2 << 40))
 #define PiB(value) ((value) * (2 << 50))
+#define MOD(n, d) ((n) & ((d) - 1))
+#define ALIGN(value, alignment) (((value) + (alignment) - 1) & -(alignment))
+#define PADDING(value, alignment) (-(value) & ((alignment) - 1))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #endif
