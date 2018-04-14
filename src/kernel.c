@@ -27,6 +27,7 @@ u4 x = 0;
 lock_t xlock = UNLOCKED;
 
 void child() {
+    int panic = 0;
     enable_interrupts();
     // Child's work
     while (true) {
@@ -47,6 +48,10 @@ void child() {
         release_lock(&xlock);
         for (u4 i = 0; i < 0xFFFFF; i++) {
             asm("nop");
+        }
+        if (++panic == 12) {
+            u1 x = *((u1*)MiB(500));
+            print_format("{d}\n", x);
         }
     }
 }
@@ -86,11 +91,6 @@ void parent() {
 extern Context * setup_process(u4 eip, u4 esp);
 
 void kernel_main() {
-
-    breakpoint();
-
-    u1 x = *((u1*)MiB(500));
-    print_format("{d}\n", x);
 
     memory_init();
 

@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "fb.h"
 
 #include <print.h>
 
@@ -90,17 +91,36 @@ const char * x86_interrupt_messages[] = {
 };
 
 void x86_interrupt_handler(x86_interrupt_t stack_frame) {
-    print_string("<Interrupt ");
-    print_uint(stack_frame.idt_index);
-    print_char('(');
-    print_uint(stack_frame.error_code);
-    print_string("): \"");
+    fb_new_page();
+    fb_fill_screen(' ', FB_COLOR_BLACK, FB_COLOR_RED);
+    fb_set_color(FB_COLOR_BLACK, FB_COLOR_RED);
+
+    print_string(
+"==============================<!>Kernel Panic<!>==============================\n"
+"An exception interrupt has not been handled:\n"
+"  Interrupt Number: "); print_uint(stack_frame.idt_index); print_string("\n"
+"  Error Code: "); print_uint(stack_frame.error_code);
+print_string("\n  Message: ");
     if (stack_frame.idt_index < 32) {
         print_string(x86_interrupt_messages[stack_frame.idt_index]);
     } else {
         print_string("No message found for this exception");
     }
-    print_string("\">\n");
-    breakpoint();
+
+    print_string("\n\n"
+"--Registers-------------------------------------------------------------------\n"
+"    EIP: "); print_hex(stack_frame.eip); print_string("\n"
+"    EFLAGS: "); print_hex(stack_frame.eflags); print_string("\n"
+"    EAX: "); print_hex(stack_frame.eax); print_string("\n"
+"    ECX: "); print_hex(stack_frame.ecx); print_string("\n"
+"    EDX: "); print_hex(stack_frame.edx); print_string("\n"
+"    EBX: "); print_hex(stack_frame.ebx); print_string("\n"
+"    ESP: "); print_hex(stack_frame.esp); print_string("\n"
+"    EBP: "); print_hex(stack_frame.ebp); print_string("\n"
+"    ESI: "); print_hex(stack_frame.esi); print_string("\n"
+"    EDI: "); print_hex(stack_frame.edi); print_string("\n"
+"    CS: "); print_hex(stack_frame.cs); print_string("\n");
+
+    halt();
 }
 

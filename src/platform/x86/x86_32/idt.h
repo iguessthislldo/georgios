@@ -72,10 +72,10 @@ extern void ih_31();
 extern void ih_pic();
 
 struct x86_interrupt_struct {
-    u4 eflags, cs, eip; // Pushed by CPU
-    u4 error_code; // Pushed by us if the CPU didn't push one
+    u4 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
     u4 idt_index; // Pushed by us
-    u4 eax, ecx, edx, ebx, esp, ebp, esi, edi; // Pushed by us using pusha
+    u4 error_code; // Pushed by us if the CPU didn't push one
+    u4 eip, cs, eflags; // Pushed by CPU
 } __attribute__((packed));
 typedef struct x86_interrupt_struct x86_interrupt_t;
 

@@ -29,6 +29,8 @@ typedef enum fb_color_t_enum {
 	FB_COLOR_WHITE = 15,
 } fb_color_t;
  
+void fb_fill_screen(char c, fb_color_t fg, fb_color_t bg);
+void fb_new_page();
 void fb_initialize();
 void fb_set_color(fb_color_t fg, fb_color_t bg);
 void fb_cursor(u4 x, u4 y);

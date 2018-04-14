@@ -17,7 +17,7 @@ ih_common:
 .global ih_\value
 .type ih_\value, @function
 ih_\value:
-    xchgw %bx, %bx
+    //xchgw %bx, %bx
     cli
     pushl $0
     pushl $\value
@@ -28,7 +28,7 @@ ih_\value:
 .global ih_\value
 .type ih_\value, @function
 ih_\value:
-    xchgw %bx, %bx
+    //xchgw %bx, %bx
     cli
     pushl $\value
     jmp ih_common

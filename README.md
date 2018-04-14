@@ -45,6 +45,7 @@ running `make run`.
 - [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
 - Primitive Kernel Space Context Switching
 - A "cmpxchg" Lock
+- Better Exception Screen
 
 ### In Progress/Fix
 
@@ -52,7 +53,6 @@ running `make run`.
 
 ### Future
 
-- Better Exception Screen
 - malloc/free for kernel
 - Userland Processes
 - System Calls: Needs Userland
