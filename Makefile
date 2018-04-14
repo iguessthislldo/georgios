@@ -3,6 +3,7 @@ rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst 
 c_sources:=$(call rwildcard, src/, *.c)
 s_sources:=$(call rwildcard, src/, *.s)
 objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
+depends:=$(foreach depend, $(c_sources:.c=.d), tmp/$(depend))
 
 ISO:=os.iso
 
@@ -26,6 +27,9 @@ ASFLAGS:=
 # -am to see marco expansion
 
 all: $(ISO)
+
+.PHONY: depend
+depend: $(depends)
 
 $(ISO_GRUB):
 	@mkdir -p $(ISO_GRUB)
@@ -53,6 +57,13 @@ tmp/%.o: %.s
 tmp/%.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) -Wa,--32 $(CFLAGS) -Wall -Wextra -c $< -o $@
+
+tmp/%.d: %.c
+	@mkdir -p $(dir $@)
+	@set -e; rm -f $@; \
+	 $(CC) -M $(CFLAGS) $< > $@.$$$$; \
+	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+	 rm -f $@.$$$$
 
 $(KERNEL): src/platform/x86/x86_32/linking.ld $(objects)
 	@mkdir -p $(dir $@)
