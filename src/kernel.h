@@ -10,7 +10,7 @@ extern u4 KERNEL_HIGH_START;
 extern u4 KERNEL_HIGH_END;
 extern u4 KERNEL_SIZE;
 
-#define kernel_offset(a) ((void*) ((a) + (u4) &KERNEL_OFFSET))
+#define kernel_offset(a) ((a) + (mem_t) &KERNEL_OFFSET)
 
 /*
 struct Context_struct {

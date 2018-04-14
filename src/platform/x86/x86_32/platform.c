@@ -16,7 +16,7 @@ void process_multiboot(multiboot_info_t* mb) {
         multiboot_memory_map_t * e;
         for (e = begin; e < end; e = ((u1*)e) + sizeof(e->size) + e->size) {
             if (e->type == MULTIBOOT_MEMORY_AVAILABLE) {
-                memory_range_add(e->addr, e->len);
+                memory_range_add(e->addr, e->len, FRAME_STACK_USE);
             }
         }
     } else {
@@ -27,6 +27,7 @@ void process_multiboot(multiboot_info_t* mb) {
 }
 
 void platform_init(multiboot_info_t* mb) {
+    kernel_range = 1;
     fb_initialize();
     gdt_initialize();
     idt_initialize();

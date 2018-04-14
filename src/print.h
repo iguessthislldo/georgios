@@ -74,3 +74,5 @@ void print_byte(u1 value);
  */
 void print_format(const char * format, ...);
 
+void print_disable_lock();
+

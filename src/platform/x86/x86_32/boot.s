@@ -45,6 +45,14 @@ kernel_page_table:
 .skip 4096
 
 /*
+ * TEMP PAGE TABLE
+ */
+.global temp_page_table
+.align 4096
+temp_page_table:
+.skip 4096
+
+/*
  * GLOBAL DESCRIPTOR TABLE
  */
 

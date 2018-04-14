@@ -12,7 +12,7 @@
 #define FRAME_SIZE KiB(4)
 #define FRAME_LEVELS 7
 
-#define PAGING_ADDRESS_MASK = 0xFFFFF000;
+#define PAGING_ADDRESS_MASK 0xFFFFF000
 
 #define PAGE_IS_PRESENT(entry) ((entry) & 1)
 #define PAGE_GET_ADDRESS(entry) (entry & PAGING_ADDRESS_MASK)

@@ -1,116 +1,182 @@
-/* ============================================================================
+/* ===========================================================================
  * System Wide Memory Management
- * ============================================================================
+ * ===========================================================================
  * Interface for Managing System Memory
+ *
+ * x86_32 Map of Physical Memory:
+ * Address| Contents    |Memory Range | Symbols
+ *    0-> +-------------+---------+---+-----------------------
+ *        | Unused                | 0 |
+ *        +-----------------------+---+
+ *        | BIOS Area             |   |
+ * 1MiB-> +-----------------------+---+ <-KERNEL_LOW_START
+ *        | Kernel                | 1 |
+ *        +-----------------------+   | <-KERNEL_LOW_END
+ *        | Frame Stack           |   |
+ *        +-----------------------+   | <-frame_stack_bottom
+ *        | Available             |   |
+ *        |                       |
+ *        |        ...
+ *
  */
 
 #include <memory.h>
 
 #include <platform.h> // FRAME_SIZE and FRAME_LEVELS
 #include <kernel.h> // Location of the kernel
-//#include <print.h> // Debug
+#include <print.h> // Debug
+
+lock_t memory_lock = UNLOCKED; // Lock that must be acquired to use the interface
 
 /*
  * For x86_32
  *     FRAME_SIZE is 4096
  *     FRAME_LEVELS is 7
- *     1<<7 = 128
+ *     1<<7 = 128 Frames per Frame Block
  *     128 * 4096 = 524288 B (1/2 MiB per Frame Block)
  */
 #define FRAMES (1 << FRAME_LEVELS)
 #define FRAME_BLOCK_SIZE (FRAMES * FRAME_SIZE)
 
-mem_t memory_total = 0;
-mem_t lost_total = 0;
-mem_t blocks_total = 0;
-mem_t memory_used = 0;
-
-/* ============================================================================
- * Memory Map
- * ============================================================================
- * Represents contiguous physical memory sections that we can use
- */
-
-typedef struct Memory_Range_struct Memory_Range;
-struct Memory_Range_struct {
-    mem_t start;
-    mem_t size;
-    mem_t blocks_start;
-    mem_t blocks;
-};
-
-#define MEMORY_RANGE_MAX 64
-Memory_Range memory_map[MEMORY_RANGE_MAX];
 u1 memory_range_num = 0;
 
-void memory_range_add(mem_t start, mem_t size) {
+mem_t memory_total = 0;
+mem_t memory_used = 0;
+mem_t frame_stack_count = 0;
+mem_t frame_stack_size = 0;
+
+mem_t other_range_frame_count = 0;
+
+void memory_range_add(mem_t start, mem_t size, Memory_Range_Use use) {
     if (memory_range_num < MEMORY_RANGE_MAX) {
         memory_map[memory_range_num].start = start;
         memory_map[memory_range_num].size = size;
-        mem_t blocks = size / FRAME_BLOCK_SIZE;
-        memory_map[memory_range_num].blocks_start = blocks_total;
-        blocks_total += blocks;
-        mem_t blocks_size = blocks * FRAME_BLOCK_SIZE;
-        memory_map[memory_range_num].blocks = blocks;
-        memory_total += blocks_size;
-        lost_total += size - blocks_size;
+        memory_map[memory_range_num].use = use;
+
+        if (memory_range_num != kernel_range && use == FRAME_STACK_USE) {
+            other_range_frame_count += size / FRAME_SIZE;
+        }
+
         memory_range_num++;
+    } else {
+        // TODO: Panic?
     }
 }
 
-/* ============================================================================
+/* ===========================================================================
  * Frame Allocation
- * ============================================================================
+ * ===========================================================================
  * Allocate Frames of Physical Memory in groups called Frame Blocks.
  * Frame Blocks use Buddy System allocation to allocate frames.
+ *
+ * ---------------------------------------------------------------------------
+ * Buddy System
+ * ---------------------------------------------------------------------------
+ * In Frames Blocks, they are encoded as an array of bytes, each representing
+ * a Frame. If the Least Significant Bit is set, the frame is being used. The
+ * rest of the bits represent the level.
+ *
+ * Example:
+ * Lvl Size Index: 0 1 2 3 4 5 6 7 8 9 A B C D E F
+ * 0   16          0 . . . . . . . . . . . . . . .
+ * 1   8           1 . . . . . . . 1 . . . . . . .
+ * 2   4           2 . . . 2 . . . 2 . . . 2 . . .
+ * 3   2           3 . 3 . 3 . 3 . 3 . 3 . 3 . 3 .
+ * 4   1           4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4
  */
 
+/* Not using for now (probably will in the future)
 typedef struct Frame_Block_struct Frame_Block;
 struct Frame_Block_struct {
-    mem_t address;
-    mem_t used, free;
+    mem_t address; // Start of Memory the block is tracking
+    mem_t free; // Total Amount of memory that is free
+    mem_t used; // Total Amount of memory that is used
     u1 frames[FRAMES];
 };
 
 Frame_Block * frame_blocks = (Frame_Block *) &KERNEL_HIGH_END;
 mem_t frame_blocks_size = 0;
+*/
+
+mem_t frame_stack_bottom;
+mem_t frame_stack_top;
+mem_t frame_stack_left;
 
 void memory_init() {
-    // Calculate size of Frame Block Array
-    mem_t lost = (mem_t) &KERNEL_SIZE;
-    frame_blocks_size = ((memory_total - lost) * sizeof(Frame_Block)) /
-        (FRAME_BLOCK_SIZE + sizeof(Frame_Block));
-    lost += frame_blocks_size;
-    lost_total += lost;
-    memory_total -= lost;
+    print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
+    print_format("End of kernel: {x}\n", &KERNEL_HIGH_END);
+    print_string("Size of kernel is ");
+    print_uint((mem_t) &KERNEL_SIZE);
+    print_string(" B (");
+    print_uint(((u4)&KERNEL_SIZE) >> 10);
+    print_string(" KiB)\n");
 
-    // Initialize Frame Blocks
-    mem_t address;
-    mem_t blocks;
-    Frame_Block * b = frame_blocks;
-    for (u1 m = 0; m < memory_range_num; m++) {
-        address = memory_map[m].start;
-        blocks = memory_map[m].blocks;
-        if ( // If Kernel is in this range
-            (address <= (mem_t) &KERNEL_LOW_START) &&
-            (address + memory_map[m].size > (mem_t) &KERNEL_LOW_END)
-        ) { // then account for the Kernel and Frame Blocks
-            address += lost;
-            blocks -= lost / FRAME_BLOCK_SIZE;
+    // Calculate Size of Frame Stack
+    const mem_t kernel_size = (mem_t) &KERNEL_SIZE;
+    const mem_t space = ALIGN(memory_map[kernel_range].size, FRAME_SIZE) - kernel_size;
+    const mem_t other_size = other_range_frame_count * sizeof(void*);
+    if (other_size > space) {
+        // TODO panic
+    }
+    mem_t n = (space - other_size) / FRAME_SIZE;
+    mem_t total_size;
+    while (true) {
+        frame_stack_count = n + other_range_frame_count;
+        frame_stack_size = ALIGN(frame_stack_count * sizeof(void*), FRAME_SIZE);
+        mem_t stack_and_frames_size = frame_stack_size + n * FRAME_SIZE;
+        total_size =
+            stack_and_frames_size + PADDING(stack_and_frames_size, FRAME_SIZE);
+
+        if (total_size > space) {
+            n--;
+        } else {
+            break;
         }
-        for (mem_t i = 0; i < blocks; i++) {
-            b++;
-            b->address = address;
-            b->used = 0;
-            b->free = FRAME_BLOCK_SIZE;
-            for (u4 i = 0; i < FRAMES; i++) {
-                b->frames[i] = 0;
-            }
-            address += FRAME_BLOCK_SIZE;
-        }
+    }
+    memory_total = n * FRAME_SIZE;
+    frame_stack_top = frame_stack_bottom = ((mem_t) &KERNEL_HIGH_END) + frame_stack_size;
+    // frame_stack_limit = (void *) &KERNEL_LOW_END;
+    frame_stack_left = n;
+
+    mem_t start_of_krange_frames =
+        memory_map[kernel_range].start +
+        memory_map[kernel_range].size -
+        n * FRAME_SIZE;
+
+    print_string("Usable Memory: ");
+    print_uint(memory_total);
+    print_string(" B (");
+    print_uint(memory_total >> 20);
+    print_string(" MiB)\n");
+    print_format("  Made up of {d} {d} KiB Frames\n", frame_stack_count, FRAME_SIZE >> 10);
+    print_format("frame_stack_bottom: {x}\n", frame_stack_bottom);
+    print_format("start of krange_frames: {x}\n", start_of_krange_frames);
+
+    for (mem_t i = 0; i < n; i++) {
+        *((mem_t*)frame_stack_top) = start_of_krange_frames + i * FRAME_SIZE;
+        //print_format("{d}: {x}\n", i, *((mem_t*)frame_stack_top));
+        frame_stack_top -= sizeof(mem_t);
     }
 }
 
+void * pop_frame() {
+    if (frame_stack_left) {
+        frame_stack_left--;
+        mem_t * s = (mem_t*) frame_stack_top;
+        mem_t rv = *(++s);
+        frame_stack_top = (mem_t) s;
+        return rv;
+    }
+    return 0;
+}
+
+void push_frame(void * address) {
+    frame_stack_left++;
+    *((mem_t*)frame_stack_top) = address;
+    frame_stack_top -= sizeof(void*);
+}
+
+#if 0
 #define FRAME_IS_FREE(page) (!((page) & 1))
 #define FRAME_LEVEL(page) ((page) >> 1)
 #define FRAME_LEVEL_SIZE(level) (1 << (FRAME_LEVELS - level))
@@ -151,6 +217,8 @@ bool Frame_Block_allocate(Frame_Block * fb, u2 frames, void ** address) {
             //print_format(" - Found at: {d}\n", i);
             FRAME_MARK_USED(i);
             *address = (void *) (fb->address + FRAME_SIZE * i);
+            fb->free -= FRAME_LEVEL_SIZE(l);
+            fb->used += FRAME_LEVEL_SIZE(l);
             return false;
         }
     }
@@ -191,7 +259,8 @@ bool Frame_Block_allocate(Frame_Block * fb, u2 frames, void ** address) {
     }
     FRAME_MARK_USED(i);
     //print_frames(fb);
-
+    fb->free -= FRAME_LEVEL_SIZE(l);
+    fb->used += FRAME_LEVEL_SIZE(l);
     *address = (void *) (fb->address + FRAME_SIZE * i);
     return false;
 }
@@ -231,45 +300,9 @@ bool Frame_Block_deallocate(Frame_Block * fb, void * address) {
         level--;
     }
     fb->frames[frame] = level << 1;
+    fb->free -= FRAME_LEVEL_SIZE(level);
     return false;
 }
+#endif
 
-u1 apmem_range = 0;
-mem_t apmem_block = 0;
-bool allocate_pmem(mem_t amount, mem_t * got, void ** address) {
-    u1 old_apmem_range = apmem_range;
-    mem_t old_apmem_block = apmem_block++;
-    if (apmem_block == memory_map[apmem_range].blocks) {
-        apmem_block = 0;
-        apmem_range = (apmem_range + 1) / memory_range_num;
-    }
-    while (
-        (apmem_range != old_apmem_range) && (apmem_block != old_apmem_block)
-    ) {
-        if (Frame_Block_allocate(
-            &frame_blocks[memory_map[apmem_range].blocks_start + apmem_block],
-            (amount / FRAME_BLOCK_SIZE) + 1, address
-        )) return false;
-        apmem_block++;
-        if (apmem_block == memory_map[apmem_range].blocks) {
-            apmem_block = 0;
-            apmem_range = (apmem_range + 1) / memory_range_num;
-        }
-    }
-    return true;
-}
 
-bool deallocate_pmem(void * address) {
-    mem_t base = 0;
-    for (u1 m = 0; m < memory_range_num; m++) {
-        if (
-            (address >= memory_map[m].start) &&
-            (address < memory_map[m].start + memory_map[m].size)
-        ) {
-            mem_t block =  ((mem_t) address - memory_map[m].start) / FRAME_BLOCK_SIZE;
-            return Frame_Block_deallocate(&frame_blocks[base + block], address);
-        }
-        base += memory_map[m].blocks;
-    }
-    return true;
-}

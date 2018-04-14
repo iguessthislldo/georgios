@@ -87,34 +87,33 @@ extern Context * setup_process(u4 eip, u4 esp);
 
 void kernel_main() {
 
-    /*
-    print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
-    print_format("End of kernel: {x}\n", &KERNEL_HIGH_END);
-    print_string("Size of kernel is ");
-    print_uint((mem_t) &KERNEL_SIZE);
-    print_string(" B (");
-    print_uint(((u4)&KERNEL_SIZE) >> 10);
-    print_string(" KiB)\n");
+    breakpoint();
+
+    u1 x = *((u1*)MiB(500));
+    print_format("{d}\n", x);
 
     memory_init();
 
-    print_string("Memory available to the kernel is ");
-    print_uint(memory_total);
-    print_string(" B (");
-    print_uint(memory_total >> 20);
-    print_format(" MiB)\n    Lost {d} bytes to the kernel and Frame Block System\n", lost_total);
-    */
+    extern mem_t temp_page_table[1024];
+    mem_t * table_low = (mem_t *) (((mem_t) &temp_page_table[0]) - (mem_t) &KERNEL_OFFSET);
+    page_directory[0] = ((mem_t) table_low) | 1;
+
+    mem_t parent_page = pop_frame();
+    temp_page_table[0] = parent_page | 1;
+
+    mem_t child_page = pop_frame();
+    temp_page_table[1] = child_page | 1;
 
     parentp.id = 0;
     parentp.running = 1;
-    // parentp.stack = allocate_frames(fctx, 1) + fctx.frame_size - 1;
-    parentp.stack = &KERNEL_HIGH_END + 0x3FFF;
+    //parentp.stack = &KERNEL_HIGH_END + 0x3FFF;
+    parentp.stack = 0xFFF;
     parentp.context = setup_process((u4) parent, parentp.stack);
 
     childp.id = 1;
     childp.running = 0;
-    // childp.stack = allocate_frames(fctx, 1) + fctx.frame_size - 1;
-    childp.stack = &KERNEL_HIGH_END + 0x7FFF;
+    //childp.stack = &KERNEL_HIGH_END + 0x7FFF;
+    childp.stack = 0x1FFF;
     childp.context = setup_process((u4) child, childp.stack);
 
     currentp = &parentp;

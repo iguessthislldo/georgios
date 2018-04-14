@@ -1,6 +1,6 @@
-/* ============================================================================
+/* ===========================================================================
  * System Wide Memory Management
- * ============================================================================
+ * ===========================================================================
  * Interface for Managing System Memory
  */
 
@@ -10,10 +10,37 @@
 #include <library.h> // normal types
 #include <platform.h> // mem_t
 
+void * pop_frame();
+void push_frame(void * address);
+
+/*
+ * Memory Map
+ * Represents contiguous physical memory sections that we can use
+ */
+
+enum Memory_Range_Use_struct {
+    DO_NOT_USE, // Do not use through allocators
+    BLOCK_ALLOCATOR_USE, // Contigous Buddy System based Allocation (TODO)
+    FRAME_STACK_USE // Break up into Frames and Allocate on a stack
+};
+typedef enum Memory_Range_Use_struct Memory_Range_Use;
+
+typedef struct Memory_Range_struct Memory_Range;
+struct Memory_Range_struct {
+    mem_t start;
+    mem_t size;
+    Memory_Range_Use use;
+};
+
+#define MEMORY_RANGE_MAX 64
+Memory_Range memory_map[MEMORY_RANGE_MAX];
+u1 memory_range_num;
+u1 kernel_range;
+
 /*
  * Add Range of Contiguous Memory, used when processing multiboot
  */
-void memory_range_add(mem_t start, mem_t size);
+void memory_range_add(mem_t start, mem_t size, Memory_Range_Use use);
 
 /*
  * Initialize Memory Management
@@ -48,10 +75,34 @@ bool deallocate_vmem(void * address, mem_t size);
 
 /*
  * Allocate Phycial Memory Frames at an address, called in peicemeal
+ * Used by platform defined virtual memory allocation implementation.
+ *
+ * left
+ *     Pointer to how much memory is left to allocate.
+ *     Initialize with ammount desired and run until 0.
+ * got
+ *     Pointer to how much it got for use in the virutal memory.
+ * address
+ *     On success is set to the address of the allocated range.
+ *
+ * Returns true if there was an error
+ *
+ * Exampe:
+ *     mem_t left = KiB(10);
+ *     mem_t got;
+ *     void * address;
+ *     while (left) {
+ *         if (allocate_pmem(&left, &got, &address)) continue;
+ *         // Set virtual memory using address and got
+ *     }
  */
-bool allocate_pmem(mem_t ammount, mem_t * got, void ** address);
+extern bool allocate_pmem(mem_t * left, mem_t * got, void ** address);
 
-bool deallocate_pmem(void * address);
+/*
+ * Allocate Phycial Memory Frames at an address, called in peicemeal
+ * like allocate_pmem,
+ */
+extern bool deallocate_pmem(void * address);
 
 /*
  * Stats
@@ -62,11 +113,11 @@ bool deallocate_pmem(void * address);
 // Max Memory available given ideal conditions
 mem_t memory_total;
 
-// Total lost to Kernel and Rounding Memory Ranges
-mem_t lost_total;
+// Total Number of Frames in Stack
+mem_t frame_stack_count;
 
-// Total Number of Frame Blocks in the system
-mem_t block_total;
+// Frame Stack Size
+mem_t frame_stack_count;
 
 // Total amount of Memory that makes up used frames
 mem_t memory_used;

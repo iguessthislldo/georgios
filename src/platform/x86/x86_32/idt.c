@@ -92,7 +92,7 @@ const char * x86_interrupt_messages[] = {
 void x86_interrupt_handler(x86_interrupt_t stack_frame) {
     print_string("<Interrupt ");
     print_uint(stack_frame.idt_index);
-    print_char("(");
+    print_char('(');
     print_uint(stack_frame.error_code);
     print_string("): \"");
     if (stack_frame.idt_index < 32) {
@@ -101,5 +101,6 @@ void x86_interrupt_handler(x86_interrupt_t stack_frame) {
         print_string("No message found for this exception");
     }
     print_string("\">\n");
+    breakpoint();
 }
 
