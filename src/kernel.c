@@ -27,7 +27,6 @@ u4 x = 0;
 lock_t xlock = UNLOCKED;
 
 void child() {
-    int panic = 0;
     enable_interrupts();
     // Child's work
     while (true) {
@@ -49,19 +48,10 @@ void child() {
         for (u4 i = 0; i < 0xFFFFF; i++) {
             asm("nop");
         }
-        if (++panic == 12) {
-            u1 x = *((u1*)MiB(500));
-            print_format("{d}\n", x);
-        }
     }
 }
 
 void parent() {
-    /*
-    TODO: Start Child Here
-    disable_interrupts();
-    enable_interrupts();
-    */
     childp.running = 1;
     enable_interrupts();
     
@@ -106,13 +96,11 @@ void kernel_main() {
 
     parentp.id = 0;
     parentp.running = 1;
-    //parentp.stack = &KERNEL_HIGH_END + 0x3FFF;
     parentp.stack = 0xFFF;
     parentp.context = setup_process((u4) parent, parentp.stack);
 
     childp.id = 1;
     childp.running = 0;
-    //childp.stack = &KERNEL_HIGH_END + 0x7FFF;
     childp.stack = 0x1FFF;
     childp.context = setup_process((u4) child, childp.stack);
 
