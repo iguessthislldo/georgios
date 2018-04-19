@@ -5,6 +5,8 @@ ih_common:
     // Push General Registers
     pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
 
+    pushl (panic_message)
+
     // The stack should now be equivalent to x86_exception_t
     call x86_interrupt_handler
 
@@ -66,4 +68,12 @@ IH_NO_CODE 28
 IH_NO_CODE 29
 IH_NO_CODE 30
 IH_NO_CODE 31
+
+.global ih_panic
+.type ih_panic, @function
+ih_panic:
+    cli
+    pushl $0
+    pushl $33
+    jmp ih_common
 

@@ -10,9 +10,6 @@
 #include <library.h> // normal types
 #include <platform.h> // mem_t
 
-void * pop_frame();
-void push_frame(void * address);
-
 /*
  * Memory Map
  * Represents contiguous physical memory sections that we can use
@@ -58,7 +55,7 @@ void memory_init();
  *
  * returns true if there was an error
  */
-bool allocate_vmem(void * address, mem_t size);
+bool allocate_vmem(mem_t address, mem_t size);
 
 /*
  * Deallocate a virtual memory range
@@ -72,6 +69,9 @@ bool allocate_vmem(void * address, mem_t size);
  * returns true if there was an error
  */
 bool deallocate_vmem(void * address, mem_t size);
+
+bool pop_frame(mem_t * address);
+void push_frame(mem_t address);
 
 /*
  * Allocate Phycial Memory Frames at an address, called in peicemeal

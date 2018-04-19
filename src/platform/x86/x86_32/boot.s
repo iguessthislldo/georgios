@@ -80,7 +80,7 @@ attempt_lock:
     movl (%ecx), %eax // eax = *lock
 
     // Don't try if already locked
-    test %eax, %eax
+    testl %eax, %eax
     jnz attempt_lock_failed
 
     movl $1, %edx // edx = LOCKED
@@ -94,7 +94,7 @@ attempt_lock:
     lock cmpxchgl %edx, (%ecx)
 
     // See if we succeeded
-    test %eax, %eax
+    testl %eax, %eax
     jnz attempt_lock_failed
 
     // Return Success

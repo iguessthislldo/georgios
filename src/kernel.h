@@ -22,9 +22,13 @@ struct Process_struct {
 };
 typedef struct Process_struct Process;
 
+bool scheduler_enabled;
 extern void context_switch(void ** old, void * new);
 void scheduler();
 Context * schedulerc;
 Process * currentp;
+
+char * panic_message;
+#define PANIC(message) panic_message = (message); asm("int $33");
 
 #endif

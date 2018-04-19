@@ -2,6 +2,7 @@
 #include "fb.h"
 
 #include <print.h>
+#include <kernel.h>
 
 void idt_set(u1 index, u4 base, u2 select, u1 flags) {
     idt[index].base_low = base & 0xFFFF;
@@ -48,6 +49,8 @@ void idt_initialize() {
     idt_set(30, (u4) ih_30, 0x08, 0x8E);
     idt_set(31, (u4) ih_31, 0x08, 0x8E);
     idt_load();
+
+    idt_set_handler(33, ih_panic);
 }
 
 void idt_set_handler(u1 index, void (*handler)()) {
@@ -97,14 +100,21 @@ void x86_interrupt_handler(x86_interrupt_t stack_frame) {
 
     print_string(
 "==============================<!>Kernel Panic<!>==============================\n"
-"An exception interrupt has not been handled:\n"
+"This kernel has encountered an unrecoverable "
+); print_string(panic_message ?
+    "software error:\n" : "unhandled hardware exception:\n");
+print_string(
 "  Interrupt Number: "); print_uint(stack_frame.idt_index); print_string("\n"
 "  Error Code: "); print_uint(stack_frame.error_code);
 print_string("\n  Message: ");
-    if (stack_frame.idt_index < 32) {
-        print_string(x86_interrupt_messages[stack_frame.idt_index]);
+    if (panic_message) {
+        print_string(panic_message);
     } else {
-        print_string("No message found for this exception");
+        if (stack_frame.idt_index < 32) {
+            print_string(x86_interrupt_messages[stack_frame.idt_index]);
+        } else {
+            print_string("No message found for this exception");
+        }
     }
 
     print_string("\n\n"

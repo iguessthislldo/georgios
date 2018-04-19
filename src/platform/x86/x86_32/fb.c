@@ -73,9 +73,12 @@ void scroll() {
 }
 
 void fb_print_char(char c) {
+    disable_interrupts();
+    /*
     while (attempt_lock(&fb_lock)) {
         // TODO: Sleep?
     }
+    */
     if (c == '\n') {
         fb_column = 0;
         if (fb_row == (FB_HEIGHT-1)) {
@@ -95,6 +98,9 @@ void fb_print_char(char c) {
         fb_place_char(c, fb_color, fb_column, fb_row);
         fb_cursor(fb_column + 1, fb_row);
     }
+    enable_interrupts();
+    /*
     release_lock(&fb_lock);
+    */
 }
 

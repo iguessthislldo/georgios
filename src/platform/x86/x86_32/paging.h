@@ -12,6 +12,9 @@
 #define FRAME_SIZE KiB(4)
 #define FRAME_LEVELS 7
 
+#define TABLE_COUNT 1024
+#define TABLE_SIZE TABLE_COUNT * FRAME_SIZE
+
 #define PAGING_ADDRESS_MASK 0xFFFFF000
 
 #define PAGE_IS_PRESENT(entry) ((entry) & 1)
@@ -25,6 +28,10 @@
  * Defined in boot.s
  */
 extern u4 page_directory[1024];
+
+extern u4 kernel_page_table[1024];
+
+extern u4 temp_page_table[1024];
 
 /*
  * Paging Control Functions

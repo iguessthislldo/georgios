@@ -70,8 +70,10 @@ extern void ih_29();
 extern void ih_30();
 extern void ih_31();
 extern void ih_pic();
+extern void ih_panic();
 
 struct x86_interrupt_struct {
+    char * panic_message;
     u4 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
     u4 idt_index; // Pushed by us
     u4 error_code; // Pushed by us if the CPU didn't push one

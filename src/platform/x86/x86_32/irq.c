@@ -44,6 +44,5 @@ void irq_initialize() {
 
 void irq0_handle() {
     pit_reset(0);
-    print_char('I');
     context_switch(&currentp->context, schedulerc);
 }

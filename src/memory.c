@@ -159,21 +159,21 @@ void memory_init() {
     }
 }
 
-void * pop_frame() {
+bool pop_frame(mem_t * address) {
     if (frame_stack_left) {
         frame_stack_left--;
         mem_t * s = (mem_t*) frame_stack_top;
-        mem_t rv = *(++s);
+        *address = *(++s);
         frame_stack_top = (mem_t) s;
-        return rv;
+        return false;
     }
-    return 0;
+    return true;
 }
 
-void push_frame(void * address) {
+void push_frame(mem_t address) {
     frame_stack_left++;
     *((mem_t*)frame_stack_top) = address;
-    frame_stack_top -= sizeof(void*);
+    frame_stack_top -= sizeof(mem_t);
 }
 
 #if 0
@@ -304,5 +304,4 @@ bool Frame_Block_deallocate(Frame_Block * fb, void * address) {
     return false;
 }
 #endif
-
 
