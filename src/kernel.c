@@ -4,6 +4,7 @@
 #include <memory.h>
 
 #include "kernel.h"
+#include "test_user.h"
 
 Process parentp;
 Process childp;
