@@ -51,6 +51,7 @@ void idt_initialize() {
     idt_load();
 
     idt_set_handler(33, ih_panic);
+    idt_set_handler(34, ih_system_call);
 }
 
 void idt_set_handler(u1 index, void (*handler)()) {

@@ -73,7 +73,17 @@ IH_NO_CODE 31
 .type ih_panic, @function
 ih_panic:
     cli
-    pushl $0
+    xchgw %bx, %bx
+    pushl 12(%esp)
     pushl $33
     jmp ih_common
+
+.global ih_system_call
+.type ih_system_call, @function
+ih_system_call:
+    cli
+    // Items on the stack above eip, cs, and eflags
+    pushl 16(%esp) // argument
+    pushl 12(%esp) // call_number
+    jmp system_call
 

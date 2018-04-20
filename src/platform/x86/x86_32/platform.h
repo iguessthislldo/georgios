@@ -29,6 +29,7 @@ void platform_init(multiboot_info_t* mbd);
 
 typedef u8 max_t; // Max Type
 typedef u4 mem_t; // Pointer Type
+typedef u4 arg_t; // Generic Argument Type
 
 typedef u4 lock_t;
 #define UNLOCKED 0
@@ -46,6 +47,13 @@ extern bool attempt_lock(lock_t * lock);
 inline void release_lock(lock_t * lock) {
     *lock = UNLOCKED;
 }
+
+#define PANIC(message) \
+    panic_message = (message); \
+    asm("pushl $0\n\tint $33");
+#define PANIC_CODE(message, code) \
+    panic_message = (message); \
+    asm("pushl %0\n\tint $33" :: "r" ((code)));
 
 #endif
 #endif

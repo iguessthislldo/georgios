@@ -50,12 +50,12 @@ running `make run`.
 ### In Progress/Fix
 
 - Paging Framework
+- Userland Processes
+- System Calls: Needs Userland
 
 ### Future
 
 - malloc/free for kernel
-- Userland Processes
-- System Calls: Needs Userland
 - Disk Driver
 - Simple File System: Needs Disk Driver and System Calls (Ideally)
 - ELF Loader: Needs Simple File System, and Userland

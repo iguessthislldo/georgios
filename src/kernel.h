@@ -2,6 +2,7 @@
 #define KERNEL_HEADER
 
 #include <library.h>
+#include <platform.h>
 
 extern u4 KERNEL_LOW_START;
 extern u4 KERNEL_LOW_END;
@@ -29,6 +30,7 @@ Context * schedulerc;
 Process * currentp;
 
 char * panic_message;
-#define PANIC(message) panic_message = (message); asm("int $33");
+
+void system_call(arg_t call_number, arg_t argument);
 
 #endif

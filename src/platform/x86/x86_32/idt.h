@@ -69,8 +69,10 @@ extern void ih_28();
 extern void ih_29();
 extern void ih_30();
 extern void ih_31();
+
 extern void ih_pic();
 extern void ih_panic();
+extern void ih_system_call();
 
 struct x86_interrupt_struct {
     char * panic_message;
