@@ -4,7 +4,6 @@
 #include <memory.h>
 
 #include "kernel.h"
-#include "test_user.h"
 
 Process parentp;
 Process childp;
@@ -81,6 +80,15 @@ void kernel_main() {
 
     memory_init();
 
+    allocate_vmem(0, FRAME_SIZE);
+    // Move breakpoint to 0
+    asm ("movb $0x66, (0)");
+    asm ("movb $0x87, (1)");
+    asm ("movb $0xDB, (2)");
+    // Jump to 0
+    asm ("movl $0, %%eax\n\tjmp %%eax" ::: "%eax");
+
+    /*
     allocate_vmem(0, KiB(10));
 
     parentp.id = 0;
@@ -95,5 +103,6 @@ void kernel_main() {
 
     currentp = &parentp;
     scheduler();
+    */
 }
 
