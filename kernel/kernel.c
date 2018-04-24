@@ -41,7 +41,6 @@ void child() {
         for (u4 i = 0; i < 0xFFFF; i++) {
             if (x != childp.id) {
                 PANIC("Lock Error");
-                halt();
             }
         }
         print_char('>');
@@ -65,7 +64,6 @@ void parent() {
         for (u4 i = 0; i < 0xFFFFF; i++) {
             if (x != parentp.id) {
                 PANIC("Lock Error");
-                halt();
             }
         }
         print_char(']');
@@ -74,7 +72,7 @@ void parent() {
     }
 }
 
-extern Context * setup_process(u4 eip, u4 esp);
+extern void * setup_process(u4 eip, u4 esp);
 
 void kernel_main() {
 

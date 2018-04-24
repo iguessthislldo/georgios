@@ -10,21 +10,19 @@
 #define IDT_SIZE 256
 
 // Entries
-struct idt_entry_struct {
+typedef struct {
 	u2 base_low;
 	u2 select;
 	u1 zero;
 	u1 flags;
     u2 base_high;
-} __attribute__((packed));
-typedef struct idt_entry_struct idt_entry_t;
+} idt_entry_t __attribute__((packed));
 
 // Pointer
-struct idt_pointer_struct {
+typedef struct {
 	u2 limit;
 	u4 base;
-} __attribute__((packed));
-typedef struct idt_pointer_struct idt_pointer_t;
+} idt_pointer_t __attribute__((packed));
 
 // Values
 idt_entry_t idt[IDT_SIZE];
@@ -74,14 +72,13 @@ extern void ih_pic();
 extern void ih_panic();
 extern void ih_system_call();
 
-struct x86_interrupt_struct {
+typedef struct {
     char * panic_message;
     u4 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
     u4 idt_index; // Pushed by us
     u4 error_code; // Pushed by us if the CPU didn't push one
     u4 eip, cs, eflags; // Pushed by CPU
-} __attribute__((packed));
-typedef struct x86_interrupt_struct x86_interrupt_t;
+} x86_interrupt_t __attribute__((packed));
 
 void x86_interrupt_handler(x86_interrupt_t stack_frame);
 

@@ -15,19 +15,17 @@
  * Represents contiguous physical memory sections that we can use
  */
 
-enum Memory_Range_Use_struct {
+typedef enum {
     DO_NOT_USE, // Do not use through allocators
     BLOCK_ALLOCATOR_USE, // Contigous Buddy System based Allocation (TODO)
     FRAME_STACK_USE // Break up into Frames and Allocate on a stack
-};
-typedef enum Memory_Range_Use_struct Memory_Range_Use;
+} Memory_Range_Use;
 
-typedef struct Memory_Range_struct Memory_Range;
-struct Memory_Range_struct {
+typedef struct {
     mem_t start;
     mem_t size;
     Memory_Range_Use use;
-};
+} Memory_Range;
 
 #define MEMORY_RANGE_MAX 64
 Memory_Range memory_map[MEMORY_RANGE_MAX];

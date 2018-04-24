@@ -11,21 +11,19 @@
 
 #include <library.h>
 
-struct gdt_entry_struct {
+typedef struct {
 	u2 limit_low;
 	u2 base_low;
 	u1 base_middle;
 	u1 access;
 	u1 granularity;
 	u1 base_high;
-} __attribute__((packed));
-typedef struct gdt_entry_struct gdt_entry_t;
+} gdt_entry_t __attribute__((packed));
 
-struct gdt_pointer_struct {
+typedef struct {
 	u2 limit;
 	u4 base;
-} __attribute__((packed));
-typedef struct gdt_pointer_struct gdt_pointer_t;
+} gdt_pointer_t __attribute__((packed));
 
 #define GDT_CNT 6
 gdt_entry_t gdt[GDT_CNT];

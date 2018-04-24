@@ -13,20 +13,18 @@ extern u4 KERNEL_SIZE;
 
 #define kernel_offset(a) ((a) + (mem_t) &KERNEL_OFFSET)
 
-typedef u1 Context;
-
-struct Process_struct {
+typedef struct {
     u1 id;
     bool running;
+    bool in_kernelspace;
     void * context;
     void * stack;
-};
-typedef struct Process_struct Process;
+} Process;
 
 bool scheduler_enabled;
 extern void context_switch(void ** old, void * new);
 void scheduler();
-Context * schedulerc;
+void * schedulerc;
 Process * currentp;
 
 char * panic_message;

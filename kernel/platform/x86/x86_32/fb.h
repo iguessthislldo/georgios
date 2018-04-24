@@ -10,7 +10,7 @@ static const u2 FB_DATA_PORT = 0x3D5;
 static const u1 FB_HIGH_BYTE_COMMAND = 14;
 static const u1 FB_LOW_BYTE_COMMAND = 15;
 
-typedef enum fb_color_t_enum {
+typedef enum {
 	FB_COLOR_BLACK = 0,
 	FB_COLOR_BLUE = 1,
 	FB_COLOR_GREEN = 2,
