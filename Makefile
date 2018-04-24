@@ -1,7 +1,7 @@
 rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 
-c_sources:=$(call rwildcard, src/, *.c)
-s_sources:=$(call rwildcard, src/, *.s)
+c_sources:=$(call rwildcard, kernel/, *.c)
+s_sources:=$(call rwildcard, kernel/, *.s)
 objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
 depends:=$(foreach depend, $(c_sources:.c=.d), tmp/$(depend))
 
@@ -20,7 +20,7 @@ ISO_GRUB:=$(ISO_DIR)/$(GRUB)
 ISO_GRUB_BIN:=$(ISO_DIR)/$(GRUB_BIN)
 
 CC:=i686-elf-gcc
-CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu11 -pedantic -Wno-pointer-arith -I src/platform -I src
+CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu11 -pedantic -Wno-pointer-arith -I kernel/platform -I kernel
 
 AS:=i686-elf-as
 ASFLAGS:=
@@ -65,7 +65,7 @@ tmp/%.d: %.c
 	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
-$(KERNEL): src/platform/x86/x86_32/linking.ld $(objects)
+$(KERNEL): kernel/platform/x86/x86_32/linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
 	objdump -S $(KERNEL) > tmp/annotated_kernel
