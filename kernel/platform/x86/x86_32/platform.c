@@ -20,8 +20,7 @@ void process_multiboot(multiboot_info_t* mb) {
             }
         }
     } else {
-        print_string("Could not get memory map from multiboot!\n");
-        halt();
+        PANIC("Could not get memory map from multiboot!\n");
     }
     
 }
@@ -31,6 +30,6 @@ void platform_init(multiboot_info_t* mb) {
     fb_initialize();
     gdt_initialize();
     idt_initialize();
-    irq_initialize();
+    //irq_initialize();
     process_multiboot(mb);
 }

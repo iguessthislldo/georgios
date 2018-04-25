@@ -52,3 +52,21 @@ context_switch:
     movl %edx, %esp
 
     ret // Return to new context (hopefully)
+
+.section .text
+.global usermode
+.type usermode, @function
+usermode:
+    movl (user_data_selector), %eax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    pushl %eax
+    movl %esp, %eax
+    pushl %eax
+    pushf
+    pushl (user_code_selector)
+    pushl $0
+    iret
+

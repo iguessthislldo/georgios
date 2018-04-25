@@ -88,6 +88,8 @@ bool allocate_vmem(mem_t address, mem_t ammount) {
             page_directory[directory_index] = 0;
             page_directory[directory_index] = table | 1;
         }
+        return false;
     }
+    return true;
 }
 

@@ -61,7 +61,7 @@ temp_page_table:
 .type gdt_load, @function
 gdt_load:
     lgdt gdt_pointer
-    movw $0x10, %ax
+    movw (kernel_data_selector), %ax
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %fs
@@ -69,6 +69,8 @@ gdt_load:
     movw %ax, %ss
     jmp gdt_complete_load
 gdt_complete_load:
+    movw (tss_selector), %ax
+    ltr %ax
     ret
 
 // bool attempt_lock(lock_t * lock)

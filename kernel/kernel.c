@@ -73,6 +73,7 @@ void parent() {
 }
 
 extern void * setup_process(u4 eip, u4 esp);
+extern void usermode();
 
 void kernel_main() {
 
@@ -80,11 +81,15 @@ void kernel_main() {
 
     allocate_vmem(0, FRAME_SIZE);
     // Move breakpoint to 0
-    asm ("movb $0x66, (0)");
-    asm ("movb $0x87, (1)");
-    asm ("movb $0xDB, (2)");
+    //asm ("movb $0x66, (0)");
+    //asm ("movb $0x87, (1)");
+    //asm ("movb $0xDB, (2)");
+    asm ("movb $0x90, (0)");  // nop
+    asm ("movb $0xeb, (1)");  // jmp to prev instruction
+    asm ("movb $0xfd, (2)");
     // Jump to 0
-    asm ("movl $0, %%eax\n\tjmp %%eax" ::: "%eax");
+    //asm ("movl $0, %%eax\n\tjmp %%eax" ::: "%eax");
+    usermode();
 
     /*
     allocate_vmem(0, KiB(10));

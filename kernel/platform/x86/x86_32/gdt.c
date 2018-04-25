@@ -1,22 +1,18 @@
 #include "gdt.h"
+#include <platform.h>
+#include <print.h>
 
-u1 gdt_set_gate(u4 num, u4 base, u4 limit, u1 access, u1 gran) {
-    gdt[num].base_low = (base & 0xFFFF);
-    gdt[num].base_middle = (base >> 16) & 0xFF;
-    gdt[num].base_high = (base >> 24) & 0xFF;
-    gdt[num].limit_low = (limit & 0xFFFF);
-    gdt[num].granularity = ((limit >> 16) & 0x0F);
-    gdt[num].granularity |= (gran & 0xF0);
-    gdt[num].access = access;
+u2 gdt_set_gate(u2 num, u4 base, u4 limit, u4 info) {
+    gdt[num].limit_0_15 = limit & 0xFFFF;
+    gdt[num].base_0_15 = base & 0xFFFF;
+    gdt[num].base_16_23 = (base >> 16) & 0xFF;
+    gdt[num].info = info & 0xFF;
+    // Combine with 3rd Nibble of Info
+    gdt[num].limit_16_19 = ((limit >> 16) & 0xF) | ((info & 0xF00) >> 4);
+    gdt[num].base_24_31 = (base >> 24) & 0xFF;
 
     return num;
 }
-
-#define GDT_SEGMENT 0xCF
-#define GDT_KERNEL 0x90
-#define GDT_USER 0x90
-#define GDT_CODE 0x0A
-#define GDT_DATA 0x02
 
 void gdt_initialize() {
     // Set Up Pointer
@@ -24,25 +20,31 @@ void gdt_initialize() {
     gdt_pointer.base = (u4) &gdt;
 
     // Required NULL Entry
-    gdt_set_gate(0, 0, 0, 0, 0);
+    gdt_set_gate(0, 0, 0, 0);
     // Kernel Code Segment
-    kernel_code_selector = gdt_set_gate(
-        1, 0, 0xFFFFFFFF, GDT_KERNEL | GDT_CODE, GDT_SEGMENT
-    ) | RING_0;
+    kernel_code_selector = (gdt_set_gate(
+        1, 0, 0xFFFFFFFF, GDT_ENTRY | GDT_RING_0 | GDT_CODE_SEGMENT_ER
+    ) << 3);
     // Kernel Data Segment
-    kernel_code_selector = gdt_set_gate(
-        2, 0, 0xFFFFFFFF, GDT_KERNEL | GDT_DATA, GDT_SEGMENT
-    ) | RING_0;
+    kernel_data_selector = (gdt_set_gate(
+        2, 0, 0xFFFFFFFF, GDT_ENTRY | GDT_RING_0 | GDT_DATA_SEGMENT_RW
+    ) << 3);
     // User Code Segment
-    user_code_selector = gdt_set_gate(
-        3, 0, 0xFFFFFFFF, GDT_USER | GDT_CODE, GDT_SEGMENT
-    ) | RING_3;
+    user_code_selector = (gdt_set_gate(
+        3, 0, 0xFFFFFFFF, GDT_ENTRY | GDT_RING_3 | GDT_CODE_SEGMENT_ER
+    ) << 3) | 3;
     // User Data Segment
-    user_data_selector = gdt_set_gate(
-        4, 0, 0xFFFFFFFF, GDT_USER | GDT_DATA, GDT_SEGMENT
-    ) | RING_3;
+    user_data_selector = (gdt_set_gate(
+        4, 0, 0xFFFFFFFF, GDT_ENTRY | GDT_RING_3 | GDT_DATA_SEGMENT_RW
+    ) << 3) | 3;
     // Required Task State Segment
-    // TODO
+    memset(&tss, 0, sizeof(tss_t));
+    tss.esp0 = 0;
+    tss.ss0 = kernel_data_selector;
+    tss_selector = (gdt_set_gate(
+        5, (u4) &tss, (u4) sizeof(tss_t),
+        GDT_RING_3 | GDT_TSS
+    ) << 3) | 3;
 
     // Load
     gdt_load();

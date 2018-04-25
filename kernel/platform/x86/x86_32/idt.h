@@ -16,13 +16,13 @@ typedef struct {
 	u1 zero;
 	u1 flags;
     u2 base_high;
-} idt_entry_t __attribute__((packed));
+} __attribute__((packed)) idt_entry_t;
 
 // Pointer
 typedef struct {
 	u2 limit;
 	u4 base;
-} idt_pointer_t __attribute__((packed));
+} __attribute__((packed)) idt_pointer_t;
 
 // Values
 idt_entry_t idt[IDT_SIZE];
@@ -78,7 +78,7 @@ typedef struct {
     u4 idt_index; // Pushed by us
     u4 error_code; // Pushed by us if the CPU didn't push one
     u4 eip, cs, eflags; // Pushed by CPU
-} x86_interrupt_t __attribute__((packed));
+} __attribute__((packed)) x86_interrupt_t;
 
 void x86_interrupt_handler(x86_interrupt_t stack_frame);
 
