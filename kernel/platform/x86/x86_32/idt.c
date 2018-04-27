@@ -4,54 +4,62 @@
 #include <print.h>
 #include <kernel.h>
 
-void idt_set(u1 index, u4 base, u2 select, u1 flags) {
-    idt[index].base_low = base & 0xFFFF;
-    idt[index].base_high = (base & 0xFFFF0000) >> 16;
-    idt[index].select = select;
+
+void idt_set(u1 index, u4 offset, u2 selector, u1 flags) {
+    idt[index].offset_0_15 = offset & 0xFFFF;
+    idt[index].offset_16_31= (offset & 0xFFFF0000) >> 16;
+    idt[index].selector = selector;
     idt[index].zero = 0;
     idt[index].flags = flags;
 }
+
+#define DEFAULT_FLAGS 0x8E
+#define DFLT kernel_code_selector, DEFAULT_FLAGS
+#define USER (3 << 5)
 
 void idt_initialize() {
     idt_pointer.limit = (sizeof(idt_entry_t) * IDT_SIZE);
     idt_pointer.base = (u4) &idt;
     memset(&idt, 0, sizeof(idt_entry_t) * IDT_SIZE);
-    idt_set(0, (u4) ih_0, 0x08, 0x8E);
-    idt_set(1, (u4) ih_1, 0x08, 0x8E);
-    idt_set(2, (u4) ih_2, 0x08, 0x8E);
-    idt_set(3, (u4) ih_3, 0x08, 0x8E);
-    idt_set(4, (u4) ih_4, 0x08, 0x8E);
-    idt_set(5, (u4) ih_5, 0x08, 0x8E);
-    idt_set(6, (u4) ih_6, 0x08, 0x8E);
-    idt_set(7, (u4) ih_7, 0x08, 0x8E);
-    idt_set(8, (u4) ih_8, 0x08, 0x8E);
-    idt_set(9, (u4) ih_9, 0x08, 0x8E);
-    idt_set(10, (u4) ih_10, 0x08, 0x8E);
-    idt_set(11, (u4) ih_11, 0x08, 0x8E);
-    idt_set(12, (u4) ih_12, 0x08, 0x8E);
-    idt_set(13, (u4) ih_13, 0x08, 0x8E);
-    idt_set(14, (u4) ih_14, 0x08, 0x8E);
-    idt_set(15, (u4) ih_15, 0x08, 0x8E);
-    idt_set(16, (u4) ih_16, 0x08, 0x8E);
-    idt_set(17, (u4) ih_17, 0x08, 0x8E);
-    idt_set(18, (u4) ih_18, 0x08, 0x8E);
-    idt_set(19, (u4) ih_19, 0x08, 0x8E);
-    idt_set(20, (u4) ih_20, 0x08, 0x8E);
-    idt_set(21, (u4) ih_21, 0x08, 0x8E);
-    idt_set(22, (u4) ih_22, 0x08, 0x8E);
-    idt_set(23, (u4) ih_23, 0x08, 0x8E);
-    idt_set(24, (u4) ih_24, 0x08, 0x8E);
-    idt_set(25, (u4) ih_25, 0x08, 0x8E);
-    idt_set(26, (u4) ih_26, 0x08, 0x8E);
-    idt_set(27, (u4) ih_27, 0x08, 0x8E);
-    idt_set(28, (u4) ih_28, 0x08, 0x8E);
-    idt_set(29, (u4) ih_29, 0x08, 0x8E);
-    idt_set(30, (u4) ih_30, 0x08, 0x8E);
-    idt_set(31, (u4) ih_31, 0x08, 0x8E);
-    idt_load();
+    idt_set(0, (u4) ih_0, DFLT);
+    idt_set(1, (u4) ih_1, DFLT);
+    idt_set(2, (u4) ih_2, DFLT);
+    idt_set(3, (u4) ih_3, DFLT);
+    idt_set(4, (u4) ih_4, DFLT);
+    idt_set(5, (u4) ih_5, DFLT);
+    idt_set(6, (u4) ih_6, DFLT);
+    idt_set(7, (u4) ih_7, DFLT);
+    idt_set(8, (u4) ih_8, DFLT);
+    idt_set(9, (u4) ih_9, DFLT);
+    idt_set(10, (u4) ih_10, DFLT);
+    idt_set(11, (u4) ih_11, DFLT);
+    idt_set(12, (u4) ih_12, DFLT);
+    idt_set(13, (u4) ih_13, DFLT);
+    idt_set(14, (u4) ih_14, DFLT);
+    idt_set(15, (u4) ih_15, DFLT);
+    idt_set(16, (u4) ih_16, DFLT);
+    idt_set(17, (u4) ih_17, DFLT);
+    idt_set(18, (u4) ih_18, DFLT);
+    idt_set(19, (u4) ih_19, DFLT);
+    idt_set(20, (u4) ih_20, DFLT);
+    idt_set(21, (u4) ih_21, DFLT);
+    idt_set(22, (u4) ih_22, DFLT);
+    idt_set(23, (u4) ih_23, DFLT);
+    idt_set(24, (u4) ih_24, DFLT);
+    idt_set(25, (u4) ih_25, DFLT);
+    idt_set(26, (u4) ih_26, DFLT);
+    idt_set(27, (u4) ih_27, DFLT);
+    idt_set(28, (u4) ih_28, DFLT);
+    idt_set(29, (u4) ih_29, DFLT);
+    idt_set(30, (u4) ih_30, DFLT);
+    idt_set(31, (u4) ih_31, DFLT);
 
-    idt_set_handler(33, ih_panic);
-    idt_set_handler(34, ih_system_call);
+    idt_set(50, (u4) ih_panic,
+        kernel_code_selector, DEFAULT_FLAGS);
+    idt_set(100, (u4) ih_system_call,
+        kernel_code_selector, DEFAULT_FLAGS | USER);
+
+    idt_load();
 }
 
 void idt_set_handler(u1 index, void (*handler)()) {

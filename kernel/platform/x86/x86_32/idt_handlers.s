@@ -36,30 +36,30 @@ ih_\value:
     jmp ih_common
 .endm
 
-IH_NO_CODE 0 
-IH_NO_CODE 1 
-IH_NO_CODE 2 
-IH_NO_CODE 3 
-IH_NO_CODE 4 
-IH_NO_CODE 5 
-IH_NO_CODE 6 
-IH_NO_CODE 7 
-IH_CODE 8 
-IH_NO_CODE 9 
-IH_CODE 10
-IH_CODE 11
-IH_CODE 12
-IH_CODE 13
-IH_CODE 14
-IH_NO_CODE 15
-IH_NO_CODE 16
-IH_NO_CODE 17
-IH_NO_CODE 18
-IH_NO_CODE 19
-IH_NO_CODE 20
-IH_NO_CODE 21
-IH_NO_CODE 22
-IH_NO_CODE 23
+IH_NO_CODE 0  // Divide By Zero
+IH_NO_CODE 1  // Debug
+IH_NO_CODE 2  // Non-Maskable Interrupt
+IH_NO_CODE 3  // Breakpoint
+IH_NO_CODE 4  // Overflow
+IH_NO_CODE 5  // Bound Range
+IH_NO_CODE 6  // Invalid Opcode
+IH_NO_CODE 7  // Device Not Available
+IH_CODE 8     // Double Fault
+IH_NO_CODE 9  // Coprocessor Seg Overrun
+IH_CODE 10    // Invalid TSS
+IH_CODE 11    // Missing Segment
+IH_CODE 12    // Stack Segment Fault
+IH_CODE 13    // Protection Fault
+IH_CODE 14    // Page Fault
+IH_NO_CODE 15 // Reserved
+IH_NO_CODE 16 // Float Exception
+IH_NO_CODE 17 // Alignment Check
+IH_NO_CODE 18 // Machine Check
+IH_NO_CODE 19 // SIMD
+IH_NO_CODE 20 // Virtualiazation
+IH_NO_CODE 21 // Reservered
+IH_NO_CODE 22 // Security
+IH_NO_CODE 23 // Reserved
 IH_NO_CODE 24
 IH_NO_CODE 25
 IH_NO_CODE 26
@@ -75,15 +75,14 @@ ih_panic:
     cli
     xchgw %bx, %bx
     pushl 12(%esp)
-    pushl $33
+    pushl $50
     jmp ih_common
 
 .global ih_system_call
 .type ih_system_call, @function
 ih_system_call:
     cli
-    // Items on the stack above eip, cs, and eflags
-    pushl 16(%esp) // argument
-    pushl 12(%esp) // call_number
-    jmp system_call
+    pushl %ebx // argument
+    pushl %eax // call_number
+    call system_call
 

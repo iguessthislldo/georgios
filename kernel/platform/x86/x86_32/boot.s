@@ -161,7 +161,7 @@ _start:
 
     // Jump to Higher Kernel
     movl $higher_kernel, %eax
-    jmp %eax
+    jmp * %eax
 higher_kernel:
     //   And Unmap kernel_page_table from 0x0
     movl $0, page_directory

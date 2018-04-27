@@ -11,11 +11,11 @@
 
 // Entries
 typedef struct {
-	u2 base_low;
-	u2 select;
+	u2 offset_0_15;
+	u2 selector;
 	u1 zero;
 	u1 flags;
-    u2 base_high;
+    u2 offset_16_31;
 } __attribute__((packed)) idt_entry_t;
 
 // Pointer
@@ -30,7 +30,7 @@ idt_pointer_t idt_pointer;
 
 // Functions
 #define idt_load() asm volatile ("lidt (%0)" : : "r" (&idt_pointer))
-void idt_set(u1 index, u4 base, u2 select, u1 flags);
+void idt_set(u1 index, u4 offset, u2 selector, u1 flags);
 void idt_initialize();
 void idt_set_handler(u1 index, void (*handler)());
 

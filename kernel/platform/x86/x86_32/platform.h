@@ -50,10 +50,10 @@ inline void release_lock(lock_t * lock) {
 
 #define PANIC(message) \
     panic_message = (message); \
-    asm("pushl $0\n\tint $33");
+    asm("pushl $0\n\tint $50");
 #define PANIC_CODE(message, code) \
     panic_message = (message); \
-    asm("pushl %0\n\tint $33" :: "r" ((code)));
+    asm("pushl %0\n\tint $50" :: "r" ((code)));
 
 #endif
 #endif

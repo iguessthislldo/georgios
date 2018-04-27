@@ -79,23 +79,27 @@ void kernel_main() {
 
     memory_init();
 
-    allocate_vmem(0, FRAME_SIZE);
-    tss.esp0 = FRAME_SIZE - 1;
-    // Move breakpoint to 0
-    //asm ("movb $0x66, (0)");
-    //asm ("movb $0x87, (1)");
-    //asm ("movb $0xDB, (2)");
+    /*
+    asm (
+        "movl $66, %eax\n\t"
+        "int $100\n\t"
+    );
+    */
+    allocate_vmem(0, 2 * FRAME_SIZE);
+    tss.esp0 = 2 * FRAME_SIZE - 1;
+    /*
     asm ("movb $0x90, (0)");  // nop
     asm ("movb $0xeb, (1)");  // jmp to prev instruction
     asm ("movb $0xfd, (2)");
-    asm (
-        "movb $0xff, %%al\n\t"
-        "outb %%al, $0xa1\n\t"
-        "outb %%al, $0x21\n\t"
-        ::: "%al"
-    );
-    // Jump to 0
-    //asm ("movl $0, %%eax\n\tjmp %%eax" ::: "%eax");
+    */
+    asm ("movb $0xb8, (0)"); // mov $0x42,%eax
+    asm ("movb $0x42, (1)");
+    asm ("movb $0x00, (2)");
+    asm ("movb $0x00, (3)");
+    asm ("movb $0x00, (4)");
+    asm ("movb $0xcd, (5)"); // int $0x64
+    asm ("movb $0x64, (6)");
+    breakpoint();
     usermode();
 
     /*

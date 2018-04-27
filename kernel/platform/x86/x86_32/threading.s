@@ -63,9 +63,8 @@ usermode:
     movw %ax, %fs
     movw %ax, %gs
 
-    movl %esp, %ebx
     pushl %eax
-    pushl %ebx
+    pushl $0xFFF
     pushf
     pushl (user_code_selector)
     pushl $0
