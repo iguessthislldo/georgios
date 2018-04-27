@@ -20,6 +20,7 @@ ISO_GRUB:=$(ISO_DIR)/$(GRUB)
 ISO_GRUB_BIN:=$(ISO_DIR)/$(GRUB_BIN)
 
 CC:=i686-elf-gcc
+DEBUGGER:=i686-elf-gdb
 CFLAGS:=-ffreestanding -O2 -g -nostdlib -std=gnu11 -pedantic -Wno-pointer-arith -I kernel/platform -I kernel
 
 AS:=i686-elf-as
@@ -73,6 +74,10 @@ $(KERNEL): kernel/platform/x86/x86_32/linking.ld $(objects)
 .PHONY: run
 run:
 	bochs -q -f misc/bochs_config -rc misc/bochs_rc
+
+.PHONY: debug
+debug:
+	$(DEBUGGER) -x misc/debug.gdb
 
 .PHONY: clean_all
 clean_all:
