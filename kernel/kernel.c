@@ -80,6 +80,7 @@ void kernel_main() {
     memory_init();
 
     allocate_vmem(0, FRAME_SIZE);
+    tss.esp0 = FRAME_SIZE - 1;
     // Move breakpoint to 0
     //asm ("movb $0x66, (0)");
     //asm ("movb $0x87, (1)");
@@ -87,6 +88,12 @@ void kernel_main() {
     asm ("movb $0x90, (0)");  // nop
     asm ("movb $0xeb, (1)");  // jmp to prev instruction
     asm ("movb $0xfd, (2)");
+    asm (
+        "movb $0xff, %%al\n\t"
+        "outb %%al, $0xa1\n\t"
+        "outb %%al, $0x21\n\t"
+        ::: "%al"
+    );
     // Jump to 0
     //asm ("movl $0, %%eax\n\tjmp %%eax" ::: "%eax");
     usermode();

@@ -80,13 +80,13 @@ bool allocate_vmem(mem_t address, mem_t ammount) {
             for (mem_t i = page_start; i < page_end; i++) {
                 mem_t t;
                 pop_frame(&t);
-                temp_page_table[i] = t | 1;
+                temp_page_table[i] = t | 5;
                 address += FRAME_SIZE;
                 ammount_left -= FRAME_SIZE;
             }
             mem_t table = PAGE_GET_ADDRESS(page_directory[directory_index]);
             page_directory[directory_index] = 0;
-            page_directory[directory_index] = table | 1;
+            page_directory[directory_index] = table | 5;
         }
         return false;
     }

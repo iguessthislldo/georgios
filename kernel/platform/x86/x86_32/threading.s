@@ -62,11 +62,13 @@ usermode:
     movw %ax, %es
     movw %ax, %fs
     movw %ax, %gs
+
+    movl %esp, %ebx
     pushl %eax
-    movl %esp, %eax
-    pushl %eax
+    pushl %ebx
     pushf
     pushl (user_code_selector)
     pushl $0
+    cli
     iret
 

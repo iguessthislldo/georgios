@@ -42,7 +42,7 @@ void gdt_initialize() {
     tss.esp0 = 0;
     tss.ss0 = kernel_data_selector;
     tss_selector = (gdt_set_gate(
-        5, (u4) &tss, (u4) sizeof(tss_t),
+        5, (u4) &tss, sizeof(tss_t) - 1,
         GDT_RING_3 | GDT_TSS
     ) << 3) | 3;
 
