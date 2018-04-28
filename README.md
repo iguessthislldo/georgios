@@ -1,6 +1,6 @@
 # Georgios
 
-![Saint George and the Dragon](george_and_dragon.png)
+![Saint George and the Dragon](misc/george_and_dragon.png)
 
 [Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
 
