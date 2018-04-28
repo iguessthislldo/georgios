@@ -11,10 +11,10 @@
 void process_multiboot(multiboot_info_t* mb) {
     // Check if Memory Map is in place
     if (mb->flags & 64) { // 6ith bit
-        multiboot_memory_map_t * begin = kernel_offset(mb->mmap_addr);
-        multiboot_memory_map_t * end = ((u1*) begin) + mb->mmap_length;
+        multiboot_memory_map_t * begin = (multiboot_memory_map_t*) kernel_offset(mb->mmap_addr);
+        multiboot_memory_map_t * end = ((void*) begin) + mb->mmap_length;
         multiboot_memory_map_t * e;
-        for (e = begin; e < end; e = ((u1*)e) + sizeof(e->size) + e->size) {
+        for (e = begin; e < end; e = ((void*)e) + sizeof(e->size) + e->size) {
             if (e->type == MULTIBOOT_MEMORY_AVAILABLE) {
                 memory_range_add(e->addr, e->len, FRAME_STACK_USE);
             }

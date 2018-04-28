@@ -119,9 +119,9 @@ _start:
 
     // Push Multiboot struct pointer on to the future kernel stack
     mov $stack_top, %eax
-    sub $KERNEL_OFFSET, %eax // translate stack into a lower kernel address
+    sub $_KERNEL_OFFSET, %eax // translate stack into a lower kernel address
     sub $4, %eax
-    add $KERNEL_OFFSET, %ebx // translate pointer to higher kerne address
+    add $_KERNEL_OFFSET, %ebx // translate pointer to higher kerne address
     mov %ebx, (%eax)
 
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET
@@ -129,14 +129,14 @@ _start:
     //   First put the physical location of the Kernel Page Table in the page
     //   directory:
     mov $kernel_page_table, %eax
-    sub $KERNEL_OFFSET, %eax
+    sub $_KERNEL_OFFSET, %eax
     and $0xFFFFF000, %eax
     or $1, %eax
     mov $page_directory, %ebx
-    sub $KERNEL_OFFSET, %ebx
+    sub $_KERNEL_OFFSET, %ebx
     mov $0, %ecx
     mov %eax, (%ebx,%ecx)
-    mov $KERNEL_OFFSET, %ecx
+    mov $_KERNEL_OFFSET, %ecx
     shr $20, %ecx
     mov %eax, (%ebx,%ecx)
     //   Then fill kernel_page_table
@@ -153,7 +153,7 @@ _start:
 
     // Enable Paging
     mov $page_directory, %eax
-    sub $KERNEL_OFFSET, %eax
+    sub $_KERNEL_OFFSET, %eax
     mov %eax, %cr3
     mov %cr0, %eax
     or $0x80000000, %eax

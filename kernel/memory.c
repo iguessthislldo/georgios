@@ -59,7 +59,7 @@ void memory_range_add(mem_t start, mem_t size, Memory_Range_Use use) {
 
         memory_range_num++;
     } else {
-        // TODO: Panic?
+        PANIC("Attempted to add more memory ranges than allowed.")
     }
 }
 
@@ -103,20 +103,19 @@ mem_t frame_stack_top;
 mem_t frame_stack_left;
 
 void memory_init() {
-    print_format("Start of kernel: {x}\n", &KERNEL_HIGH_START);
-    print_format("End of kernel: {x}\n", &KERNEL_HIGH_END);
+    print_format("Start of kernel: {x}\n", KERNEL_HIGH_START);
+    print_format("End of kernel: {x}\n", KERNEL_HIGH_END);
     print_string("Size of kernel is ");
-    print_uint((mem_t) &KERNEL_SIZE);
+    print_uint(KERNEL_SIZE);
     print_string(" B (");
-    print_uint(((u4)&KERNEL_SIZE) >> 10);
+    print_uint(KERNEL_SIZE >> 10);
     print_string(" KiB)\n");
 
     // Calculate Size of Frame Stack
-    const mem_t kernel_size = (mem_t) &KERNEL_SIZE;
-    const mem_t space = ALIGN(memory_map[kernel_range].size, FRAME_SIZE) - kernel_size;
+    const mem_t space = ALIGN(memory_map[kernel_range].size, FRAME_SIZE) - KERNEL_SIZE;
     const mem_t other_size = other_range_frame_count * sizeof(void*);
     if (other_size > space) {
-        // TODO panic
+        PANIC("memory_init: \"other\" range size is larger than total space");
     }
     mem_t n = (space - other_size) / FRAME_SIZE;
     mem_t total_size;
@@ -134,8 +133,7 @@ void memory_init() {
         }
     }
     memory_total = n * FRAME_SIZE;
-    frame_stack_top = frame_stack_bottom = ((mem_t) &KERNEL_HIGH_END) + frame_stack_size;
-    // frame_stack_limit = (void *) &KERNEL_LOW_END;
+    frame_stack_top = frame_stack_bottom = KERNEL_HIGH_END + frame_stack_size;
     frame_stack_left = n;
 
     mem_t start_of_krange_frames =
