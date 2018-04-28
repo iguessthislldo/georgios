@@ -81,7 +81,6 @@ void print_format(const char * format, ...) {
     va_list args;
     va_start(args, format);
     bool escape = false;
-    u1 size = 0;
     char type = 0;
     bool is_signed = false;
     bool show_positive = false;
@@ -96,33 +95,15 @@ void print_format(const char * format, ...) {
                 // Decimal
                 case 'd':
                     if (is_signed) {
-                        if (size == 1) {
-                            print_int_sign(va_arg(args, i1), show_positive);
-                        } else if (size == 2) {
-                            print_int_sign(va_arg(args, i2), show_positive);
-                        } else {
-                            print_int_sign(va_arg(args, i4), show_positive);
-                        }
+                        print_int_sign(va_arg(args, i4), show_positive);
                     } else {
-                        if (size == 1) {
-                            print_uint(va_arg(args, u1));
-                        } else if (size == 2) {
-                            print_uint(va_arg(args, u2));
-                        } else {
-                            print_uint(va_arg(args, u4));
-                        }
+                        print_uint(va_arg(args, u4));
                     }
                     break;
 
                 // Hexadecimal
                 case 'x':
-                    if (size == 1) {
-                        print_hex(va_arg(args, u1));
-                    } else if (size == 2) {
-                        print_hex(va_arg(args, u2));
-                    } else {
-                        print_hex(va_arg(args, u4));
-                    }
+                    print_hex(va_arg(args, u4));
                     break;
 
                 // Characters 
@@ -153,12 +134,6 @@ void print_format(const char * format, ...) {
                 is_signed = true;
                 break;
 
-            case '1':
-            case '2':
-            case '4':
-                size = c - '0';
-                break;
-
             case '{':
                 print_char('{');
                 reset = true;
@@ -176,7 +151,6 @@ void print_format(const char * format, ...) {
         if (reset) {
             escape = false;
             type = 0;
-            size = 0;
             is_signed = false;
             show_positive = false;
             reset = false;
