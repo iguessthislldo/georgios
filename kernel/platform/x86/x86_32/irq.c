@@ -44,5 +44,8 @@ void irq_initialize() {
 
 void irq0_handle() {
     pit_reset(0);
-    context_switch(&currentp->context, schedulerc);
+    context_switch(
+        &processes[process_index].threads[thread_index].context,
+        schedulerc
+    );
 }

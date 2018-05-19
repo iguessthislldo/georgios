@@ -13,3 +13,12 @@ void * memset(void * pointer, i1 value, u4 number) {
     return pointer;
 }
 
+void * memcpy(void * dest, const void * src, u4 size) {
+    u1 * d = dest;
+    const u1 * s = src;
+    for (u4 i = 0; i < size; i++) {
+        *(d++) = *(s++);
+    }
+    return dest;
+}
+

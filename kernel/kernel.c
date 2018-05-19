@@ -5,89 +5,74 @@
 
 #include "kernel.h"
 
-Process parentp;
-Process childp;
+u1 process_count = 0;
+u2 next_process_id = 1;
 
 bool scheduler_enabled = true;
 char * panic_message = 0;
 
 void scheduler() {
-    enable_interrupts();
+    process_index = 0;
+    thread_index = 0;
     while (true) {
-        if (scheduler_enabled) {
-            if (currentp->id || !childp.running) {
-                currentp = &parentp;
+        bool next_proc = false;
+        if (scheduler_enabled && process_count) {
+            process_t * p = &processes[process_index];
+            if (p->thread_count) {
+                thread_t * t = &p->threads[thread_index];
+                if (t->valid) {
+                    context_switch(&schedulerc, t->context);
+                }
+                thread_index = (thread_index + 1) % THREAD_COUNT_MAX;
+                if (!thread_index) {
+                    next_proc = true;
+                }
             } else {
-                currentp = &childp;
+                next_proc = true;
             }
-            context_switch(&schedulerc, currentp->context);
-        }
-    }
-}
-
-u4 x = 0;
-lock_t xlock = UNLOCKED;
-
-void child() {
-    enable_interrupts();
-    // Child's work
-    while (true) {
-        for (u4 i = 0; i < 0xFFF; i++) {
-            asm("nop");
-        }
-        if (attempt_lock(&xlock)) continue;
-        print_char('<');
-        x = childp.id;
-        for (u4 i = 0; i < 0xFFFF; i++) {
-            if (x != childp.id) {
-                PANIC("Lock Error");
+            if (next_proc) {
+                process_index = (process_index + 1) % PROCESS_COUNT_MAX;
+                thread_index = 0;
             }
         }
-        print_char('>');
-        release_lock(&xlock);
-        for (u4 i = 0; i < 0xFFFFF; i++) {
-            asm("nop");
-        }
-    }
-}
-
-void parent() {
-    enable_interrupts();
-    // Parent's Work
-    while (true) {
-        for (u4 i = 0; i < 0xFFFFFF; i++) {
-            asm("nop");
-        }
-        if (attempt_lock(&xlock)) continue;
-        print_char('[');
-        x = parentp.id;
-        for (u4 i = 0; i < 0xFFFFF; i++) {
-            if (x != parentp.id) {
-                PANIC("Lock Error");
-            }
-        }
-        print_char(']');
-        childp.running = 1;
-        release_lock(&xlock);
     }
 }
 
 extern void * setup_process(u4 eip, u4 esp);
 extern void usermode();
 
+void make_proc(char value) {
+
+}
+
 void kernel_main() {
 
+    //print_dragon();
+
+    panic_message = 0;
     memory_init();
+    
+    allocate_vmem(0, 2 * FRAME_SIZE);
+    tss.esp0 = 2 * FRAME_SIZE - 1;
+
+    const u4 start = 0xc0101aca;
+    memcpy(0, start, 0xc0101adf - start);
+    usermode(0, 0xFFF);
+
+    asm(
+        "movl $99, %%eax\n\t" // print_char
+        "movl $0x2B, %%ebx\n\t" // '+'
+        "int $100\n\t"
+        "movl $0, %%eax\n\t"
+        "jmp %%eax\n\t"
+        ::: "%eax", "%ebx"
+    );
 
     /*
     asm (
         "movl $66, %eax\n\t"
         "int $100\n\t"
     );
-    */
-    /*
-    allocate_vmem(0, 2 * FRAME_SIZE);
-    tss.esp0 = 2 * FRAME_SIZE - 1;
     */
     /*
     asm ("movb $0x90, (0)");  // nop

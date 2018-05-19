@@ -1,11 +1,8 @@
-.section .text
-
+.section .text 
 ih_common:
     //xchgw %bx, %bx
     // Push General Registers
     pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
-
-    pushl (panic_message)
 
     // The stack should now be equivalent to x86_exception_t
     call x86_interrupt_handler
@@ -58,16 +55,16 @@ IH_NO_CODE 18 // Machine Check
 IH_NO_CODE 19 // SIMD
 IH_NO_CODE 20 // Virtualiazation
 IH_NO_CODE 21 // Reservered
-IH_NO_CODE 22 // Security
-IH_NO_CODE 23 // Reserved
+IH_NO_CODE 22 // ...
+IH_NO_CODE 23 
 IH_NO_CODE 24
 IH_NO_CODE 25
 IH_NO_CODE 26
 IH_NO_CODE 27
 IH_NO_CODE 28
 IH_NO_CODE 29
-IH_NO_CODE 30
-IH_NO_CODE 31
+IH_NO_CODE 30 // Security
+IH_NO_CODE 31 // Reserved
 
 .global ih_panic
 .type ih_panic, @function
@@ -79,10 +76,20 @@ ih_panic:
     jmp ih_common
 
 .global ih_system_call
+// %eax is the call number
+// %ebx is the argument
 .type ih_system_call, @function
 ih_system_call:
     cli
+    pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
+
     pushl %ebx // argument
     pushl %eax // call_number
     call system_call
+    popl %ecx
+    popl %ecx
+
+    popal // Restore Registers
+    sti
+    iret
 

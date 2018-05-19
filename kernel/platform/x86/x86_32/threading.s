@@ -53,21 +53,27 @@ context_switch:
 
     ret // Return to new context (hopefully)
 
+// void usermode(mem_t ip, memt sp)
 .section .text
 .global usermode
 .type usermode, @function
 usermode:
+    movl 4(%esp), %ecx // ip, Where to jump as ring 3
+    movl 8(%esp), %edx // sp, What the stack should be
+
+    // Load User Data Selector into Data Segment Registers
     movl (user_data_selector), %eax
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %fs
     movw %ax, %gs
 
-    pushl %eax
-    pushl $0xFFF
-    pushf
-    pushl (user_code_selector)
-    pushl $0
-    cli
-    iret
+    // Push arguments for iret
+    pushl %eax // ss
+    pushl %edx // sp
+    pushf // flags
+    pushl (user_code_selector) // cs
+    pushl %ecx // ip
+    sti
+    iret // jump to ip as ring 3
 

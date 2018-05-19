@@ -73,7 +73,6 @@ extern void ih_panic();
 extern void ih_system_call();
 
 typedef struct {
-    char * panic_message;
     u4 edi, esi, ebp, esp, ebx, edx, ecx, eax; // Pushed by us using pusha
     u4 idt_index; // Pushed by us
     u4 error_code; // Pushed by us if the CPU didn't push one

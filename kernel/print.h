@@ -76,3 +76,5 @@ void print_format(const char * format, ...);
 
 void print_disable_lock();
 
+void print_dragon();
+
