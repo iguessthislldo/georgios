@@ -16,6 +16,7 @@
 #include "paging.h"
 #include "io.h"
 #include "irq.h"
+#include "ps2.h"
 
 #include "multiboot.h"
 

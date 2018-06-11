@@ -56,6 +56,7 @@ running `make run`.
 - Paging Framework
 - Userland Processes
 - System Calls: Needs Userland
+- Keyboard/PS/2 Driver
 
 ### Future
 

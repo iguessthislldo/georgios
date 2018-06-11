@@ -20,8 +20,14 @@ static inline void pit_reset(u1 irq) {
     out1(PIT_0_7_COMMAND, PIT_RESET);
 }
 
-extern void ih_irq0();
 void irq_initialize();
+
+// PIT
+extern void ih_irq0();
 void irq0_handle();
+
+// PS/2 Keyboard
+extern void ih_irq1();
+void irq1_handle();
 
 #endif

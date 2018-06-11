@@ -55,7 +55,6 @@ temp_page_table:
 /*
  * GLOBAL DESCRIPTOR TABLE
  */
-
 .section .text
 .global gdt_load
 .type gdt_load, @function
@@ -68,7 +67,7 @@ gdt_load:
     movw %ax, %gs
     movw %ax, %ss
     jmp gdt_complete_load
-gdt_complete_load:
+  gdt_complete_load:
     movw (tss_selector), %ax
     ltr %ax
     ret
@@ -103,7 +102,7 @@ attempt_lock:
     movl $0, %eax
     ret
 
-attempt_lock_failed:
+  attempt_lock_failed:
     // Return Failure
     movl $1, %eax
     ret
@@ -121,7 +120,9 @@ _start:
     mov $stack_top, %eax
     sub $_KERNEL_OFFSET, %eax // translate stack into a lower kernel address
     sub $4, %eax
-    add $_KERNEL_OFFSET, %ebx // translate pointer to higher kerne address
+    add $_KERNEL_OFFSET, %ebx // translate pointer to higher kernel address
+    // Put higher address of Multiboot pointer in the first
+    // 4 bytes of the stack
     mov %ebx, (%eax)
 
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET
@@ -144,7 +145,7 @@ _start:
     mov $0, %ebx
     mov $0x400, %ecx
     mov $1, %edx
-    kernel_page_table_fill_loop:
+  kernel_page_table_fill_loop:
     mov %edx, (%eax, %ebx, 4)
     add $0x1000, %edx
     add $1, %ebx
@@ -162,7 +163,7 @@ _start:
     // Jump to Higher Kernel
     movl $higher_kernel, %eax
     jmp * %eax
-higher_kernel:
+  higher_kernel:
     //   And Unmap kernel_page_table from 0x0
     movl $0, page_directory
 

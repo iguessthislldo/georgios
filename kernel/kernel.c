@@ -49,9 +49,10 @@ void kernel_main() {
 
     //print_dragon();
 
-    panic_message = 0;
-    memory_init();
+    //memory_init();
+    //print_char('\n');
     
+    /*
     allocate_vmem(0, 2 * FRAME_SIZE);
     tss.esp0 = 2 * FRAME_SIZE - 1;
 
@@ -67,6 +68,7 @@ void kernel_main() {
         "jmp %%eax\n\t"
         ::: "%eax", "%ebx"
     );
+    */
 
     /*
     asm (
@@ -107,5 +109,7 @@ void kernel_main() {
     currentp = &parentp;
     scheduler();
     */
+
+    print_string("Done\n");
 }
 
