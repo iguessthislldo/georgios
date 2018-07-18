@@ -66,7 +66,7 @@ tmp/%.d: %.c
 	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
-$(KERNEL): kernel/platform/x86/x86_32/linking.ld $(objects)
+$(KERNEL): kernel/platform/linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
 	objdump -S $(KERNEL) > tmp/annotated_kernel

@@ -4,7 +4,6 @@
 #include <memory.h>
 
 #include "platform.h"
-#include "../platform.h"
 
 #include "multiboot.h"
 
