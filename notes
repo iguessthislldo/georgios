@@ -4,22 +4,23 @@ These are general things that I might need reminding of.
 GNU Assembler x86_32 CDEL
 -------------------------------------------------------------------------------
 
-The order is:
-    Push Last Argument,
+The order function data is pushed onto the stack is, from bottom to top:
+    Last Argument,
     ...
-    Push Second Argument,
-    Push First Argument,
-    Push Return Address
+    Second Argument,
+    First Argument,
+    Return Address
 
-This also applies to struct arguments, the last member is pushed first.
+This also applies to structs passed as arguments (the last member of the
+struct is pushed first).
 
-If function is f(int32_t a, int32_t b, int32_t c), then
-    a = 4(%esp)
-    b = 8(%esp)
-    b = 12(%esp)
+If a function's signature is f(int32_t a, int32_t b, int32_t c), then
+    - a can be accessed as 4(%esp),
+    - b can be accessed as 8(%esp)
+    - c can be accessed as 12(%esp)
 
-%eax, %ecx, and %edx are the only registers saved by the caller
-return is %eax
+%eax, %ecx, and %edx are the registers saved by the caller.
+The returned value is expected to be in %eax.
 
 ===============================================================================
 x86 Assembly
