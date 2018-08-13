@@ -57,4 +57,6 @@ char * panic_message;
 
 void system_call(arg_t call_number, arg_t argument);
 
+bool serial_log_enabled;
+
 #endif

@@ -79,6 +79,9 @@ void fb_print_char(char c) {
         // TODO: Sleep?
     }
     */
+    if (serial_log_enabled) {
+        serial_out(c);
+    }
     if (c == '\n') {
         fb_column = 0;
         if (fb_row == (FB_HEIGHT-1)) {

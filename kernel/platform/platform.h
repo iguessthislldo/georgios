@@ -55,5 +55,7 @@ inline void release_lock(lock_t * lock) {
     panic_message = (message); \
     asm("pushl %0\n\tint $50" :: "r" ((code)));
 
+void serial_out(char c);
+
 #endif
 #endif

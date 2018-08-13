@@ -1,8 +1,9 @@
 symbol-file tmp/iso/boot/kernel
-#display/4i $pc
-#break *0x0
-#break ps2.c:73
-#break ps2_send
-break boot.s: 
-target remote | qemu-system-i386 -S -gdb stdio -m 16 -cdrom os.iso
-continue
+set disassemble-next-line on
+set confirm off
+set pagination off
+set logging file tmp/gdb.log
+set logging overwrite on
+set logging on
+
+target remote | qemu-system-i386 -S -gdb stdio -m 16 -cdrom os.iso -serial file:tmp/serial.log
