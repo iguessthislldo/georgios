@@ -35,7 +35,6 @@ void irq_initialize() {
         "out %al, $0xA1" _
     );
 
-    /*
     // Trigger IRQ0, lowest frequency
     out1(PIT_MODE, 0x34);
     out1(PIT_CHANNEL, 0xFF);
@@ -43,7 +42,6 @@ void irq_initialize() {
 
     // Register IRQ0
     idt_set_handler(32, &ih_irq0);
-    */
 
     /*
     idt_set_handler(33, &ih_irq1);
@@ -52,10 +50,12 @@ void irq_initialize() {
 
 void irq0_handle() {
     pit_reset(0);
+    /*
     context_switch(
         &processes[process_index].threads[thread_index].context,
         schedulerc
     );
+    */
 }
 
 void irq1_handle() {

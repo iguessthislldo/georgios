@@ -1,4 +1,4 @@
-// Context * setup_process(u4 eip, u4 esp)
+// mem_t setup_process(mem_t eip, mem_t esp)
 .section .text
 .global setup_process
 .type setup_process, @function
@@ -39,13 +39,13 @@ setup_process:
     popl %ebx // Restore ebx
     ret
 
-// void context_switch(Context ** old, Context * new);
+// void context_switch(mem_t * old, mem_t new);
 .section .text
 .global context_switch
 .type context_switch, @function
 context_switch:
-    movl 4(%esp), %eax // old context
-    movl 8(%esp), %edx // new context
+    movl 4(%esp), %eax // pointer to old context location
+    movl 8(%esp), %edx // new context location
 
     // Switch to new stack
     movl %esp, (%eax)
@@ -58,22 +58,31 @@ context_switch:
 .global usermode
 .type usermode, @function
 usermode:
-    movl 4(%esp), %ecx // ip, Where to jump as ring 3
-    movl 8(%esp), %edx // sp, What the stack should be
+    movl 4(%esp), %eax // ip, Where to jump as ring 3
+    movl 8(%esp), %ebx // sp, What the stack should be
+
+    // Get the User Data and Code Selectors
+/*
+    movl (user_data_selector), %edi
+    movl (%edi), %edx
+    movl (user_code_selector), %edi
+    movl (%edi), %ecx
+*/
+    movl $0x23, %edx
+    movl $0x1b, %ecx
 
     // Load User Data Selector into Data Segment Registers
-    movl (user_data_selector), %eax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
+    movw %dx, %ds
+    movw %dx, %es
+    movw %dx, %fs
+    movw %dx, %gs
 
     // Push arguments for iret
-    pushl %eax // ss
-    pushl %edx // sp
+    pushl %edx // ss
+    pushl %ebx // sp
     pushf // flags
-    pushl (user_code_selector) // cs
-    pushl %ecx // ip
+    pushl %ecx // cs
+    pushl %eax // ip
     sti
     iret // jump to ip as ring 3
 

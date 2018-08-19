@@ -21,7 +21,7 @@ ISO_GRUB_BIN:=$(ISO_DIR)/$(GRUB_BIN)
 
 CC:=i686-elf-gcc
 DEBUGGER:=i686-elf-gdb
-CFLAGS:=-std=gnu11 -O2 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith -I kernel/platform -I kernel
+CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith -I kernel/platform -I kernel
 
 AS:=i686-elf-as
 ASFLAGS:=

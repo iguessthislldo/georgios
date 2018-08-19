@@ -38,37 +38,33 @@ void scheduler() {
     }
 }
 
-extern void * setup_process(u4 eip, u4 esp);
+extern mem_t setup_process(mem_t eip, mem_t esp);
 extern void usermode();
-
-void make_proc(char value) {
-
-}
 
 void kernel_main() {
 
-    //print_dragon();
+    disable_interrupts();
 
-    //memory_init();
-    //print_char('\n');
+    memory_init();
     
-    /*
-    allocate_vmem(0, 2 * FRAME_SIZE);
-    tss.esp0 = 2 * FRAME_SIZE - 1;
+    mem_t kernel_stack = 2 * FRAME_SIZE - 1;
+    mem_t user_stack = FRAME_SIZE - 1;
+    allocate_vmem(0, 3 * FRAME_SIZE);
+    tss.esp0 = kernel_stack;
 
-    const u4 start = 0xc0101aca;
-    memcpy(0, start, 0xc0101adf - start);
-    usermode(0, 0xFFF);
+    memcpy(0, &&test_program_start, &&test_program_end - &&test_program_start);
+    usermode(0, user_stack);
 
+test_program_start:
     asm(
         "movl $99, %%eax\n\t" // print_char
         "movl $0x2B, %%ebx\n\t" // '+'
         "int $100\n\t"
         "movl $0, %%eax\n\t"
-        "jmp %%eax\n\t"
+        "jmp * %%eax\n\t"
         ::: "%eax", "%ebx"
     );
-    */
+test_program_end:
 
     /*
     asm (
