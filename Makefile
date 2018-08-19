@@ -71,13 +71,13 @@ $(KERNEL): kernel/platform/linking.ld $(objects)
 	$(CC) $(CFLAGS) -T $^ -o $@
 	objdump -S $(KERNEL) > tmp/annotated_kernel
 
-.PHONY: run
-run:
+.PHONY: bochs
+bochs:
 	bochs -q -f misc/bochs_config -rc misc/bochs_rc
 
-.PHONY: debug
-debug:
-	$(DEBUGGER) -x misc/debug.gdb
+.PHONY: qemu
+qemu:
+	$(DEBUGGER) -x misc/qemu.gdb
 
 .PHONY: clean_all
 clean_all:
