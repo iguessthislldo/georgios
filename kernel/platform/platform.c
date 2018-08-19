@@ -49,6 +49,6 @@ void platform_init(multiboot_info_t* mb) {
     gdt_initialize();
     idt_initialize();
     irq_initialize();
-    /* ps2_init(); */
+    ps2_init();
     process_multiboot(mb);
 }

@@ -2,7 +2,6 @@
 #include <print.h>
 
 void system_call(arg_t call_number, arg_t argument) {
-    breakpoint();
     switch (call_number) {
     case 99:
         print_char((char) argument);

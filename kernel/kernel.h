@@ -4,6 +4,9 @@
 #include <library.h>
 #include <platform.h>
 
+/*
+ * Values from Linking
+ */
 extern u4 _KERNEL_LOW_START;
 #define KERNEL_LOW_START ((mem_t) &_KERNEL_LOW_START)
 extern u4 _KERNEL_LOW_END;
@@ -17,6 +20,7 @@ extern u4 _KERNEL_HIGH_END;
 extern u4 _KERNEL_SIZE;
 #define KERNEL_SIZE ((mem_t) &_KERNEL_SIZE)
 
+// Convert Lower Kernel Address into Higher Address
 #define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
 
 typedef struct {
@@ -53,10 +57,10 @@ bool scheduler_enabled;
 extern void context_switch(mem_t * old, mem_t new);
 void scheduler();
 
+// Message to print during panic
 char * panic_message;
 
+// Access to System calls
 void system_call(arg_t call_number, arg_t argument);
-
-bool serial_log_enabled;
 
 #endif

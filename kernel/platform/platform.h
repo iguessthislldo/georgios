@@ -1,14 +1,18 @@
+/* ===========================================================================
+ * x86_32 PC Platform
+ * ===========================================================================
+ * Exposes interface to the kernel for working on a i686 based IBM PC
+ * descendent system and how to initialize it.
+ */
 #ifndef X86_32_PLATFORM_HEADER
 #define X86_32_PLATFORM_HEADER
 
 #if defined(__GNUC__) && defined(__i386__)
 #define x86_32
 
-#define halt() __asm__("cli;hlt\n\t")
-#define breakpoint() __asm__("xchgw %bx, %bx")
-
 #include <library.h>
 
+// Platform Submodules
 #include "fb.h"
 #include "gdt.h"
 #include "idt.h"
@@ -17,20 +21,29 @@
 #include "irq.h"
 #include "ps2.h"
 
+// GRUB Multiboot structure
 #include "multiboot.h"
 
-// Connect the print library to x86 framebuffer
-#define print_char fb_print_char
-
-#define enable_interrupts() asm ("sti");
-#define disable_interrupts() asm ("cli");
-
-void platform_init(multiboot_info_t* mbd);
-
+/*
+ * Types for this Platform
+ */
 typedef u8 max_t; // Max Type
 typedef u4 mem_t; // Pointer Type
 typedef u4 arg_t; // Generic Argument Type
 
+/*
+ * Platform initialization, which takes the pointer to system info we got from
+ * GRUB as an argument.
+ */
+void platform_init(multiboot_info_t* mbd);
+
+// Connect the print library to x86 framebuffer
+#define print_char fb_print_char
+
+/* ---------------------------------------------------------------------------
+ * Lock
+ * ---------------------------------------------------------------------------
+ */
 typedef u4 lock_t;
 #define UNLOCKED 0
 #define LOCKED 1
@@ -48,6 +61,11 @@ inline void release_lock(lock_t * lock) {
     *lock = UNLOCKED;
 }
 
+/* ---------------------------------------------------------------------------
+ * System Control
+ * ---------------------------------------------------------------------------
+ */
+
 #define PANIC(message) \
     panic_message = (message); \
     asm("pushl $0\n\tint $50");
@@ -55,6 +73,20 @@ inline void release_lock(lock_t * lock) {
     panic_message = (message); \
     asm("pushl %0\n\tint $50" :: "r" ((code)));
 
+#define enable_interrupts() asm ("sti");
+#define disable_interrupts() asm ("cli");
+#define halt() __asm__("cli;hlt\n\t")
+#define breakpoint() __asm__("xchgw %bx, %bx")
+
+/* ---------------------------------------------------------------------------
+ * Serial Ports
+ * ---------------------------------------------------------------------------
+ */
+
+// If true, printing will also print to serial
+bool serial_log_enabled;
+
+// Output c to COM1
 void serial_out(char c);
 
 #endif

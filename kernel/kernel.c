@@ -43,10 +43,9 @@ extern void usermode();
 
 void kernel_main() {
 
-    disable_interrupts();
-
     memory_init();
     
+    /*
     mem_t kernel_stack = 2 * FRAME_SIZE - 1;
     mem_t user_stack = FRAME_SIZE - 1;
     allocate_vmem(0, 3 * FRAME_SIZE);
@@ -65,28 +64,6 @@ test_program_start:
         ::: "%eax", "%ebx"
     );
 test_program_end:
-
-    /*
-    asm (
-        "movl $66, %eax\n\t"
-        "int $100\n\t"
-    );
-    */
-    /*
-    asm ("movb $0x90, (0)");  // nop
-    asm ("movb $0xeb, (1)");  // jmp to prev instruction
-    asm ("movb $0xfd, (2)");
-    */
-    /*
-    asm ("movb $0xb8, (0)"); // mov $0x42,%eax
-    asm ("movb $0x42, (1)");
-    asm ("movb $0x00, (2)");
-    asm ("movb $0x00, (3)");
-    asm ("movb $0x00, (4)");
-    asm ("movb $0xcd, (5)"); // int $0x64
-    asm ("movb $0x64, (6)");
-    breakpoint();
-    usermode();
     */
 
     /*
