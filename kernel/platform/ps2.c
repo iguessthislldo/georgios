@@ -92,14 +92,13 @@ bool ps2_send(bool port, u1 value) {
 
 #define READY_OR_FAIL(msg) \
 if (ps2_wait_ready((msg))) { \
-    ps2_enabled = false; \
     return; \
 }
 void ps2_init() {
     // TODO: Use ACPI to test for PS/2 Controller. Return if missing
-    breakpoint();
 
     // Disable Ports
+    READY_OR_FAIL("Disable Port 1");
     out1(STATUS_PORT, DISABLE_PORT1);
     READY_OR_FAIL("Disable Port 2");
     out1(STATUS_PORT, DISABLE_PORT2);
@@ -142,57 +141,41 @@ void ps2_init() {
     }
 
     // Test Ports
-    int ports = 0;
+    bool port1_test_succeeded;
+    bool port2_test_succeeded = false;
     READY_OR_FAIL("Test Port 1");
     out1(STATUS_PORT, PORT1_TEST);
     WAIT
     response = ps2_receive();
-    if (response == PORT_TEST_SUCCESS) ports++;
+    port1_test_succeeded = response == PORT_TEST_SUCCESS;
     if (ps2_dual_channel) {
         READY_OR_FAIL("Test Port 2");
         out1(STATUS_PORT, PORT2_TEST);
         WAIT
         response = ps2_receive();
-        if (response == PORT_TEST_SUCCESS) ports++;
+        port2_test_succeeded = response == PORT_TEST_SUCCESS;
     }
-    if (!ports) {
+    if (!port1_test_succeeded && !port2_test_succeeded) {
         print_string("PS/2 Ports Test Failed\n");
         return;
     }
 
-    print_string("PS/2 ENABLED\n");
-    ps2_enabled = true;
-
-    // Enable Interupts and Translation
+    // Enable Interrupts and Translation
     READY_OR_FAIL("2nd Read Config");
     out1(STATUS_PORT, READ_CFG);
     WAIT
     config = ps2_receive();
-    config |= (PORT1_INT_ENABLED | PORT2_INT_ENABLED | TRANSLATION);
+    config |= (PORT1_INT_ENABLED | TRANSLATION);
+    if (port2_test_succeeded) {
+        config |= PORT2_INT_ENABLED;
+    }
     READY_OR_FAIL("2nd Write Config Flag");
     out1(STATUS_PORT, WRITE_CFG);
     READY_OR_FAIL("2nd Write Config Data");
     out1(STATUS_PORT, config);
 
     // Enable Ports and Reset Devices
-    switch (ports) {
-    case 2:
-        // Enable 2nd Port
-        READY_OR_FAIL("Enable 2nd Port");
-        out1(STATUS_PORT, ENABLE_PORT2);
-        // Try to Reset Device on the 2nd Port
-        if (ps2_send(true, RESET)) {
-            response = ps2_receive();
-            if (response == ACK) {
-                ps2_port2 = true;
-            } else {
-                print_format("Reset Device at PS/2 Port 2 Failed, "
-                    "Response: {x}\n", response);
-            }
-        } else {
-            print_format("Reset Device at PS/2 Port 2 Send Failed\n");
-        }
-    case 1:
+    if (port1_test_succeeded) {
         // Enable 1st Port
         READY_OR_FAIL("Enable 1st Port");
         out1(STATUS_PORT, ENABLE_PORT1);
@@ -209,6 +192,32 @@ void ps2_init() {
             print_format("Reset Device at PS/2 Port 1 Send Failed\n");
         }
     }
+    if (port2_test_succeeded) {
+        // Enable 2nd Port
+        READY_OR_FAIL("Enable 2nd Port");
+        out1(STATUS_PORT, ENABLE_PORT2);
+        // Try to Reset Device on the 2nd Port
+        if (ps2_send(true, RESET)) {
+            response = ps2_receive();
+            if (response == ACK) {
+                ps2_port2 = true;
+            } else {
+                print_format("Reset Device at PS/2 Port 2 Failed, "
+                    "Response: {x}\n", response);
+            }
+        } else {
+            print_format("Reset Device at PS/2 Port 2 Send Failed\n");
+        }
+    }
 
+    print_format(
+        "PS/2 Initialization is Done:\n"
+        "    Device on Port 1 is {s}.\n",
+        ps2_port1 ? "present" : "not present"
+    );
+    if (ps2_dual_channel) {
+        print_format("    Device on Port 2 is {s}.\n", ps2_port2 ? "present" : "not present");
+    }
+    ps2_enabled = true;
 }
 
