@@ -21,7 +21,6 @@ void process_multiboot(multiboot_info_t* mb) {
     } else {
         PANIC("Could not get memory map from multiboot!\n");
     }
-    
 }
 
 #define COM1 0x3f8
