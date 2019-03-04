@@ -19,7 +19,7 @@ void irq_initialize() {
         "out %al, $0x21" _
         "mov $0x28, %al\n\t"
         "out %al, $0xA1" _
-        
+
         // Set Master and Slave
         "mov $0x4, %al\n\t"
         "out %al, $0x21" _
@@ -40,12 +40,11 @@ void irq_initialize() {
     out1(PIT_CHANNEL, 0xFF);
     out1(PIT_CHANNEL, 0xFF);
 
-    // Register IRQ0
+    // Register IRQ0, Timer
     idt_set_handler(32, &ih_irq0);
 
-    /*
+    // Register IRQ1, Keyboard
     idt_set_handler(33, &ih_irq1);
-    */
 }
 
 void irq0_handle() {
@@ -60,6 +59,5 @@ void irq0_handle() {
 
 void irq1_handle() {
     pit_reset(0);
-    print_hex(ps2_receive());
-    print_char('\n');
+    ps2_print();
 }
