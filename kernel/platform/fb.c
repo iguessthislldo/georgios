@@ -89,6 +89,7 @@ void fb_print_char(char c) {
         } else {
             fb_row++;
         }
+        fb_cursor(fb_column + 1, fb_row);
     } else {
         if (++fb_column == FB_WIDTH) {
             if (fb_row == (FB_HEIGHT-1)) {
