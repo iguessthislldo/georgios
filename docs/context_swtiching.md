@@ -2,7 +2,11 @@
 
 ## `iret`
 
-On a x86\_32 CPU, the `iret` instruction uses the stack to transition the CPU from one state to another. It does this by popping new values for the `eip`, `cs`, and `eflags` registers from the stack in that order. If the `cs` selector is for a different ring, then `iret` will also pop new values for the `esp` and `ss` registers from the stack in that order.
+On a x86\_32 CPU, the `iret` instruction uses the stack to transition the CPU
+from one state to another. It does this by popping new values for the `eip`,
+`cs`, and `eflags` registers from the stack in that order. If the `cs` selector
+is for a different ring, then `iret` will also pop new values for the `esp` and
+`ss` registers from the stack in that order.
 
 ## Specific Resources Used
 
