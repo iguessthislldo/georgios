@@ -1,13 +1,13 @@
 #include <print.h> // Header for this c file
 
 #include <platform.h> // vargs
- 
+
 void print_nstring(const char * string, u4 size) {
 	for (u4 i = 0; i < size; i++) {
 		print_char(string[i]);
     }
 }
- 
+
 void print_string(const char * string) {
     u4 i = 0;
 	for (char c = string[i]; c; c = string[++i]) {
@@ -106,7 +106,7 @@ void print_format(const char * format, ...) {
                     print_hex(va_arg(args, u4));
                     break;
 
-                // Characters 
+                // Characters
                 case 'c':
                     print_char(va_arg(args, u4));
                     break;

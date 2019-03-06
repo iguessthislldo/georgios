@@ -1,14 +1,16 @@
 /* ===========================================================================
  * x86_32 PC Platform
  * ===========================================================================
- * Exposes interface to the kernel for working on a i686 based IBM PC
- * descendent system and how to initialize it.
+ * Exposes an interface for the kernel to initialize and work on a i686 based
+ * IBM PC descendent system.
  */
 #ifndef X86_32_PLATFORM_HEADER
 #define X86_32_PLATFORM_HEADER
 
 #if defined(__GNUC__) && defined(__i386__)
 #define x86_32
+#define GEORGIOS_IS_32_BIT
+#define GEORGIOS_IS_LITTLE_ENDIAN
 
 #include <library.h>
 
@@ -37,7 +39,7 @@ typedef u4 arg_t; // Generic Argument Type
  */
 void platform_init(multiboot_info_t* mbd);
 
-// Connect the print library to x86 framebuffer
+// Connect the print library to PC framebuffer
 #define print_char fb_print_char
 
 /* ---------------------------------------------------------------------------

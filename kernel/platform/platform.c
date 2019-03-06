@@ -50,4 +50,5 @@ void platform_init(multiboot_info_t* mb) {
     irq_initialize();
     ps2_init();
     process_multiboot(mb);
+    find_pci_devices();
 }

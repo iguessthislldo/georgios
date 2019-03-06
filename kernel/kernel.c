@@ -4,6 +4,7 @@
 #include <memory.h>
 
 #include "kernel.h"
+#include "pci.h"
 
 u1 process_count = 0;
 u2 next_process_id = 1;
@@ -45,10 +46,6 @@ void kernel_main() {
 
     memory_init();
 
-    while (true) {
-        asm("nop");
-    }
-
     /*
     mem_t kernel_stack = 2 * FRAME_SIZE - 1;
     mem_t user_stack = FRAME_SIZE - 1;
@@ -88,5 +85,7 @@ test_program_end:
     */
 
     print_string("Done\n");
+    out4(0xB004, 0x2000); // Bochs
+    out4(0x604, 0x2000); // QEMU
 }
 

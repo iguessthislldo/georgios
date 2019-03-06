@@ -48,6 +48,7 @@ void * memcpy(void * dest, const void * src, u4 size);
     : \
         BIT_ROUND_DOWN((VALUE), (N)) \
 )
+#define GET_BYTE(value, n) (((value) >> ((n) * 8)) & 0x000000FF)
 
 /*
  * Varargs
