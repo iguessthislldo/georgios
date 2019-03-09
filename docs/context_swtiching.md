@@ -10,7 +10,7 @@ is for a different ring, then `iret` will also pop new values for the `esp` and
 
 ## Specific Resources Used
 
-- [~~Alex Dzoba OS Interrupts~~](https://alex.dzyoba.com/lib/os-interrupts/) (PAGE HAS BEEN REMOVED)
+- [Alex Dzoba OS Interrupts](https://alex.dzyoba.com/blog/os-interrupts/)
 
 - [Stackoverflow Question: Switching to User-mode using iret](https://stackoverflow.com/questions/6892421/switching-to-user-mode-using-iret)
 
