@@ -14,7 +14,6 @@ void check_function(u1 bus, u1 device, u1 function) {
         switch (class) {
         case 0x0101:
             print_string("IDE Controller");
-            ata_initialize_ide_controller(bus, device, function);
             break;
         case 0x0102:
             print_string("Floppy Disk Controller");
@@ -44,6 +43,8 @@ void check_function(u1 bus, u1 device, u1 function) {
             print_hex(class);
         }
         print_format(" at ({d}, {d}, {d})\n", bus, device, function);
+
+        if (class == 0x0101) ata_initialize_controller(bus, device, function);
     }
 }
 

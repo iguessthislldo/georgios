@@ -3,8 +3,6 @@
 
 #include <library.h>
 
-void ata_initialize_ide_controller(u1 bus, u1 device, u1 function);
+void ata_initialize_controller(u1 bus, u1 device, u1 function);
 
 #endif
-
-
