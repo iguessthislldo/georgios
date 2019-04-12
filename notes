@@ -30,3 +30,32 @@ Use pushf/popf to push/pop the flags register.
 
 iret pops eip, cs, and eflags from the stack in that order.
 
+===============================================================================
+qemu-system-i386
+-------------------------------------------------------------------------------
+
+bus 0
+    device 2
+        function 0
+            VGA Controller
+            Vendor ID 1234
+            Device ID 1111
+    device 3
+        function 0
+            Enthernet Controller
+            Vendor ID 8086
+            Device ID 100E
+    device 0
+        function 0
+            PCI Host Bridge
+            Vendor ID 8086
+            Device ID 1237
+    device 1
+        function 0
+            PCI to ISA Bridge
+            Vendor ID 8086
+            Device ID 7000
+        function 1
+            IDE Controller
+            Vendor ID 8086
+            Device ID 7010
