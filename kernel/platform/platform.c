@@ -52,3 +52,12 @@ void platform_init(multiboot_info_t* mb) {
     process_multiboot(mb);
     find_pci_devices();
 }
+
+u4 tick_counter = 0;
+
+void wait(u4 ticks) {
+    ticks += tick_counter;
+    while (tick_counter != ticks) {
+        asm("nop");
+    }
+}

@@ -80,6 +80,13 @@ inline void release_lock(lock_t * lock) {
 #define halt() __asm__("cli;hlt\n\t")
 #define breakpoint() __asm__("xchgw %bx, %bx")
 
+// Frequency of Tick Increment in Hertz
+#define TICK_FREQUENCY 100
+// Ticks
+u4 tick_counter;
+// Loop for this many ticks
+void wait(u4 ticks);
+
 /* ---------------------------------------------------------------------------
  * Serial Ports
  * ---------------------------------------------------------------------------
