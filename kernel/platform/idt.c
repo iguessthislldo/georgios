@@ -109,7 +109,7 @@ void x86_interrupt_handler(x86_interrupt_t stack_frame) {
 
     print_string(
 "==============================<!>Kernel Panic<!>==============================\n"
-"This kernel has encountered an unrecoverable "
+"The system has encountered an unrecoverable "
 ); print_string(panic_message ?
     "software error:\n" : "unhandled hardware exception:\n");
 print_string(
