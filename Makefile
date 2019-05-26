@@ -5,23 +5,17 @@ s_sources:=$(call rwildcard, kernel/, *.s)
 objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
 depends:=$(foreach depend, $(c_sources:.c=.d), tmp/$(depend))
 
-ISO:=os.iso
+ISO:=georgios.iso
 
 ISO_DIR:=tmp/iso
-BOOT_DIR=boot
-ISO_BOOT_DIR=$(ISO_DIR)/$(BOOT_DIR)
+ISO_BOOT_DIR=$(ISO_DIR)/boot
 KERNEL:=$(ISO_BOOT_DIR)/kernel
-
-GRUB:=$(BOOT_DIR)/grub
-GRUB_BIN:=$(GRUB)/stage2_eltorito
-GRUB_BIN_URL=http://littleosbook.github.com/files/stage2_eltorito
-#GRUB_BIN_CHECKSUM:=b18ff4d5d923c4a190fea4d0313deebd
-ISO_GRUB:=$(ISO_DIR)/$(GRUB)
-ISO_GRUB_BIN:=$(ISO_DIR)/$(GRUB_BIN)
+GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
 
 CC:=i686-elf-gcc
 DEBUGGER:=i686-elf-gdb
-CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith -I kernel/platform -I kernel
+CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith
+KERNEL_INCLUDES:=-Ikernel/platform -Itmp/kernel/platform -Ikernel -Itmp/kernel
 
 AS:=i686-elf-as
 ASFLAGS:=
@@ -32,37 +26,25 @@ all: $(ISO)
 .PHONY: depend
 depend: $(depends)
 
-$(ISO_GRUB):
-	@mkdir -p $(ISO_GRUB)
-	curl -L -o $(ISO_GRUB_BIN) '$(GRUB_BIN_URL)'
-	#md5sum $(ISO_GRUB_BIN) | grep '$(GRUB_BIN_CHECKSUM)  '
-	cp misc/menu.lst $(ISO_GRUB)
+$(GRUB_CFG): misc/grub.cfg
+	@mkdir -p $(dir $@)
+	cp $< $(GRUB_CFG)
 
-$(ISO): $(KERNEL) $(ISO_GRUB)
-	genisoimage \
-		-R                              \
-		-b $(GRUB_BIN)    \
-		-no-emul-boot                   \
-		-boot-load-size 4               \
-		-A os                           \
-		-input-charset utf8             \
-		-quiet                          \
-		-boot-info-table                \
-		-o $@                       \
-		$(ISO_DIR)
+$(ISO): $(KERNEL) $(GRUB_CFG)
+	grub-mkrescue --output=$(ISO) $(ISO_DIR)
 
 tmp/%.o: %.s
 	@mkdir -p $(dir $@)
-	$(AS) $(ASFLAGS) $< -o $@
+	$(CC) -Wa,--32 -c -x assembler-with-cpp $(CFLAGS) $< -o $@
 
 tmp/%.o : %.c
 	@mkdir -p $(dir $@)
-	$(CC) -Wa,--32 $(CFLAGS) -c $< -o $@
+	$(CC) -Wa,--32 $(CFLAGS) $(KERNEL_INCLUDES) -c $< -o $@
 
 tmp/%.d: %.c
 	@mkdir -p $(dir $@)
 	@set -e; rm -f $@; \
-	 $(CC) -M $(CFLAGS) $< > $@.$$$$; \
+	 $(CC) -M $(CFLAGS) $(KERNEL_INCLUDES) $< > $@.$$$$; \
 	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
@@ -79,17 +61,6 @@ bochs:
 qemu:
 	$(DEBUGGER) -x misc/qemu.gdb
 
-.PHONY: clean_all
-clean_all:
-	rm -fr tmp $(ISO)
-
-# Remove everything except the grub files
-tmploc:=/tmp/grub_tmp_copy_ee5f01ca-d372-4321-b330-68b076f0d29f
 .PHONY: clean
 clean:
-	rm -fr $(tmploc)
-	mv $(ISO_GRUB) $(tmploc)
 	rm -fr tmp $(ISO)
-	mkdir -p $(ISO_BOOT_DIR)
-	mv $(tmploc) $(ISO_GRUB)
-

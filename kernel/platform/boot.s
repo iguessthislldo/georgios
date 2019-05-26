@@ -3,19 +3,34 @@
 */
 
 /*
- * MULTIBOOT HEADER
+ * MULTIBOOT2 HEADER
  */
 
-.set ALIGN,    1<<0             /* align loaded modules on page boundaries */
-.set MEMINFO,  1<<1             /* provide memory map */
-.set FLAGS,    ALIGN | MEMINFO  /* this is the Multiboot 'flag' field */
-.set MAGIC,    0x1BADB002       /* 'magic number' lets bootloader find the header */
-.set CHECKSUM, -(MAGIC + FLAGS) /* checksum of above, to prove we are multiboot */
+#define ASM_FILE
+#include "multiboot2.h"
+#undef ASM_FILE
+
 .section .multiboot
-.align 4
-.long MAGIC
-.long FLAGS
-.long CHECKSUM
+.align 8
+multiboot_header_start:
+.long MULTIBOOT2_HEADER_MAGIC
+.long MULTIBOOT_ARCHITECTURE_I386
+.long multiboot_header_end - multiboot_header_start
+.long -(MULTIBOOT2_HEADER_MAGIC + MULTIBOOT_ARCHITECTURE_I386 + (multiboot_header_end - multiboot_header_start))
+/*
+multiboot_fb_tag_start:
+.short MULTIBOOT_HEADER_TAG_FRAMEBUFFER
+.short MULTIBOOT_HEADER_TAG_OPTIONAL
+.long multiboot_fb_tag_end - multiboot_fb_tag_start
+.long 1024
+.long 768
+.long 32
+multiboot_fb_tag_end:
+*/
+.short MULTIBOOT_HEADER_TAG_END
+.short 0
+.long 8
+multiboot_header_end:
 
 /*
  * STACK

@@ -11,6 +11,7 @@ u4 fb_row;
 u4 fb_column;
 fb_color_t fb_color;
 u2 * fb_buffer;
+bool fb_renables_interrupts = false;
 
 #define COLOR(fg, bg) ((fg) | (bg) << 4)
 
@@ -102,7 +103,8 @@ void fb_print_char(char c) {
         fb_place_char(c, fb_color, fb_column, fb_row);
         fb_cursor(fb_column + 1, fb_row);
     }
-    enable_interrupts();
+    if (fb_renables_interrupts) enable_interrupts();
+
     /*
     release_lock(&fb_lock);
     */

@@ -1,13 +1,15 @@
-// mem_t setup_process(mem_t eip, mem_t esp)
+// mem_t setup_process(bool usermode, mem_t eip, mem_t esp)
 .section .text
 .global setup_process
 .type setup_process, @function
 setup_process:
     pushl %ebx // Save ebx
+    pushl %esi // Save esi
 
     // Get Values
-    movl 8(%esp), %eax // eip
-    movl 12(%esp), %ebx // esp
+    movl 8(%esp), %esi // usermode
+    movl 12(%esp), %eax // eip
+    movl 16(%esp), %ebx // esp
     pushf
     pop %ecx // eflags
 
@@ -17,6 +19,11 @@ setup_process:
 
     // Create Inital Process Stack
     // for iret
+    cmp %eax, 0
+    je setup_process_kernel_mode // Skip Pushing these if Going to Kernel Mode
+    pushl $0x23 // ss (user data selector)
+    pushl %ebx // esp
+  setup_process_kernel_mode:
     pushl %ecx // eflags
     pushl %cs // cs
     pushl %eax // eip
@@ -36,6 +43,7 @@ setup_process:
     movl %esp, %eax // Return Context
     movl %edx, %esp
 
+    popl %esi // Restore esi
     popl %ebx // Restore ebx
     ret
 

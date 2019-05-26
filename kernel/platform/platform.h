@@ -8,9 +8,10 @@
 #define X86_32_PLATFORM_HEADER
 
 #if defined(__GNUC__) && defined(__i386__)
-#define x86_32
-#define GEORGIOS_IS_32_BIT
-#define GEORGIOS_IS_LITTLE_ENDIAN
+
+#define CPU_IS_X86_32
+#define CPU_IS_32_BITS
+#define CPU_IS_LITTLE_ENDIAN
 
 #include <library.h>
 
@@ -22,9 +23,7 @@
 #include "io.h"
 #include "irq.h"
 #include "ps2.h"
-
-// GRUB Multiboot structure
-#include "multiboot.h"
+#include "pci.h"
 
 /*
  * Types for this Platform
@@ -33,11 +32,14 @@ typedef u8 max_t; // Max Type
 typedef u4 mem_t; // Pointer Type
 typedef u4 arg_t; // Generic Argument Type
 
+// GRUB Multiboot structure
+#include "multiboot2.h"
+
 /*
  * Platform initialization, which takes the pointer to system info we got from
  * GRUB as an argument.
  */
-void platform_init(multiboot_info_t* mbd);
+void platform_init(u4 * mb_info_ptr);
 
 // Connect the print library to PC framebuffer
 #define print_char fb_print_char

@@ -39,12 +39,12 @@ void scheduler() {
     }
 }
 
-extern mem_t setup_process(mem_t eip, mem_t esp);
+extern mem_t setup_process(bool usermode, mem_t eip, mem_t esp);
 extern void usermode();
 
 void kernel_main() {
 
-    memory_init();
+    // memory_init();
 
     /*
     mem_t kernel_stack = 2 * FRAME_SIZE - 1;

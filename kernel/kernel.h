@@ -26,7 +26,8 @@ extern u4 _KERNEL_SIZE;
 typedef struct {
     bool valid;
     mem_t context;
-    mem_t stack;
+    mem_t user_stack;
+    mem_t kernel_stack;
 #ifdef PLATFORM_THREAD_MEMBERS
     PLATFORM_THREAD_MEMBERS
 #endif

@@ -4,7 +4,9 @@
 
 void print_nstring(const char * string, u4 size) {
 	for (u4 i = 0; i < size; i++) {
-		print_char(string[i]);
+        if (string[i])
+            print_char(string[i]);
+        else break;
     }
 }
 

@@ -46,7 +46,9 @@ void gdt_initialize() {
         GDT_RING_3 | GDT_TSS
     ) << 3) | 3;
 
-    /*
+    // Load
+    gdt_load();
+
     print_format(
         "kernel code selector: {x}\n"
         "kernel data selector: {x}\n"
@@ -57,8 +59,4 @@ void gdt_initialize() {
         user_code_selector,
         user_data_selector
     );
-    */
-
-    // Load
-    gdt_load();
 }

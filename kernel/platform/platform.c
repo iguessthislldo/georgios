@@ -5,10 +5,9 @@
 
 #include "platform.h"
 
-#include "multiboot.h"
-
-void process_multiboot(multiboot_info_t* mb) {
+void process_multiboot(u4 * mb_info_ptr) {
     // Check if Memory Map is in place
+    /*
     if (mb->flags & 64) { // 6ith bit
         multiboot_memory_map_t * begin = (multiboot_memory_map_t*) kernel_offset(mb->mmap_addr);
         multiboot_memory_map_t * end = ((void*) begin) + mb->mmap_length;
@@ -21,6 +20,7 @@ void process_multiboot(multiboot_info_t* mb) {
     } else {
         PANIC("Could not get memory map from multiboot!\n");
     }
+    */
 }
 
 #define COM1 0x3f8
@@ -40,7 +40,7 @@ void serial_out(char c) {
     out1(COM1, c);
 }
 
-void platform_init(multiboot_info_t* mb) {
+void platform_init(u4 * mb_info_ptr) {
 	serial_log_enabled = false;
     kernel_range = 1;
     serial_initialize();
@@ -49,7 +49,7 @@ void platform_init(multiboot_info_t* mb) {
     idt_initialize();
     irq_initialize();
     ps2_init();
-    process_multiboot(mb);
+    process_multiboot(mb_info_ptr);
     find_pci_devices();
 }
 
