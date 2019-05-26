@@ -1,18 +1,19 @@
 #ifndef LIBRARY_HEADER
 #define LIBRARY_HEADER
 
+#include <stdint.h>
+
 /*
  * Integer Types
- * TODO: Check/do based on Compiler
  */
-typedef char i1;
-typedef unsigned char u1;
-typedef short i2;
-typedef unsigned short u2;
-typedef long i4;
-typedef unsigned long u4;
-typedef long long i8;
-typedef unsigned long u8;
+typedef int8_t i1;
+typedef uint8_t u1;
+typedef int16_t i2;
+typedef uint16_t u2;
+typedef int32_t i4;
+typedef uint32_t u4;
+typedef int64_t i8;
+typedef uint64_t u8;
 
 /*
  * Floating Point Types
