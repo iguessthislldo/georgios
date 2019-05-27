@@ -17,16 +17,16 @@ multiboot_header_start:
 .long MULTIBOOT_ARCHITECTURE_I386
 .long multiboot_header_end - multiboot_header_start
 .long -(MULTIBOOT2_HEADER_MAGIC + MULTIBOOT_ARCHITECTURE_I386 + (multiboot_header_end - multiboot_header_start))
-/*
-multiboot_fb_tag_start:
-.short MULTIBOOT_HEADER_TAG_FRAMEBUFFER
-.short MULTIBOOT_HEADER_TAG_OPTIONAL
-.long multiboot_fb_tag_end - multiboot_fb_tag_start
-.long 1024
-.long 768
-.long 32
-multiboot_fb_tag_end:
-*/
+
+multiboot_info_request_start:
+.align 8
+.short MULTIBOOT_HEADER_TAG_INFORMATION_REQUEST
+.short 0
+.long multiboot_info_request_end - multiboot_info_request_start
+.long MULTIBOOT_TAG_TYPE_VBE
+multiboot_info_request_end:
+
+.align 8
 .short MULTIBOOT_HEADER_TAG_END
 .short 0
 .long 8
@@ -70,6 +70,7 @@ temp_page_table:
 /*
  * GLOBAL DESCRIPTOR TABLE
  */
+// void gdt_load()
 .section .text
 .global gdt_load
 .type gdt_load, @function
@@ -135,9 +136,9 @@ _start:
     mov $stack_top, %eax
     sub $_KERNEL_OFFSET, %eax // translate stack into a lower kernel address
     sub $4, %eax
-    add $_KERNEL_OFFSET, %ebx // translate pointer to higher kernel address
-    // Put higher address of Multiboot pointer in the first
-    // 4 bytes of the stack
+    add $_KERNEL_OFFSET, %ebx // translate pointer to a higher kernel address
+    // Put the higher address of Multiboot pointer in the first 4 bytes of the
+    // stack
     mov %ebx, (%eax)
 
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET

@@ -14,6 +14,11 @@
 void print_nstring(const char * string, u4 size);
 
 /*
+ * Print string stripped of trailing whitespace.
+ */
+void print_stripped_string(const char * string, u4 size);
+
+/*
  * Print a null terminated string
  */
 void print_string(const char * string);
@@ -78,3 +83,4 @@ void print_disable_lock();
 
 void print_dragon();
 
+void print_data(u1 * ptr, u4 size);

@@ -51,6 +51,7 @@ tmp/%.d: %.c
 $(KERNEL): kernel/platform/linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
+	grub-file --is-x86-multiboot2 $(KERNEL)
 	objdump -S $(KERNEL) > tmp/annotated_kernel
 
 .PHONY: bochs

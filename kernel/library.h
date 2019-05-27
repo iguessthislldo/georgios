@@ -34,6 +34,7 @@ typedef u1 bool;
 u4 strlen(const char * string);
 void * memset(void * pointer, i1 value, u4 number);
 void * memcpy(void * dest, const void * src, u4 size);
+bool isspace(char c);
 
 /*
  * Bit Operations

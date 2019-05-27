@@ -100,5 +100,37 @@ bool serial_log_enabled;
 // Output c to COM1
 void serial_out(char c);
 
+
+/* ---------------------------------------------------------------------------
+ * ACPI
+ * ---------------------------------------------------------------------------
+ */
+enum ACPI_RSDP_Status {
+    ACPI_RSDP_STATUS_NOT_FOUND,
+    ACPI_RSDP_STATUS_FOUND_V1,
+    ACPI_RSDP_STATUS_FOUND_V2
+} acpi_rsdp_status;
+
+typedef struct {
+    char signature[8];
+    u1 checksum;
+    char oemid[6];
+    u1 revision;
+    u4 rsdt_ptr;
+} __attribute__((packed)) ACPI_RSDPv1;
+
+typedef struct {
+    ACPI_RSDPv1 v1;
+    u4 len;
+    u8 xsdt_ptr;
+    u1 checksum;
+    u1 reserved[3];
+} __attribute__((packed)) ACPI_RSDPv2;
+
+union ACPI_RSDP {
+    ACPI_RSDPv1 v1;
+    ACPI_RSDPv2 v2;
+} acpi_rsdp;
+
 #endif
 #endif

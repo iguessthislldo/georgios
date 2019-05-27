@@ -5,22 +5,120 @@
 
 #include "platform.h"
 
+enum ACPI_RSDP_Status acpi_rsdp_status = ACPI_RSDP_STATUS_NOT_FOUND;
+
+static inline const char * mb_tag_type_to_str(u4 tag_type) {
+    switch (tag_type) {
+    case MULTIBOOT_TAG_TYPE_END:
+        return "MULTIBOOT_TAG_TYPE_END";
+    case MULTIBOOT_TAG_TYPE_CMDLINE:
+        return "MULTIBOOT_TAG_TYPE_CMDLINE";
+    case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME:
+        return "MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME";
+    case MULTIBOOT_TAG_TYPE_MODULE:
+        return "MULTIBOOT_TAG_TYPE_MODULE";
+    case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO:
+        return "MULTIBOOT_TAG_TYPE_BASIC_MEMINFO";
+    case MULTIBOOT_TAG_TYPE_BOOTDEV:
+        return "MULTIBOOT_TAG_TYPE_BOOTDEV";
+    case MULTIBOOT_TAG_TYPE_MMAP:
+        return "MULTIBOOT_TAG_TYPE_MMAP";
+    case MULTIBOOT_TAG_TYPE_VBE:
+        return "MULTIBOOT_TAG_TYPE_VBE";
+    case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
+        return "MULTIBOOT_TAG_TYPE_FRAMEBUFFER";
+    case MULTIBOOT_TAG_TYPE_ELF_SECTIONS:
+        return "MULTIBOOT_TAG_TYPE_ELF_SECTIONS";
+    case MULTIBOOT_TAG_TYPE_APM:
+        return "MULTIBOOT_TAG_TYPE_APM";
+    case MULTIBOOT_TAG_TYPE_EFI32:
+        return "MULTIBOOT_TAG_TYPE_EFI32";
+    case MULTIBOOT_TAG_TYPE_EFI64:
+        return "MULTIBOOT_TAG_TYPE_EFI64";
+    case MULTIBOOT_TAG_TYPE_SMBIOS:
+        return "MULTIBOOT_TAG_TYPE_SMBIOS";
+    case MULTIBOOT_TAG_TYPE_ACPI_OLD:
+        return "MULTIBOOT_TAG_TYPE_ACPI_OLD";
+    case MULTIBOOT_TAG_TYPE_ACPI_NEW:
+        return "MULTIBOOT_TAG_TYPE_ACPI_NEW";
+    case MULTIBOOT_TAG_TYPE_NETWORK:
+        return "MULTIBOOT_TAG_TYPE_NETWORK";
+    case MULTIBOOT_TAG_TYPE_EFI_MMAP:
+        return "MULTIBOOT_TAG_TYPE_EFI_MMAP";
+    case MULTIBOOT_TAG_TYPE_EFI_BS:
+        return "MULTIBOOT_TAG_TYPE_EFI_BS";
+    case MULTIBOOT_TAG_TYPE_EFI32_IH:
+        return "MULTIBOOT_TAG_TYPE_EFI32_IH";
+    case MULTIBOOT_TAG_TYPE_EFI64_IH:
+        return "MULTIBOOT_TAG_TYPE_EFI64_IH";
+    case MULTIBOOT_TAG_TYPE_LOAD_BASE_ADDR:
+        return "MULTIBOOT_TAG_TYPE_LOAD_BASE_ADDR";
+    default:
+        return "Unkown Type";
+    }
+}
+
 void process_multiboot(u4 * mb_info_ptr) {
-    // Check if Memory Map is in place
-    /*
-    if (mb->flags & 64) { // 6ith bit
-        multiboot_memory_map_t * begin = (multiboot_memory_map_t*) kernel_offset(mb->mmap_addr);
-        multiboot_memory_map_t * end = ((void*) begin) + mb->mmap_length;
-        multiboot_memory_map_t * e;
-        for (e = begin; e < end; e = ((void*)e) + sizeof(e->size) + e->size) {
-            if (e->type == MULTIBOOT_MEMORY_AVAILABLE) {
-                memory_range_add(e->addr, e->len, FRAME_STACK_USE);
+    u1 * i = (u1*) (mb_info_ptr + 2);
+    u4 type = -1;
+    bool got_memory_map = false;
+    print_string("Multiboot Tags Available:\n");
+    while (type) {
+        type = *(u4*)i;
+        print_string("  ");
+        print_string(mb_tag_type_to_str(type));
+        print_char('\n');
+        u4 size = *(u4*)(i + 4);
+
+        u4 mmap_entry_size;
+        u4 mmap_entry_count;
+        struct multiboot_mmap_entry * mmap_entries;
+
+        switch (type) {
+        case MULTIBOOT_TAG_TYPE_ACPI_OLD:
+            if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND) {
+                memcpy(&acpi_rsdp.v1, i + 8, sizeof(ACPI_RSDPv1));
+                acpi_rsdp_status = ACPI_RSDP_STATUS_FOUND_V1;
             }
+            break;
+        case MULTIBOOT_TAG_TYPE_ACPI_NEW:
+            if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND ||
+                acpi_rsdp_status == ACPI_RSDP_STATUS_FOUND_V1) {
+                memcpy(&acpi_rsdp.v2, i + 8, sizeof(ACPI_RSDPv2));
+                acpi_rsdp_status = ACPI_RSDP_STATUS_FOUND_V2;
+            }
+            break;
+
+        case MULTIBOOT_TAG_TYPE_MMAP:
+            got_memory_map = true;
+            mmap_entry_size = *(u4*)(i + 8);
+            mmap_entry_count = (size - 16) / mmap_entry_size;
+            mmap_entries = (struct multiboot_mmap_entry*)(i + 16);
+            for (u4 e = 0; e < mmap_entry_count; e++) {
+                if (mmap_entries[e].type == MULTIBOOT_MEMORY_AVAILABLE) {
+                    memory_range_add(
+                        mmap_entries[e].addr, mmap_entries[e].len,
+                        FRAME_STACK_USE);
+                }
+            }
+            break;
         }
-    } else {
+
+        i += ALIGN(size, 8);
+    }
+
+    if (!got_memory_map) {
         PANIC("Could not get memory map from multiboot!\n");
     }
-    */
+
+    if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND) {
+        PANIC("ACPI was not found!\n");
+    } else {
+        print_format("ACPI is v{s}\nOEM is ",
+            acpi_rsdp.v1.revision ? "2 or later" : "1");
+        print_stripped_string(acpi_rsdp.v1.oemid, 6);
+        print_char('\n');
+    }
 }
 
 #define COM1 0x3f8

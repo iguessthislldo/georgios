@@ -44,7 +44,7 @@ extern void usermode();
 
 void kernel_main() {
 
-    // memory_init();
+    memory_init();
 
     /*
     mem_t kernel_stack = 2 * FRAME_SIZE - 1;

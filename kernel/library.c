@@ -22,3 +22,6 @@ void * memcpy(void * dest, const void * src, u4 size) {
     return dest;
 }
 
+bool isspace(char c) {
+    return c == ' ' || c == '\n' || c == '\t' || c == '\v' || c == '\f' || c == '\r';
+}

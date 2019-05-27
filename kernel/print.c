@@ -17,6 +17,17 @@ void print_string(const char * string) {
     }
 }
 
+void print_stripped_string(const char * string, u4 size) {
+    u4 i;
+    u4 keep = 0;
+    for (i = 0; i < size && string[i]; i++) {
+        if (!isspace(string[i])) keep = i + 1;
+    }
+	for (i = 0; i < keep; i++) {
+        print_char(string[i]);
+    }
+}
+
 void print_int_recurse(u4 value) {
     if (value) {
         u1 digit = value % 10;
@@ -179,4 +190,18 @@ void print_dragon() {
 "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@' ,@' ,e@@e,,@@@@@@@@@@@@@@@@@\n"
 "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@~ ,@@@,,0@@@@@@@@@@@@@@@@@@@@@@\n"
     );
+}
+
+void print_data(u1 * ptr, u4 size) {
+    for (u4 i = 0; i < size; i++) {
+        print_byte(ptr[i]);
+        if (!((i+1) % 16)) {
+            print_char('\n');
+        } else {
+            if (!((i+1) % 8)) {
+                print_char(' ');
+            }
+            print_char(' ');
+        }
+    }
 }
