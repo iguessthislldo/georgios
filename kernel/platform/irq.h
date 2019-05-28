@@ -5,19 +5,19 @@
 #include "io.h"
 
 // IO Ports
-#define PIT_CHANNEL 0x40
-#define PIT_MODE 0x43
-#define PIT_0_7_COMMAND 0x20
-#define PIT_0_7_DATA 0x21
-#define PIT_8_15_COMMAND 0xA0
-#define PIT_8_15_DATA 0xA1
+#define PIC_CHANNEL 0x40
+#define PIC_MODE 0x43
+#define PIC_0_7_COMMAND 0x20
+#define PIC_0_7_DATA 0x21
+#define PIC_8_15_COMMAND 0xA0
+#define PIC_8_15_DATA 0xA1
 
 // Commands
-#define PIT_RESET 0x20
+#define PIC_RESET 0x20
 
-static inline void pit_reset(u1 irq) {
-    if (irq >= 8) out1(PIT_8_15_COMMAND, PIT_RESET);
-    out1(PIT_0_7_COMMAND, PIT_RESET);
+static inline void pic_reset(u1 irq) {
+    if (irq >= 8) out1(PIC_8_15_COMMAND, PIC_RESET);
+    out1(PIC_0_7_COMMAND, PIC_RESET);
 }
 
 void irq_initialize();

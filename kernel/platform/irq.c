@@ -37,9 +37,9 @@ void irq_initialize() {
 
     // Trigger IRQ0
     u4 div = 1193180 / TICK_FREQUENCY;
-    out1(PIT_MODE, 0x36);
-    out1(PIT_CHANNEL, div & 0xFF);
-    out1(PIT_CHANNEL, div >> 8);
+    out1(PIC_MODE, 0x36);
+    out1(PIC_CHANNEL, div & 0xFF);
+    out1(PIC_CHANNEL, div >> 8);
 
     // Register IRQ0, Timer
     idt_set_handler(32, &ih_irq0);
@@ -49,8 +49,8 @@ void irq_initialize() {
 }
 
 void irq0_handle() {
-    pit_reset(0);
     tick_counter++;
+    pic_reset(0);
     /*
     context_switch(
         &processes[process_index].threads[thread_index].context,
@@ -60,6 +60,6 @@ void irq0_handle() {
 }
 
 void irq1_handle() {
-    pit_reset(0);
     ps2_print();
+    pic_reset(1);
 }

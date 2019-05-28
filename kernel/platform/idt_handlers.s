@@ -9,7 +9,6 @@ ih_common:
 
     popal // Restore Registers
     addl $8, %esp // Error Code
-    sti // Enable Interrupts
     iret 
 
 .macro IH_NO_CODE value
@@ -90,6 +89,5 @@ ih_system_call:
     popl %ecx
 
     popal // Restore Registers
-    sti
     iret
 

@@ -3,7 +3,7 @@
 
 #include <library.h>
 
-/* 
+/*
  * Interrupt Descriptor Table
  */
 
@@ -68,7 +68,6 @@ extern void ih_29();
 extern void ih_30();
 extern void ih_31();
 
-extern void ih_pic();
 extern void ih_panic();
 extern void ih_system_call();
 
