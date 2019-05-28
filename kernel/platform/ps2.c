@@ -266,6 +266,10 @@ void ps2_print() {
             print_dragon();
             return;
         }
+        if (shifted && alt_is_pressed && c == 'P') {
+            shutdown();
+            return;
+        }
         if (!shifted && c >= 'A' && c <= 'Z') c += 'a' - 'A';
         print_char(c);
     }

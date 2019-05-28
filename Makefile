@@ -12,9 +12,15 @@ ISO_BOOT_DIR=$(ISO_DIR)/boot
 KERNEL:=$(ISO_BOOT_DIR)/kernel
 GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
 
+ifdef BOOT_TEST
+BOOT_TEST:=-DBOOT_TEST
+else
+BOOT_TEST:=
+endif
+
 CC:=i686-elf-gcc
 DEBUGGER:=i686-elf-gdb
-CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith
+CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith $(BOOT_TEST)
 KERNEL_INCLUDES:=-Ikernel/platform -Itmp/kernel/platform -Ikernel -Itmp/kernel
 
 AS:=i686-elf-as

@@ -5,6 +5,12 @@
 
 #include "platform.h"
 
+void shutdown() {
+    print_string("Shutting Down...\n");
+    out4(0xB004, 0x2000); // Bochs
+    out4(0x604, 0x2000); // QEMU
+}
+
 enum ACPI_RSDP_Status acpi_rsdp_status = ACPI_RSDP_STATUS_NOT_FOUND;
 
 static inline const char * mb_tag_type_to_str(u4 tag_type) {

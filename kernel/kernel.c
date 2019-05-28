@@ -15,8 +15,12 @@ void kernel_main() {
 
     memory_init();
 
-    print_string("Done\n");
-    out4(0xB004, 0x2000); // Bochs
-    out4(0x604, 0x2000); // QEMU
+    print_string("Booted\n");
+
+#ifndef BOOT_TEST
+    while (true) {}
+#else
+    shutdown();
+#endif
 }
 

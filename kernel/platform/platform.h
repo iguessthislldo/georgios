@@ -44,6 +44,8 @@ void platform_init(u4 * mb_info_ptr);
 // Connect the print library to PC framebuffer
 #define print_char fb_print_char
 
+void shutdown();
+
 /* ---------------------------------------------------------------------------
  * Lock
  * ---------------------------------------------------------------------------
