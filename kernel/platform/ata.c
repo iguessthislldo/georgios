@@ -1,9 +1,14 @@
 #include "ata.h"
 #include "pci.h"
+#include "platform.h"
 
 // Based on
 // https://wiki.osdev.org/PCI_IDE_Controller
 // http://flingos.co.uk/docs/reference/ATA/
+
+// Don't know how to determine and/or change this. This will be an assumtion
+// for now.
+#define BLOCK_SIZE 512
 
 #define ATA_LEGACY_PRIMARY_CHANNEL_BASE 0x01F0
 #define ATA_LEGACY_PRIMARY_CHANNEL_CONTROL 0x03F4
@@ -57,12 +62,6 @@
 #define ATA_IDENT_COMMANDSETS  164
 #define ATA_IDENT_MAX_LBA_EXT  200
 
-#define IDE_ATA        0x00
-#define IDE_ATAPI      0x01
-
-#define ATA_MASTER     0x00
-#define ATA_SLAVE      0x01
-
 #define ATA_REG_DATA       0x00
 #define ATA_REG_ERROR      0x01
 #define ATA_REG_FEATURES   0x01
@@ -79,7 +78,15 @@
 #define ATA_REG_LBA5       0x0B
 #define ATA_REG_CONTROL    0x0C
 #define ATA_REG_ALTSTATUS  0x0C
-#define ATA_REG_DEVADDRESS 0x0D
+
+#define ATA_TYPE_INVALID 0x0000
+#define ATA_TYPE_PATA 0x0001
+#define ATA_TYPE_SATA 0xC33C
+#define ATA_TYPE_PATAPI 0xEB14
+#define ATA_TYPE_SATAPI 0x9669
+
+#define ATA_MASTER     0x00
+#define ATA_SLAVE      0x01
 
 // Channels:
 #define      ATA_PRIMARY      0x00
@@ -90,6 +97,10 @@
 #define      ATA_WRITE     0x01
 
 typedef struct {
+    u2 master_type;
+    u2 slave_type;
+    bool master_lba48;
+    bool slave_lba48;
     u2 base;
     u2 control;
     u2 bus_master;
@@ -142,20 +153,17 @@ void ata_read_buffer(u1 channel, u1 reg) {
     Channel * c = &channels[channel];
 
     prething(c, reg);
-    for (u2 i = 0; i < ATA_BUFFER_SIZE; i++) {
-        ata_buffer[i] = in1(reg_to_port(c, reg));
-    }
+    insl(reg_to_port(c, reg), ata_buffer, ATA_BUFFER_SIZE);
     postthing(c, reg);
 }
 
-enum Polling_Result {
+typedef enum {
     POLL_SUCCESS,
     POLL_ERROR,
     POLL_FAULT,
     POLL_DRQ
-};
-
-u1 ata_poll(u1 channel, bool post_check) {
+} ata_poll_result_t ;
+ata_poll_result_t ata_poll(u1 channel, bool post_check) {
     for (u1 i = 0; i < 4; i++)
         ata_read(channel, ATA_REG_ALTSTATUS);
 
@@ -191,15 +199,15 @@ void ata_initialize_controller(u1 bus, u1 device, u1 function) {
     channels[ATA_PRIMARY].control =
         PORT(bar1, ATA_LEGACY_PRIMARY_CHANNEL_CONTROL);
     channels[ATA_PRIMARY].bus_master = BYTE_MASK(bar4);
-    channels[ATA_PRIMARY].no_interrupt = 0;
+    channels[ATA_PRIMARY].no_interrupt = 1;
 
-    channels[ATA_PRIMARY].channel = ATA_SECONDARY;
+    channels[ATA_SECONDARY].channel = ATA_SECONDARY;
     channels[ATA_SECONDARY].base =
         PORT(bar2, ATA_LEGACY_SECONDARY_CHANNEL_CONTROL);
     channels[ATA_SECONDARY].control =
         PORT(bar3, ATA_LEGACY_SECONDARY_CHANNEL_CONTROL);
     channels[ATA_SECONDARY].bus_master = BYTE_MASK(bar4) + 8;
-    channels[ATA_SECONDARY].no_interrupt = 0;
+    channels[ATA_SECONDARY].no_interrupt = 1;
 
     /*
     print_format(
@@ -218,22 +226,110 @@ void ata_initialize_controller(u1 bus, u1 device, u1 function) {
     ata_write(ATA_SECONDARY, ATA_REG_CONTROL, 2);
 
     for (u1 i = 0; i < 2; i++) for (u1 j = 0; j < 2; j++) {
-        /* u1 error = 0; */
-        /* u1 type = IDE_ATA; */
+        u2 * type = j ? &channels[i].slave_type : &channels[i].master_type;
+        bool * lba48 = j ? &channels[i].slave_lba48 : &channels[i].master_lba48;
         ata_write(i, ATA_REG_HDDEVSEL, 0xA0 | (j << 4));
-        for (u4 wait = 0; wait < 1000000; wait++) {
-            asm("nop");
-        }
+        wait(2);
         ata_write(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-        for (u4 wait = 0; wait < 1000000; wait++) {
-            asm("nop");
-        }
+        wait(2);
         print_format("    ATA {s} {s}: ", i ? "Secondary" : "Primary", j ? "Slave" : "Master");
-        if (ata_read(i, ATA_REG_STATUS)) {
-            print_string("Present");
-        } else {
-            print_string("Missing");
+        if (!ata_read(i, ATA_REG_STATUS)) {
+            print_string("Missing\n");
+            *type = ATA_TYPE_INVALID;
+            continue;
         }
-        print_char('\n');
+
+        // "Error" Flag, is expected for PATAPI, SATA, and SATAPI
+        bool error = false;
+        u4 timeout = 1000;
+        while (timeout) {
+            u1 status = ata_read(i, ATA_REG_STATUS);
+            if (status & ATA_SR_ERR) {
+                error = true;
+                break;
+            } else if (!(status & ATA_SR_BUSY) && (status & ATA_SR_DRQ))
+                break;
+            timeout--;
+        }
+        if (!timeout) {
+            print_string("Drive Timedout!\n");
+            *type = ATA_TYPE_INVALID;
+            continue;
+        }
+
+        if (error) {
+            u1 lba1 = ata_read(i, ATA_REG_LBA1);
+            u1 lba2 = ata_read(i, ATA_REG_LBA2);
+            *type = (lba2 << 8) | lba1;
+            switch (*type) {
+            case ATA_TYPE_SATA:
+                print_string("SATA\n");
+                break;
+            case ATA_TYPE_PATAPI:
+                print_string("PATAPI\n");
+                break;
+            case ATA_TYPE_SATAPI:
+                print_string("SATAPI\n");
+                break;
+            default:
+                print_format("Unknown ATA Type {x}\n", *type);
+                *type = ATA_TYPE_INVALID;
+                continue;
+            }
+
+            ata_write(i, ATA_REG_COMMAND, ATA_CMD_IDENTIFY_PACKET);
+            wait(2);
+        } else {
+            print_string("PATA\n");
+            *type = ATA_TYPE_PATA;
+        }
+
+        ata_read_buffer(i, ATA_REG_DATA);
+
+        char model_string[40];
+        for (u1 i = 0; i < 40; i += 2) {
+            model_string[i] = ata_buffer[ATA_IDENT_MODEL + i + 1];
+            model_string[i + 1] = ata_buffer[ATA_IDENT_MODEL + i];
+        }
+        model_string[40] = '\0';
+        print_format("        Name: \"{s}\"\n", model_string);
+
+        u4 command_sets = *((u4*)&ata_buffer[ATA_IDENT_COMMANDSETS]);
+        u4 size = 0;
+        if (command_sets & (1 << 26)) {
+            size = *((u4*)&ata_buffer[ATA_IDENT_MAX_LBA_EXT]);
+            *lba48 = true;
+        } else {
+            size = *((u4*)&ata_buffer[ATA_IDENT_MAX_LBA]);
+            *lba48 = false;
+        }
+        size *= BLOCK_SIZE;
+        print_format("        {d} B\n", size);
+        u4 kib_size = size >> 10;
+        if (kib_size) {
+            print_format("        {d} KiB\n", kib_size);
+            u4 mib_size = kib_size >> 10;
+            if (mib_size) {
+                print_format("        {d} MiB\n", mib_size);
+                u4 gib_size = mib_size >> 10;
+                if (gib_size) {
+                    print_format("        {d} GiB\n", gib_size);
+                }
+            }
+        }
     }
+}
+
+void ata_read_disk(u4 sector, mem_t dest) {
+    out1(0x01F6, sector >> 24 | 0xE0);
+    out1(0x01F2, 1);
+    out1(0x01F3, sector);
+    out1(0x01F4, sector >> 8);
+    out1(0x01F5, sector >> 16);
+    out1(0x01F7, ATA_CMD_READ_PIO);
+    print_string("About to Poll\n");
+    wait(2);
+    print_string("Poll Done, Reading\n");
+    insw(0x1F0, (void*) dest, sector);
+    print_string("Reading Done\n");
 }
