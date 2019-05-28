@@ -21,7 +21,7 @@ AS:=i686-elf-as
 ASFLAGS:=
 # -am to see marco expansion
 
-all: $(ISO)
+all: $(ISO) tmp/programs/test_prog/test_prog.elf
 
 .PHONY: depend
 depend: $(depends)
@@ -48,6 +48,9 @@ tmp/%.d: %.c
 	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
+hd.img:
+	qemu-img create -f raw hd.img 100M
+
 $(KERNEL): kernel/platform/linking.ld $(objects)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -T $^ -o $@
@@ -58,10 +61,14 @@ $(KERNEL): kernel/platform/linking.ld $(objects)
 bochs:
 	bochs -q -f misc/bochs_config -rc misc/bochs_rc
 
+tmp/programs/test_prog/test_prog.elf: programs/test_prog/test_prog.ld programs/test_prog/test_prog.s
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -T $^ -o $@
+
 .PHONY: qemu
-qemu:
+qemu: hd.img
 	$(DEBUGGER) -x misc/qemu.gdb
 
 .PHONY: clean
 clean:
-	rm -fr tmp $(ISO)
+	rm -fr tmp $(ISO) hd.img
