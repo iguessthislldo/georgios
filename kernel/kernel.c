@@ -8,9 +8,6 @@
 
 char * panic_message = 0;
 
-extern mem_t setup_process(bool usermode, mem_t eip, mem_t esp);
-extern void usermode();
-
 void kernel_main() {
 
     memory_init();

@@ -23,12 +23,18 @@ extern u4 _KERNEL_SIZE;
 // Convert Lower Kernel Address into Higher Address
 #define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
 
-extern void context_switch(mem_t * old, mem_t new);
+/*
+ * System Management
+ */
 
 // Message to print during panic
 char * panic_message;
 
 // Access to System calls
 void system_call(arg_t call_number, arg_t argument);
+
+extern mem_t setup_process(bool usermode, mem_t eip, mem_t esp);
+extern void context_switch(mem_t * old, mem_t new);
+extern void usermode();
 
 #endif
