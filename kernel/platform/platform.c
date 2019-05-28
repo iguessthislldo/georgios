@@ -146,9 +146,11 @@ void platform_init(u4 * mb_info_ptr) {
     gdt_initialize();
     idt_initialize();
     irq_initialize();
-    ps2_init();
+    //ps2_init();
     process_multiboot(mb_info_ptr);
-    find_pci_devices();
+    //find_pci_devices();
+    enable_interrupts();
+    fb_renables_interrupts = true;
 }
 
 u4 tick_counter = 0;

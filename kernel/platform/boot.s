@@ -82,8 +82,11 @@ gdt_load:
     movw %ax, %fs
     movw %ax, %gs
     movw %ax, %ss
-    jmp gdt_complete_load
-  gdt_complete_load:
+    pushl (kernel_code_selector)
+    push $.gdt_complete_load
+    ljmp *(%esp)
+  .gdt_complete_load:
+    add $8, %esp
     movw (tss_selector), %ax
     ltr %ax
     ret
