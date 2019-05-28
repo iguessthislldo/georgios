@@ -89,6 +89,21 @@ u4 tick_counter;
 // Loop for this many ticks
 void wait(u4 ticks);
 
+static inline void usec_wait(u4 usec) {
+    for (; usec; usec--) {
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+    }
+}
+
 /* ---------------------------------------------------------------------------
  * Serial Ports
  * ---------------------------------------------------------------------------
