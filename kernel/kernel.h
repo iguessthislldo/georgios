@@ -23,40 +23,7 @@ extern u4 _KERNEL_SIZE;
 // Convert Lower Kernel Address into Higher Address
 #define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
 
-typedef struct {
-    bool valid;
-    mem_t context;
-    mem_t user_stack;
-    mem_t kernel_stack;
-#ifdef PLATFORM_THREAD_MEMBERS
-    PLATFORM_THREAD_MEMBERS
-#endif
-} thread_t;
-
-#define THREAD_COUNT_MAX 4
-typedef struct {
-    u2 id;
-    u1 index;
-    bool in_kernelspace;
-    u1 thread_count;
-    thread_t threads[THREAD_COUNT_MAX];
-#ifdef PLATFORM_PROCESS_MEMBERS
-    PLATFORM_PROCESS_MEMBERS
-#endif
-} process_t;
-
-#define PROCESS_COUNT_MAX 255
-u1 process_count;
-u2 next_process_id;
-process_t processes[PROCESS_COUNT_MAX];
-
-mem_t schedulerc;
-u1 process_index;
-u1 thread_index;
-
-bool scheduler_enabled;
 extern void context_switch(mem_t * old, mem_t new);
-void scheduler();
 
 // Message to print during panic
 char * panic_message;
