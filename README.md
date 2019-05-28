@@ -17,23 +17,24 @@ that once the possibility of implementing a file system comes into view.
 
 ## Building
 
-Building Georgios requires a Unix-like enviroment with:
-- `genisoimage`
-- A i686 GNU Toolchain (`i686-elf-gcc`, `i686-elf-as`, etc)
+Building Georgios requires a Unix-like environment with:
+- GRUB2
+  - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
+- An i686 GNU Toolchain (`i686-elf-gcc`, `i686-elf-as`, etc.)
 
-Geogrios can be built as a bootable iso by running `make`.
-If you have bochs installed you can also run the testing/debuging setup by
-running `make run`.
+Georgios can be built as a bootable ISO (called `georgios.iso`) by running
+`make`. This can be written to a CD or USB Flash Drive. If installed, QEMU and
+Bochs can be run by running `make qemu` or `make bochs` respectively.
 
 ## Resources Used
 
-- [OS Dev Wiki](http://wiki.osdev.org/)
+- [OSDev Wiki](http://wiki.osdev.org/)
     - Very popular, fairly large set of resources in one place, but rough
       or just plain unhelpful in many places.
 - [The little book about OS development](https://littleosbook.github.io/)
     - Polished, but limited intro into x86 OS development. Provided me with
       the initial start.
-- [Intel x86 Software Development Mannuals](https://software.intel.com/en-us/articles/intel-sdm)
+- [Intel x86 Software Development Manuals](https://software.intel.com/en-us/articles/intel-sdm)
 - [xv6](https://github.com/mit-pdos/xv6-public)
 - [The Design and Implementation of the 4.4 BSD Operating System](https://www.amazon.com/Implementation-Operating-paperback-Addison-wesley-Systems/dp/0132317923)
 - [Lions' Commentary on Unix 6th Edition](https://www.amazon.com/Lions-Commentary-Unix-John/dp/1573980137)
@@ -44,24 +45,24 @@ running `make run`.
 
 - Getting to a kernel written in C from GRUB.
 - Basic Interrupts (like divide by zero) can be handled.
-- Printing to the screen in Real Mode graphics including a printf like
+- Printing to the screen in Real Mode graphics including a printf-like
   function.
 - [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
 - Primitive Kernel Space Context Switching
 - A "cmpxchg" Lock
 - Better Exception Screen
+- Use GRUB2/Multiboot2 (Able to write ISO to USB Flash Drive)
 
 ### In Progress/Fix
 
 - Paging Framework
-- Userland Processes
-- System Calls: Needs Userland
-- Keyboard/PS/2 Driver
+- Kernel and Userland Processes with Context Switching and System Calls
+- Keyboard/PS/2 Driver (IRQ1 Works, but Init. acts weird, On Hold)
+- Disk Driver
 
 ### Future
 
 - malloc/free for kernel
-- Disk Driver
 - Simple File System: Needs Disk Driver and System Calls (Ideally)
 - ELF Loader: Needs Simple File System, and Userland
 - clib (Maybe glibc?)
