@@ -36,6 +36,9 @@ void check_function(u1 bus, u1 device, u1 function) {
         case 0x0601:
             print_string("ISA Bridge");
             break;
+        case 0x0680:
+            print_string("Bridge"); // ?
+            break;
         case 0x0C03:
             print_string("USB Controler");
             break;
