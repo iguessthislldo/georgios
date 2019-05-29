@@ -2,7 +2,7 @@
 
 ![Saint George and the Dragon](misc/george_and_dragon.png)
 
-[Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
+"ST. GEORGE OF MERRIE ENGLAND" Illustration by Arthur Rackham for 1927 "English Fairy Tales" by Flora Annie Webster Steel, [File Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
 
 My OS that I'm making for fun which currently targets i386/IA-32. Hopefully I
 will be able to target x86\_64/AMD64 and maybe ARM in the future.
