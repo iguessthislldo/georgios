@@ -99,10 +99,22 @@ const char * x86_interrupt_messages[] = {
     "Reserved",
 };
 
+static const char * selectors[] = {
+    "NULL",
+    "Kernel Code",
+    "Kernel Data",
+    "User Code",
+    "User Data",
+    "TSS"
+};
+#define selector_count 6
+
 void x86_interrupt_handler(x86_interrupt_t stack_frame) {
     fb_new_page();
     fb_fill_screen(' ', FB_COLOR_BLACK, FB_COLOR_RED);
     fb_set_color(FB_COLOR_BLACK, FB_COLOR_RED);
+
+    u4 ec = stack_frame.error_code;
 
     print_string(
 "==============================<!>Kernel Panic<!>==============================\n"
@@ -111,13 +123,40 @@ void x86_interrupt_handler(x86_interrupt_t stack_frame) {
     "software error:\n" : "unhandled hardware exception:\n");
 print_string(
 "  Interrupt Number: "); print_uint(stack_frame.idt_index); print_string("\n"
-"  Error Code: "); print_uint(stack_frame.error_code);
+"  Error Code: "); print_uint(ec);
 print_string("\n  Message: ");
     if (panic_message) {
         print_string(panic_message);
     } else {
         if (stack_frame.idt_index < 32) {
             print_string(x86_interrupt_messages[stack_frame.idt_index]);
+            if (stack_frame.idt_index == 13) { // GPF
+                if (ec & 1)
+                    print_string(" Externally");
+                print_string(" Caused By ");
+                const char * tables[] = { "GDT", "IDT", "LDT", "IDT" };
+                u1 table = (ec >> 1) & 3;
+                print_string(tables[table]);
+                print_char('[');
+                u4 index = (ec >> 3) & 8191;
+                print_uint(index);
+                print_char(']');
+                if (table == 0) {
+                    print_string(" (");
+                    print_string((index >= selector_count) ?
+                        "Invalid Selector" : selectors[index]);
+                    print_char(')');
+                } else if (table & 1) { // IDT Helper
+                    print_string(" (");
+                    if (index < 32) {
+                        print_string(x86_interrupt_messages[index]);
+                    } else {
+                        print_string("IRQ");
+                        print_uint(index - 32);
+                    }
+                    print_char(')');
+                }
+            }
         } else {
             print_string("No message found for this exception");
         }
@@ -135,7 +174,12 @@ print_string("\n  Message: ");
 "    EBP: "); print_hex(stack_frame.ebp); print_string("\n"
 "    ESI: "); print_hex(stack_frame.esi); print_string("\n"
 "    EDI: "); print_hex(stack_frame.edi); print_string("\n"
-"    CS: "); print_hex(stack_frame.cs); print_string("\n");
+"    CS: "); print_hex(stack_frame.cs);
+    print_string(" (");
+    u4 selector_index = stack_frame.cs / 8;
+    print_string((selector_index >= selector_count) ?
+        "Invalid Selector" : selectors[selector_index]);
+    print_string(")\n");
 
     disable_interrupts();
     halt();
