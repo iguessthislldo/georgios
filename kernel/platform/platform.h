@@ -103,7 +103,12 @@ static inline void usec_wait(u4 usec) {
         out1(0x80, 0x00);
         out1(0x80, 0x00);
         out1(0x80, 0x00);
+        out1(0x80, 0x00);
     }
+}
+
+static inline void msec_wait(u4 msec) {
+    usec_wait(msec * 1100);
 }
 
 /* ---------------------------------------------------------------------------
