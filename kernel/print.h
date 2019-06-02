@@ -84,3 +84,7 @@ void print_disable_lock();
 void print_dragon();
 
 void print_data(u1 * ptr, u4 size);
+
+size_t sprint_uint(u4 value, char * output);
+
+size_t sprint_size(mem_t size, char * buffer, size_t buffer_size);

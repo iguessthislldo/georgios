@@ -205,3 +205,63 @@ void print_data(u1 * ptr, u4 size) {
         }
     }
 }
+
+// Recursion probably isn't necessary here... but whatever
+size_t sprint_int_recurse(u4 value, char * output) {
+    size_t rv = 0;
+    if (value) {
+        u1 digit = value % 10;
+        rv = sprint_int_recurse(value / 10, output ? (output + 1) : 0) + 1;
+        if (output) {
+            *output = '0' + digit;
+        }
+    }
+    return rv;
+}
+
+size_t sprint_uint(u4 value, char * output) {
+    if (!value) {
+        if (output) {
+            *output = '0';
+        }
+        return 1;
+    }
+    return sprint_int_recurse(value, output);
+}
+
+size_t sprint_size(mem_t size, char * buffer, size_t buffer_size) {
+	size_t kib_size = size >> 10;
+	size_t mib_size = kib_size >> 10;
+	size_t gib_size = mib_size >> 10;
+    size_t len;
+	if (gib_size) {
+#define L 4
+        len = sprint_uint(gib_size, 0);
+        if ((len + L) > buffer_size) return 0;
+        sprint_uint(gib_size, buffer);
+        memcpy(buffer + len, " GiB", L);
+        len += L;
+	} else if (mib_size) {
+        len = sprint_uint(mib_size, 0);
+        if ((len + L) > buffer_size) return 0;
+        sprint_uint(mib_size, buffer);
+        memcpy(buffer + len, " MiB", L);
+        len += L;
+	} else if (kib_size) {
+        len = sprint_uint(kib_size, 0);
+        if ((len + L) > buffer_size) return 0;
+        sprint_uint(kib_size, buffer);
+        memcpy(buffer + len, " KiB", L);
+        len += L;
+	} else {
+#undef L
+#define L 2
+        len = sprint_uint(size, 0);
+        if ((len + L) > buffer_size) return 0;
+        sprint_uint(size, buffer);
+        memcpy(buffer + len, " B", L);
+        len += L;
+#undef L
+	}
+    return len;
+}

@@ -24,13 +24,7 @@
 #include "irq.h"
 #include "ps2.h"
 #include "pci.h"
-
-/*
- * Types for this Platform
- */
-typedef u8 max_t; // Max Type
-typedef u4 mem_t; // Pointer Type
-typedef u4 arg_t; // Generic Argument Type
+#include "ata.h"
 
 // GRUB Multiboot structure
 #include "multiboot2.h"
@@ -50,7 +44,6 @@ void shutdown();
  * Lock
  * ---------------------------------------------------------------------------
  */
-typedef u4 lock_t;
 #define UNLOCKED 0
 #define LOCKED 1
 

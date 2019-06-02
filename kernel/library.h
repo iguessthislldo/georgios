@@ -1,7 +1,7 @@
 #ifndef LIBRARY_HEADER
 #define LIBRARY_HEADER
 
-#include <stdint.h>
+#include <stddef.h>
 
 /*
  * Integer Types
@@ -31,10 +31,11 @@ typedef u1 bool;
 /*
  * Utility Functions
  */
-u4 strlen(const char * string);
-void * memset(void * pointer, i1 value, u4 number);
-void * memcpy(void * dest, const void * src, u4 size);
+size_t strlen(const char * string);
+void * memset(void * pointer, i1 value, size_t number);
+void * memcpy(void * dest, const void * src, size_t size);
 bool isspace(char c);
+char * strcpy(char * dest, const char * src);
 
 /*
  * Bit Operations
