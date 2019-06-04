@@ -6,11 +6,13 @@
  * https://wiki.osdev.org/"8042"_PS/2_Controller
  */
 
+#include "ps2.h"
+
 #include <kernel.h>
 #include <print.h>
 
-#include "ps2.h"
 #include "io.h"
+#include "ps2_scan_codes.h"
 
 // IO Ports
 #define DATA_PORT 0x60
@@ -234,33 +236,33 @@ void ps2_print() {
     u1 code = ps2_receive();
     if (!code) return;
     switch(code) {
-    case PS2_SCAN_CODE_LEFT_SHIFT_PRESSED:
+    case Key_Left_Shift_Pressed:
         left_shift_is_pressed = true;
         break;
-    case PS2_SCAN_CODE_RIGHT_SHIFT_PRESSED:
+    case Key_Right_Shift_Pressed:
         right_shift_is_pressed = true;
         break;
-    case PS2_SCAN_CODE_LEFT_SHIFT_RELEASED:
+    case Key_Left_Shift_Released:
         left_shift_is_pressed = false;
         break;
-    case PS2_SCAN_CODE_RIGHT_SHIFT_RELEASED:
+    case Key_Right_Shift_Released:
         right_shift_is_pressed = false;
         break;
-    case PS2_SCAN_CODE_LEFT_ALT_PRESSED:
+    case Key_Left_Alt_Pressed:
         alt_is_pressed = true;
         break;
-    case PS2_SCAN_CODE_LEFT_ALT_RELEASED:
+    case Key_Left_Alt_Released:
         alt_is_pressed = false;
         break;
-    case PS2_SCAN_CODE_LEFT_CONTROL_PRESSED:
+    case Key_Left_Control_Pressed:
         control_is_pressed = true;
         break;
-    case PS2_SCAN_CODE_LEFT_CONTROL_RELEASED:
+    case Key_Left_Control_Released:
         control_is_pressed = false;
         break;
     }
     bool shifted = right_shift_is_pressed || left_shift_is_pressed;
-    char c = ps2_scan_code_chars[code];
+    char c = ps2_scan_code_to_char(code);
     if (c) {
         if (shifted && alt_is_pressed && c == 'D') {
             print_dragon();

@@ -18,6 +18,7 @@ that once the possibility of implementing a file system comes into view.
 ## Building
 
 Building Georgios requires a Unix-like environment with:
+- [Zig](https://ziglang.org/)
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 - An i686 GNU Toolchain (`i686-elf-gcc`, `i686-elf-as`, etc.)

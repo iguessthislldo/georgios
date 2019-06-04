@@ -8,8 +8,6 @@
 
 #include <basic_types.h>
 
-#include "ps2_scan_codes.h"
-
 bool ps2_enabled;
 bool ps2_dual_channel;
 bool ps2_port1;

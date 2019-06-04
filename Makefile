@@ -2,8 +2,8 @@ rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst 
 
 c_sources:=$(call rwildcard, kernel/, *.c)
 s_sources:=$(call rwildcard, kernel/, *.s)
-objects:=$(foreach object, $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
-depends:=$(foreach depend, $(c_sources:.c=.d), tmp/$(depend))
+z_sources:=$(call rwildcard, kernel/, *.zig)
+objects:=$(foreach object, $(z_sources:.zig=.o) $(c_sources:.c=.o) $(s_sources:.s=.o), tmp/$(object))
 
 ISO:=georgios.iso
 
@@ -27,6 +27,9 @@ AS:=i686-elf-as
 ASFLAGS:=
 # -am to see marco expansion
 
+ZIGC:=zig build-obj
+ZIGC_FLAGS:=-target i386-freestanding
+
 all: $(ISO) tmp/programs/test_prog/test_prog.elf
 
 .PHONY: depend
@@ -47,12 +50,9 @@ tmp/%.o : %.c
 	@mkdir -p $(dir $@)
 	$(CC) -Wa,--32 $(CFLAGS) $(KERNEL_INCLUDES) -c $< -o $@
 
-tmp/%.d: %.c
+tmp/%.o: %.zig
 	@mkdir -p $(dir $@)
-	@set -e; rm -f $@; \
-	 $(CC) -M $(CFLAGS) $(KERNEL_INCLUDES) $< > $@.$$$$; \
-	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
-	 rm -f $@.$$$$
+	$(ZIGC) $(ZIGC_FLAGS) $< --output-dir $(dir $@)
 
 hd.img: tmp/programs/test_prog/test_prog.elf
 	python3 scripts/create_hd_img.py 512 $< $@
