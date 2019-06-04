@@ -38,6 +38,7 @@ Bochs can be run by running `make qemu` or `make bochs` respectively.
 - [xv6](https://github.com/mit-pdos/xv6-public)
 - [The Design and Implementation of the 4.4 BSD Operating System](https://www.amazon.com/Implementation-Operating-paperback-Addison-wesley-Systems/dp/0132317923)
 - [Lions' Commentary on Unix 6th Edition](https://www.amazon.com/Lions-Commentary-Unix-John/dp/1573980137)
+- [FYSOS: Media Storage Devices](https://www.amazon.com/dp/1514111888/)
 
 ## Tasks
 
