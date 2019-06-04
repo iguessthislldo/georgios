@@ -64,8 +64,6 @@ bool allocate_vmem(mem_t address, mem_t ammount) {
         }
 
         mem_t ammount_left = ammount;
-        mem_t tables_count = ammount / TABLE_SIZE;
-        if (!tables_count) tables_count = 1;
         while (ammount_left) {
             mem_t directory_index = GET_DIRECTORY_INDEX(address);
             load_table(address); // Load table into temp_page_table
