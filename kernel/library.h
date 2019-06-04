@@ -1,32 +1,8 @@
 #ifndef LIBRARY_HEADER
 #define LIBRARY_HEADER
 
-#include <stddef.h>
-
-/*
- * Integer Types
- */
-typedef int8_t i1;
-typedef uint8_t u1;
-typedef int16_t i2;
-typedef uint16_t u2;
-typedef int32_t i4;
-typedef uint32_t u4;
-typedef int64_t i8;
-typedef uint64_t u8;
-
-/*
- * Floating Point Types
- */
-typedef float f4;
-typedef double f8;
-
-/*
- * Boolean Type
- */
-typedef u1 bool;
-#define true 1
-#define false 0
+#include <basic_types.h>
+#include <stdarg.h>
 
 /*
  * Utility Functions
@@ -52,19 +28,6 @@ char * strcpy(char * dest, const char * src);
         BIT_ROUND_DOWN((VALUE), (N)) \
 )
 #define GET_BYTE(value, n) (((value) >> ((n) * 8)) & 0x000000FF)
-
-/*
- * Varargs
- */
-#if defined(__GNUC__)
-typedef __builtin_va_list va_list;
-#define va_start(list, preargument) __builtin_va_start(list, preargument)
-#define va_arg(list, type) __builtin_va_arg(list, type)
-#else
-typedef void * va_list;
-#define va_start(list, preargument) list = ((va_list) &preargument) + sizeof(preargument)
-#define va_arg(list , type) *((type*)((list += sizeof(type)) - sizeof(type)))
-#endif
 
 /*
  * Math Macros

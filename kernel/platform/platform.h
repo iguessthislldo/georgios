@@ -44,6 +44,7 @@ void shutdown();
  * Lock
  * ---------------------------------------------------------------------------
  */
+typedef u4 lock_t;
 #define UNLOCKED 0
 #define LOCKED 1
 
