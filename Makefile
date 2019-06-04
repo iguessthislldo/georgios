@@ -54,8 +54,8 @@ tmp/%.d: %.c
 	 sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
 	 rm -f $@.$$$$
 
-hd.img:
-	qemu-img create -f raw hd.img 100M
+hd.img: tmp/programs/test_prog/test_prog.elf
+	python3 scripts/create_hd_img.py 512 $< $@
 
 $(KERNEL): kernel/platform/linking.ld $(objects)
 	@mkdir -p $(dir $@)
