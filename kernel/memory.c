@@ -22,6 +22,7 @@
 
 #include <memory.h>
 
+#include <library.h>
 #include <platform.h> // FRAME_SIZE and FRAME_LEVELS
 #include <kernel.h> // Location of the kernel
 #include <print.h> // Debug

@@ -1,7 +1,7 @@
 #ifndef X86_FB_HEADER
 #define X86_FB_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 
 static const u4 FB_WIDTH = 80;
 static const u4 FB_HEIGHT = 25;

@@ -11,7 +11,7 @@
 #ifndef X86_GDT_HEADER
 #define X86_GDT_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 
 typedef struct {
     u2 limit_0_15;

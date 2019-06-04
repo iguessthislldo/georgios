@@ -1,4 +1,5 @@
 #include "gdt.h"
+#include <library.h>
 #include <platform.h>
 #include <print.h>
 

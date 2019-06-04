@@ -7,8 +7,7 @@
 #ifndef MEMORY_HEADER
 #define MEMROY_HEADER
 
-#include <library.h> // normal types
-#include <platform.h> // mem_t
+#include <basic_types.h>
 
 /*
  * Memory Map

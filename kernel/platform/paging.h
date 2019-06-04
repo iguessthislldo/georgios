@@ -6,7 +6,7 @@
 #ifndef X86_32_PAGING
 #define X86_32_PAGING
 
-#include <library.h> // normal types
+#include <basic_types.h>
 
 // Values for use in memory.c
 #define FRAME_SIZE KiB(4)

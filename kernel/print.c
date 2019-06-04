@@ -1,6 +1,7 @@
-#include <print.h> // Header for this c file
+#include "print.h"
 
-#include <platform.h> // vargs
+#include <stdarg.h> // va_* for print_format
+#include <library.h> // isspace,  memcpy
 
 void print_nstring(const char * string, u4 size) {
 	for (u4 i = 0; i < size; i++) {

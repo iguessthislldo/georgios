@@ -13,7 +13,7 @@
 #define CPU_IS_32_BITS
 #define CPU_IS_LITTLE_ENDIAN
 
-#include <library.h>
+#include <basic_types.h>
 
 // Platform Submodules
 #include "fb.h"

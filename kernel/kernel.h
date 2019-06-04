@@ -1,7 +1,7 @@
 #ifndef KERNEL_HEADER
 #define KERNEL_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 #include <platform.h>
 
 /*

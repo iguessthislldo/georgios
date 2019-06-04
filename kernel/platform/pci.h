@@ -5,8 +5,8 @@
 #ifndef X86_32_PCI_HEADER
 #define X86_32_PCI_HEADER
 
-#include <library.h>
-#include <io.h>
+#include <basic_types.h>
+#include "io.h"
 
 #define MAX_PCI_DEVICES 64
 struct PCI_Device {

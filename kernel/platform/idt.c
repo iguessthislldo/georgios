@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "fb.h"
 
+#include <library.h>
 #include <print.h>
 #include <kernel.h>
 

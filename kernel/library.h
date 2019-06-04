@@ -2,7 +2,6 @@
 #define LIBRARY_HEADER
 
 #include <basic_types.h>
-#include <stdarg.h>
 
 /*
  * Utility Functions

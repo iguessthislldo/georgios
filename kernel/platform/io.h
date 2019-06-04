@@ -1,7 +1,7 @@
 #ifndef X86_IO_HEADER
 #define X86_IO_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 
 static inline void out1(u2 port, u1 val) {
     asm volatile ( "outb %0, %1" : : "a"(val), "Nd"(port) );

@@ -1,7 +1,7 @@
 #ifndef X86_IDT_HEADER
 #define X86_IDT_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 
 /*
  * Interrupt Descriptor Table

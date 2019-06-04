@@ -5,6 +5,7 @@
 
 #include "paging.h"
 
+#include <library.h>
 #include <kernel.h>
 #include <print.h>
 #include <memory.h>

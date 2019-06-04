@@ -6,7 +6,7 @@
 #ifndef PS2_HEADER
 #define PS2_HEADER
 
-#include <library.h>
+#include <basic_types.h>
 
 #include "ps2_scan_codes.h"
 

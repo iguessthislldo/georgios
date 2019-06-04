@@ -1,7 +1,7 @@
 #ifndef X86_32_IRQ
 #define X86_32_IRQ
 
-#include <library.h>
+#include <basic_types.h>
 #include "io.h"
 
 // IO Ports
