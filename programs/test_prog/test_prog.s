@@ -5,5 +5,5 @@ test_prog_start:
     movl $99, %eax // print_char
     movl $0x2B, %ebx // '+'
     int $100
-    movl $0, %eax
+    movl $test_prog_start, %eax
     jmp * %eax
