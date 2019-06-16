@@ -3,31 +3,19 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /*
  * Integer Types
  */
-typedef int8_t i1;
-typedef uint8_t u1;
-typedef int16_t i2;
-typedef uint16_t u2;
-typedef int32_t i4;
-typedef uint32_t u4;
-typedef int64_t i8;
-typedef uint64_t u8;
-
-/*
- * Floating Point Types
- */
-typedef float f4;
-typedef double f8;
-
-/*
- * Boolean Type
- */
-typedef u1 bool;
-#define true 1
-#define false 0
+#define i1 int8_t
+#define u1 uint8_t
+#define i2 int16_t
+#define u2 uint16_t
+#define i4 int32_t
+#define u4 uint32_t
+#define i8 int64_t
+#define u8 uint64_t
 
 /*
  * Address Types

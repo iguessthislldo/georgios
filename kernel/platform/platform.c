@@ -3,6 +3,8 @@
 #include <kernel.h>
 #include <memory.h>
 
+#include <transitional.h>
+
 #include "platform.h"
 
 void shutdown() {
@@ -145,10 +147,9 @@ void serial_out(char c) {
 }
 
 void platform_init(u4 * mb_info_ptr) {
-	serial_log_enabled = false;
     kernel_range = 1;
     serial_initialize();
-    fb_initialize();
+    transitional_initialize_cga_console();
     gdt_initialize();
     idt_initialize();
     irq_initialize();
@@ -156,7 +157,6 @@ void platform_init(u4 * mb_info_ptr) {
     process_multiboot(mb_info_ptr);
     find_pci_devices();
     enable_interrupts();
-    fb_renables_interrupts = true;
 }
 
 u4 tick_counter = 0;

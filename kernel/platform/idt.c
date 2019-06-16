@@ -1,9 +1,12 @@
 #include "idt.h"
-#include "fb.h"
 
 #include <library.h>
 #include <print.h>
 #include <kernel.h>
+
+#include <transitional.h>
+
+char * panic_message = 0;
 
 void idt_set(u1 index, u4 offset, u2 selector, u1 flags) {
     idt[index].offset_0_15 = offset & 0xFFFF;
@@ -111,9 +114,7 @@ static const char * selectors[] = {
 #define selector_count 6
 
 void x86_interrupt_handler(x86_interrupt_t stack_frame) {
-    fb_new_page();
-    fb_fill_screen(' ', FB_COLOR_BLACK, FB_COLOR_RED);
-    fb_set_color(FB_COLOR_BLACK, FB_COLOR_RED);
+    transitional_panic_paint();
 
     u4 ec = stack_frame.error_code;
 

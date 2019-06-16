@@ -28,7 +28,7 @@ ASFLAGS:=
 # -am to see marco expansion
 
 ZIGC:=zig build-obj
-ZIGC_FLAGS:=-target i386-freestanding
+ZIGC_FLAGS:=-target i386-freestanding -isystem kernel/platform -isystem tmp/kernel/platform -isystem kernel -isystem tmp/kernel --cache-dir tmp/zig-cache
 
 all: $(ISO) tmp/programs/test_prog/test_prog.elf
 

@@ -5,25 +5,6 @@
 #include <platform.h>
 
 /*
- * Values from Linking
- */
-extern u4 _KERNEL_LOW_START;
-#define KERNEL_LOW_START ((mem_t) &_KERNEL_LOW_START)
-extern u4 _KERNEL_LOW_END;
-#define KERNEL_LOW_END ((mem_t) &_KERNEL_LOW_END)
-extern u4 _KERNEL_OFFSET;
-#define KERNEL_OFFSET ((mem_t) &_KERNEL_OFFSET)
-extern u4 _KERNEL_HIGH_START;
-#define KERNEL_HIGH_START ((mem_t) &_KERNEL_HIGH_START)
-extern u4 _KERNEL_HIGH_END;
-#define KERNEL_HIGH_END ((mem_t) &_KERNEL_HIGH_END)
-extern u4 _KERNEL_SIZE;
-#define KERNEL_SIZE ((mem_t) &_KERNEL_SIZE)
-
-// Convert Lower Kernel Address into Higher Address
-#define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
-
-/*
  * System Management
  */
 

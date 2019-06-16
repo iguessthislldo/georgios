@@ -113,9 +113,6 @@ mem_t memory_total;
 // Total Number of Frames in Stack
 mem_t frame_stack_count;
 
-// Frame Stack Size
-mem_t frame_stack_count;
-
 // Total amount of Memory that makes up used frames
 mem_t memory_used;
 

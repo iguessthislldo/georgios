@@ -2,10 +2,7 @@
  * Functions for printing to console
  */
 
-/*
- * Platform will define a print_char(char) which will be used by these
- * functions.
- */
+#include <basic_types.h>
 #include <platform.h>
 
 /*

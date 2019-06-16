@@ -233,15 +233,15 @@ bool ata_disk_read(u1 disk, u4 sector) {
     usec_wait(5);
     if (channel_wait(channel, 30)) {
         print_string("Read Timeout\n");
-        return false;
+        return true;
     }
     msec_wait(2);
     u1 error = cmd_reg_read(channel, CMD_ERROR);
     u1 status = cmd_reg_read(channel, CMD_STATUS);
     if (error & 0x80 || status & 0x25) {
         print_format("Error is {x}, status is {x}\n", error, status);
-        return false;
+        return true;
     }
     insw(channels[channel].command_base + CMD_DATA, ata_buffer, 256);
-    return true;
+    return false;
 }
