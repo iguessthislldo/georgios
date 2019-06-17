@@ -1,4 +1,4 @@
-symbol-file tmp/iso/boot/kernel
+symbol-file tmp/iso/boot/kernel.elf
 set disassemble-next-line on
 set confirm off
 set pagination off

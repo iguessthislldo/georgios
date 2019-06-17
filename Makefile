@@ -9,18 +9,12 @@ ISO:=georgios.iso
 
 ISO_DIR:=tmp/iso
 ISO_BOOT_DIR=$(ISO_DIR)/boot
-KERNEL:=$(ISO_BOOT_DIR)/kernel
+KERNEL:=$(ISO_BOOT_DIR)/kernel.elf
 GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
-
-ifdef BOOT_TEST
-BOOT_TEST:=-DBOOT_TEST
-else
-BOOT_TEST:=
-endif
 
 CC:=i686-elf-gcc
 DEBUGGER:=i686-elf-gdb
-CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith $(BOOT_TEST)
+CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-pointer-arith
 KERNEL_INCLUDES:=-Ikernel/platform -Itmp/kernel/platform -Ikernel -Itmp/kernel
 
 AS:=i686-elf-as
@@ -32,8 +26,8 @@ ZIGC_FLAGS:=-target i386-freestanding -isystem kernel/platform -isystem tmp/kern
 
 all: $(ISO) tmp/programs/test_prog/test_prog.elf
 
-.PHONY: depend
-depend: $(depends)
+# .PHONY: depend
+# depend: $(depends)
 
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)
@@ -42,26 +36,26 @@ $(GRUB_CFG): misc/grub.cfg
 $(ISO): $(KERNEL) $(GRUB_CFG)
 	grub-mkrescue --output=$(ISO) $(ISO_DIR)
 
-tmp/%.o: %.s
-	@mkdir -p $(dir $@)
-	$(CC) -Wa,--32 -c -x assembler-with-cpp $(CFLAGS) $< -o $@
+# tmp/%.o: %.s
+# 	@mkdir -p $(dir $@)
+# 	$(CC) -Wa,--32 -c -x assembler-with-cpp $(CFLAGS) $< -o $@
 
-tmp/%.o : %.c
-	@mkdir -p $(dir $@)
-	$(CC) -Wa,--32 $(CFLAGS) $(KERNEL_INCLUDES) -c $< -o $@
+# tmp/%.o : %.c
+# 	@mkdir -p $(dir $@)
+# 	$(CC) -Wa,--32 $(CFLAGS) $(KERNEL_INCLUDES) -c $< -o $@
 
-tmp/%.o: %.zig
-	@mkdir -p $(dir $@)
-	$(ZIGC) $(ZIGC_FLAGS) $< --output-dir $(dir $@)
+# tmp/%.o: %.zig
+# 	@mkdir -p $(dir $@)
+# 	$(ZIGC) $(ZIGC_FLAGS) $< --output-dir $(dir $@)
 
 hd.img: tmp/programs/test_prog/test_prog.elf
 	python3 scripts/create_hd_img.py 512 $< $@
 
-$(KERNEL): kernel/platform/linking.ld $(objects)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -T $^ -o $@
-	grub-file --is-x86-multiboot2 $(KERNEL)
-	objdump -S $(KERNEL) > tmp/annotated_kernel
+# $(KERNEL): kernel/platform/linking.ld $(objects)
+# 	@mkdir -p $(dir $@)
+# 	$(CC) $(CFLAGS) -T $^ -o $@
+# 	grub-file --is-x86-multiboot2 $(KERNEL)
+# 	objdump -S $(KERNEL) > tmp/annotated_kernel
 
 .PHONY: bochs
 bochs:

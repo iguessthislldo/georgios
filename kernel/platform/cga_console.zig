@@ -1,4 +1,21 @@
-const platform = @import("platform.zig");
+const builtin = @import("builtin");
+const platform = @import("zplatform.zig");
+
+export fn initialize_cga_console() void {
+    initialize();
+}
+
+extern fn serial_out(c: u8) void;
+pub export fn x86_32_print_char(c: u8) void {
+    print_char(c);
+    serial_out(c);
+}
+
+export fn transitional_panic_paint() void {
+    new_page();
+    set_colors(Color.Black, Color.Red);
+    fill_screen(' ');
+}
 
 pub const Color = enum {
     Black = 0,

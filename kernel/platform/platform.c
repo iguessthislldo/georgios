@@ -3,9 +3,13 @@
 #include <kernel.h>
 #include <memory.h>
 
-#include <transitional.h>
-
 #include "platform.h"
+
+#include <cga_console.h>
+
+void print_char(char c) {
+    x86_32_print_char(c);
+}
 
 void shutdown() {
     print_string("Shutting Down...\n");
@@ -149,7 +153,7 @@ void serial_out(char c) {
 void platform_init(u4 * mb_info_ptr) {
     kernel_range = 1;
     serial_initialize();
-    transitional_initialize_cga_console();
+    initialize_cga_console();
     gdt_initialize();
     idt_initialize();
     irq_initialize();

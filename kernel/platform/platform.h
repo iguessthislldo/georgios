@@ -34,8 +34,7 @@ extern u4 _KERNEL_SIZE;
 // Convert Lower Kernel Address into Higher Address
 #define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
 
-#include <transitional.h>
-#define print_char transitional_print_char
+void print_char(char);
 
 // Platform Submodules
 #include "gdt.h"

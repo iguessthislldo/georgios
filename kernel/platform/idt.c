@@ -4,7 +4,7 @@
 #include <print.h>
 #include <kernel.h>
 
-#include <transitional.h>
+#include <cga_console.h>
 
 char * panic_message = 0;
 

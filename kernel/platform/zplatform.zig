@@ -32,3 +32,6 @@ pub inline fn out8(port : u16, val: u8) void {
 //     asm volatile ( "inl %1, %0" : "=a"(rv) : "Nd"(port) );
 //     return rv;
 // }
+
+pub fn initialize_io() void {
+}
