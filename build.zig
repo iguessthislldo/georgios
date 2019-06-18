@@ -4,7 +4,6 @@ const fs = std.fs;
 const DirectAllocator = std.heap.DirectAllocator;
 const Builder = std.build.Builder;
 
-const root = "/mnt/arch/data/development/concepts/georgios/";
 const t_path = "tmp/";
 const k_path = "kernel/";
 const tk_path = t_path ++ k_path;
@@ -43,7 +42,7 @@ const c_args = []const []const u8 {
 };
 
 const s_sources = [][]const u8 {
-    p_path ++ "boot.S",
+    p_path ++ "boot.s",
     p_path ++ "threading.s",
     p_path ++ "irq_handlers.s",
     p_path ++ "idt_handlers.s",
@@ -75,7 +74,7 @@ pub fn build(b: *Builder) void {
     const alloc = DirectAllocator.init();
 
     const kernel = b.addExecutable("kernel.elf", k_path ++ "kernel.zig");
-    kernel.setOutputDir(t_path);
+    kernel.setOutputDir(tk_path);
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTarget(builtin.Arch.i386, builtin.Os.freestanding, builtin.Abi.gnu);
 
@@ -100,5 +99,6 @@ pub fn build(b: *Builder) void {
     for (c_sources) |c_source| {
         kernel.addCSourceFile(c_source, c_args);
     }
+
     b.default_step.dependOn(&kernel.step);
 }
