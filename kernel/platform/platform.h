@@ -29,7 +29,7 @@ extern u4 _KERNEL_HIGH_START;
 extern u4 _KERNEL_HIGH_END;
 #define KERNEL_HIGH_END ((mem_t) &_KERNEL_HIGH_END)
 extern u4 _KERNEL_SIZE;
-#define KERNEL_SIZE ((mem_t) &_KERNEL_SIZE)
+#define KERNEL_SIZE (KERNEL_LOW_END - KERNEL_LOW_START)
 
 // Convert Lower Kernel Address into Higher Address
 #define kernel_offset(a) (((mem_t) a) + KERNEL_OFFSET)
@@ -102,25 +102,8 @@ u4 tick_counter;
 // Loop for this many ticks
 void wait(u4 ticks);
 
-static inline void usec_wait(u4 usec) {
-    for (; usec; usec--) {
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-        out1(0x80, 0x00);
-    }
-}
-
-static inline void msec_wait(u4 msec) {
-    usec_wait(msec * 1100);
-}
+void usec_wait(u4 usec);
+void msec_wait(u4 msec);
 
 /* ---------------------------------------------------------------------------
  * Serial Ports

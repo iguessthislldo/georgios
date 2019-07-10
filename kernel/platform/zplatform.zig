@@ -1,4 +1,9 @@
+const io = @import("../io.zig");
+
 extern var _KERNEL_OFFSET: u32;
+extern var _KERNEL_LOW_END: u32;
+extern var _KERNEL_LOW_START: u32;
+
 pub inline fn offset(address: usize) usize {
     return @ptrToInt(&_KERNEL_OFFSET) + address;
 }
@@ -34,4 +39,6 @@ pub inline fn out8(port : u16, val: u8) void {
 // }
 
 pub fn initialize_io() void {
+    io.console_in = io.new_file() catch |e| null;
+    io.console_out = io.new_file() catch |e| null;
 }

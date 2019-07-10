@@ -114,6 +114,12 @@ void process_multiboot(u4 * mb_info_ptr) {
                 }
             }
             break;
+
+        case MULTIBOOT_TAG_TYPE_CMDLINE:
+            print_string("    \"");
+            print_string((char*)(i + 8));
+            print_string("\"\n");
+            break;
         }
 
         i += ALIGN(size, 8);
@@ -168,6 +174,27 @@ u4 tick_counter = 0;
 void wait(u4 ticks) {
     ticks += tick_counter;
     while (tick_counter != ticks) {
-        asm("nop");
+        asm volatile ("nop");
     }
 }
+
+void usec_wait(u4 usec) {
+    for (; usec; usec--) {
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+        out1(0x80, 0x00);
+    }
+}
+
+void msec_wait(u4 msec) {
+    usec_wait(msec * 1100);
+}
+
