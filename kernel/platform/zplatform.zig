@@ -39,6 +39,6 @@ pub inline fn out8(port : u16, val: u8) void {
 // }
 
 pub fn initialize_io() void {
-    io.console_in = io.new_file() catch |e| null;
-    io.console_out = io.new_file() catch |e| null;
+    // io.console_in = io.new_file() catch |e| null;
+    // io.console_out = io.new_file() catch |e| null;
 }

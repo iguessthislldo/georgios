@@ -1,23 +1,17 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const fs = std.fs;
-const DirectAllocator = std.heap.DirectAllocator;
-const Builder = std.build.Builder;
+const warn = std.debug.warn;
 
 const t_path = "tmp/";
 const k_path = "kernel/";
-const tk_path = t_path ++ k_path;
 const p_path = k_path ++ "platform/";
-const tp_path = t_path ++ p_path;
 
-const c_include_dirs = [][]const u8{
+const c_include_dirs = [_][]const u8 {
     &k_path,
-    &tk_path,
     &p_path,
-    &tp_path,
 };
 
-const c_sources = [][]const u8 {
+const c_sources = [_][]const u8 {
     p_path ++ "gdt.c",
     p_path ++ "paging.c",
     p_path ++ "idt.c",
@@ -33,15 +27,12 @@ const c_sources = [][]const u8 {
     k_path ++ "system_call.c",
 };
 
-const c_args = []const []const u8 {
+const c_args = [_][]const u8 {
     "-std=gnu11",
     "-O0",
-    "-g",
-    "-ffreestanding",
-    "-nostdlib",
 };
 
-const s_sources = [][]const u8 {
+const s_sources = [_][]const u8 {
     p_path ++ "boot.s",
     p_path ++ "threading.s",
     p_path ++ "irq_handlers.s",
@@ -60,36 +51,37 @@ const ZSource = struct {
         };
     }
 };
-const z_sources = []const ZSource {
+const z_sources = [_]ZSource {
     ZSource.init(p_path, "zplatform"),
     ZSource.init(p_path, "ps2_scan_codes"),
     ZSource.init(p_path, "cga_console"),
     ZSource.init(k_path, "io"),
 };
-var z_objects = []?*std.build.LibExeObjStep{null} ** z_sources.len;
 
 const boot_path = t_path ++ "iso/boot/";
 
-pub fn build(b: *Builder) void {
-    const alloc = DirectAllocator.init();
+pub fn build(b: *std.build.Builder) void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.direct_allocator);
+    defer arena.deinit();
+    const alloc = &arena.allocator;
 
+    const target = std.build.Target {
+        .Cross = std.build.CrossTarget{
+            .arch = .i386,
+            .os = .freestanding,
+            .abi = .gnu,
+        },
+    };
+
+    // Kernel
     const kernel = b.addExecutable("kernel.elf", k_path ++ "kernel.zig");
-    kernel.setOutputDir(tk_path);
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
-    kernel.setTarget(builtin.Arch.i386, builtin.Os.freestanding, builtin.Abi.gnu);
-
-    var i: usize = 0;
+    kernel.setTheTarget(target);
     for (z_sources) |z_source| {
-        z_objects[i] = b.addObject(z_source.name, z_source.source);
-        if (z_objects[i]) |z_object| {
-            z_object.setTarget(builtin.Arch.i386, builtin.Os.freestanding, builtin.Abi.gnu);
-            kernel.step.dependOn(&z_object.step);
-            kernel.addObject(z_object);
-            z_object.setOutputDir(z_source.dir);
-        }
-        i += 1;
+        const obj = b.addObject(z_source.name, z_source.source);
+        obj.setTheTarget(target);
+        kernel.addObject(obj);
     }
-
     for (c_include_dirs) |dir| {
         kernel.addIncludeDir(dir);
     }
@@ -99,6 +91,7 @@ pub fn build(b: *Builder) void {
     for (c_sources) |c_source| {
         kernel.addCSourceFile(c_source, c_args);
     }
+    kernel.install();
 
-    b.default_step.dependOn(&kernel.step);
+    // TODO: programs/test_prog
 }

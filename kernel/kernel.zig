@@ -7,7 +7,7 @@ const c = @cImport({
 });
 const print_string = c.print_string;
 
-export fn kernel_main() void {
+pub export fn kernel_main() void {
     c.memory_init();
     io.initialize();
     c.print_string(c"Booted\n");

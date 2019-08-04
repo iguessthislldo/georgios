@@ -1,7 +1,7 @@
 const builtin = @import("builtin");
 const platform = @import("zplatform.zig");
 
-export fn initialize_cga_console() void {
+pub export fn initialize_cga_console() void {
     initialize();
 }
 
@@ -11,7 +11,7 @@ pub export fn x86_32_print_char(c: u8) void {
     serial_out(c);
 }
 
-export fn transitional_panic_paint() void {
+pub export fn transitional_panic_paint() void {
     new_page();
     set_colors(Color.Black, Color.Red);
     fill_screen(' ');

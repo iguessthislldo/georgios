@@ -11,9 +11,6 @@ CFLAGS:=-std=gnu11 -O0 -g -ffreestanding -nostdlib -pedantic -Wall -Wextra -Wno-
 
 all: $(ISO) tmp/programs/test_prog/test_prog.elf
 
-# .PHONY: depend
-# depend: $(depends)
-
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)
 	cp $< $(GRUB_CFG)
@@ -26,9 +23,8 @@ hd.img: tmp/programs/test_prog/test_prog.elf
 
 $(KERNEL): kernel/platform/linking.ld FORCE
 	@mkdir -p $(dir $@)
-	@mkdir -p tmp/kernel/platform
 	zig build --cache-dir tmp/zig-cache
-	cp tmp/kernel/kernel.elf $(KERNEL)
+	cp tmp/zig-cache/bin/kernel.elf $(KERNEL)
 	grub-file --is-x86-multiboot2 $(KERNEL)
 	objdump -S $(KERNEL) > tmp/annotated_kernel
 FORCE:
