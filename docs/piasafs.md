@@ -1,11 +1,14 @@
-# Georgios File System Design
+# PiasaFS
 
 Georgios ultimate purpose is to be a host for a experimental file system based
-on tags called DragonFS.
+on tags called [Piasa](https://en.wikipedia.org/wiki/Piasa)FS (pronounced
+*PIE-A-SAW*).
+
+## Design Notes
 
 # Case Study 1
 
-The basis of DragonFS usage, at least at first, be will be a unnamed website,
+The basis of PiasaFS usage, at least at first, be will be a unnamed website,
 with an advanced tagging system for content. This is a summery of the system
 along with my comments.
 
@@ -29,6 +32,6 @@ along with my comments.
         date ranges
       - Hashes
       - `order:score`: Order by the score attribute
-    - This will be implemented in some way into DragonFS
+    - Will be implemented in some way into PiasaFS
 
 TODO: More Case Studies

@@ -2,18 +2,16 @@
 
 ![Saint George and the Dragon](misc/george_and_dragon.png)
 
-"ST. GEORGE OF MERRIE ENGLAND" Illustration by Arthur Rackham for 1927 "English Fairy Tales" by Flora Annie Webster Steel, [File Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
+"ST. GEORGE OF MERRIE ENGLAND" Illustration by Arthur Rackham for 1927 "English
+Fairy Tales" by Flora Annie Webster Steel, [File
+Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
 
-My OS that I'm making for fun which currently targets i386/IA-32. Hopefully I
-will be able to target x86\_64/AMD64 and maybe ARM in the future.
-
-The purposes of this OS are to serve as a learning experience and as an
+Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
+making for fun which currently targets i386/IA-32. The purposes of this project
+are to serve as a learning experience in low-level hardware and as an
 experiment with a OS built around a
-[tag](https://en.wikipedia.org/wiki/Tag_\(metadata\))
-based file system (maybe more technically called a
-[Semanitic File System](https://en.wikipedia.org/wiki/Semantic_file_system)).
-My plans for how this part will work are not yet concrete as I hope to work on
-that once the possibility of implementing a file system comes into view.
+[tag](https://en.wikipedia.org/wiki/Tag_\(metadata\))-based file system called
+I'm also planning on developing called [PiasaFS](docs/piasafs.md).
 
 ## Building
 
