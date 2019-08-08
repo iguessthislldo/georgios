@@ -1,6 +1,5 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const warn = std.debug.warn;
 
 const t_path = "tmp/";
 const k_path = "kernel/";
@@ -40,12 +39,10 @@ const s_sources = [_][]const u8 {
 };
 
 const ZSource = struct {
-    dir: []const u8,
     name: []const u8,
     source: []const u8,
     pub fn init(comptime dir: []const u8, comptime name: []const u8) ZSource {
         return ZSource {
-            .dir = t_path ++ dir,
             .name = name,
             .source = dir ++ name ++ ".zig",
         };
@@ -93,5 +90,10 @@ pub fn build(b: *std.build.Builder) void {
     }
     kernel.install();
 
-    // TODO: programs/test_prog
+    // programs/test_prog
+    const test_prog = b.addExecutable("test_prog.elf", null);
+    test_prog.addAssemblyFile("programs/test_prog/test_prog.s");
+    test_prog.setLinkerScriptPath("programs/test_prog/test_prog.ld");
+    test_prog.setTheTarget(target);
+    test_prog.install();
 }
