@@ -77,6 +77,9 @@ pub fn build(b: *std.build.Builder) void {
     for (z_sources) |z_source| {
         const obj = b.addObject(z_source.name, z_source.source);
         obj.setTheTarget(target);
+        for (c_include_dirs) |dir| {
+            obj.addIncludeDir(dir);
+        }
         kernel.addObject(obj);
     }
     for (c_include_dirs) |dir| {
