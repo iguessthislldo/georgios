@@ -1,15 +1,15 @@
-pub fn KiB(x: usize) usize {
+pub inline fn KiB(x: usize) usize {
     return x * (1 << 10);
 }
 
-pub fn MiB(x: usize) usize {
+pub inline fn MiB(x: usize) usize {
     return x * (1 << 20);
 }
 
-pub fn GiB(x: usize) usize {
+pub inline fn GiB(x: usize) usize {
     return x * (1 << 30);
 }
 
-pub fn TiB(x: usize) usize {
+pub inline fn TiB(x: usize) usize {
     return x * (1 << 40);
 }
