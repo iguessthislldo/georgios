@@ -51,6 +51,7 @@ const z_sources = [_]ZSource {
     ZSource.init(p_path, "ps2_scan_codes"),
     ZSource.init(p_path, "cga_console"),
     ZSource.init(k_path, "io"),
+    ZSource.init(p_path, "platform_initialize"),
 };
 
 const boot_path = t_path ++ "iso/boot/";

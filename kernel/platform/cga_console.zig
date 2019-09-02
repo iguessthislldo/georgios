@@ -1,18 +1,6 @@
 const builtin = @import("builtin");
 const platform = @import("zplatform.zig");
 
-extern fn serial_out(c: u8) void;
-pub export fn x86_32_print_char(c: u8) void {
-    print_char(c);
-    serial_out(c);
-}
-
-pub export fn transitional_panic_paint() void {
-    new_page();
-    set_colors(Color.Black, Color.Red);
-    fill_screen(' ');
-}
-
 pub const Color = enum {
     Black = 0,
     Blue = 1,
