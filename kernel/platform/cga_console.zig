@@ -1,10 +1,6 @@
 const builtin = @import("builtin");
 const platform = @import("zplatform.zig");
 
-pub export fn initialize_cga_console() void {
-    initialize();
-}
-
 extern fn serial_out(c: u8) void;
 pub export fn x86_32_print_char(c: u8) void {
     print_char(c);

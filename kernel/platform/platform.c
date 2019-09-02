@@ -17,8 +17,6 @@ void shutdown() {
     out4(0x604, 0x2000); // QEMU
 }
 
-enum ACPI_RSDP_Status acpi_rsdp_status = ACPI_RSDP_STATUS_NOT_FOUND;
-
 static inline const char * mb_tag_type_to_str(u4 tag_type) {
     switch (tag_type) {
     case MULTIBOOT_TAG_TYPE_END:
@@ -88,17 +86,7 @@ void process_multiboot(u4 * mb_info_ptr) {
 
         switch (type) {
         case MULTIBOOT_TAG_TYPE_ACPI_OLD:
-            if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND) {
-                memcpy(&acpi_rsdp.v1, i + 8, sizeof(ACPI_RSDPv1));
-                acpi_rsdp_status = ACPI_RSDP_STATUS_FOUND_V1;
-            }
-            break;
         case MULTIBOOT_TAG_TYPE_ACPI_NEW:
-            if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND ||
-                acpi_rsdp_status == ACPI_RSDP_STATUS_FOUND_V1) {
-                memcpy(&acpi_rsdp.v2, i + 8, sizeof(ACPI_RSDPv2));
-                acpi_rsdp_status = ACPI_RSDP_STATUS_FOUND_V2;
-            }
             break;
 
         case MULTIBOOT_TAG_TYPE_MMAP:
@@ -128,15 +116,6 @@ void process_multiboot(u4 * mb_info_ptr) {
     if (!got_memory_map) {
         PANIC("Could not get memory map from multiboot!\n");
     }
-
-    if (acpi_rsdp_status == ACPI_RSDP_STATUS_NOT_FOUND) {
-        PANIC("ACPI was not found!\n");
-    } else {
-        print_format("ACPI is v{s}\nOEM is ",
-            acpi_rsdp.v1.revision ? "2 or later" : "1");
-        print_stripped_string(acpi_rsdp.v1.oemid, 6);
-        print_char('\n');
-    }
 }
 
 #define COM1 0x3f8
@@ -154,19 +133,6 @@ void serial_initialize() {
 void serial_out(char c) {
     while (!(in1(COM1 + 5) & 0x20)) {}
     out1(COM1, c);
-}
-
-void platform_init(u4 * mb_info_ptr) {
-    kernel_range = 1;
-    serial_initialize();
-    initialize_cga_console();
-    gdt_initialize();
-    idt_initialize();
-    irq_initialize();
-    //ps2_init();
-    process_multiboot(mb_info_ptr);
-    find_pci_devices();
-    enable_interrupts();
 }
 
 u4 tick_counter = 0;

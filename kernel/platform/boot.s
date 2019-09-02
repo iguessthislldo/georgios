@@ -193,7 +193,7 @@ _start:
     sub $4, %esp // Sub 4 bytes for Multiboot pointer
 
     // Rest of Platform Setup
-    call platform_init
+    call platform_initialize
 
     // Start Main Part of Kernel
     call kernel_main

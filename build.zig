@@ -17,8 +17,6 @@ const c_sources = [_][]const u8 {
     p_path ++ "platform.c",
     p_path ++ "irq.c",
     p_path ++ "ps2.c",
-    p_path ++ "ata.c",
-    p_path ++ "pci.c",
 
     k_path ++ "library.c",
     k_path ++ "print.c",

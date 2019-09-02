@@ -1,6 +1,4 @@
 const io = @import("io.zig");
-const util = @import("util.zig");
-const KiB = util.KiB;
 const c = @cImport({
     @cInclude("memory.h");
     @cInclude("print.h");
