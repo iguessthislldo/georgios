@@ -8,35 +8,43 @@ pub inline fn offset(address: usize) usize {
     return @ptrToInt(&_KERNEL_OFFSET) + address;
 }
 
-pub inline fn out8(port : u16, val: u8) void {
-    asm volatile ( "outb %[val], %[port]" : : [val] "{al}" (val), [port] "N{dx}" (port) );
+pub inline fn out8(port: u16, val: u8) void {
+    asm volatile ("outb %[val], %[port]" : :
+        [val] "{al}" (val), [port] "N{dx}" (port));
 }
 
-// inline out16(u16 port, u16 val) void {
-//     asm volatile ( "outw %0, %1" : : "a"(val), "Nd"(port) );
-// }
+pub inline fn out16(port: u16, val: u16) void {
+    asm volatile ("outw %[val], %[port]" : :
+        [val] "{al}" (val), [port] "N{dx}" (port));
+}
 
-// inline out4(u16 port, u32 val) void {
-//     asm volatile ( "outl %0, %1" : : "a"(val), "Nd"(port) );
-// }
+pub inline fn out32(port: u16, val: u32) void {
+    asm volatile ("outl %[val], %[port]" : :
+        [val] "{al}" (val), [port] "N{dx}" (port));
+}
 
-// inline in8(u16 port) u8 {
-//     u1 rv;
-//     asm volatile ( "inb %1, %0" : "=a"(rv) : "Nd"(port) );
-//     return rv;
-// }
+pub inline fn in8(port: u16) u8 {
+    return asm volatile ("inb %[port], %[rv]" :
+        [rv] "={al}" (-> u8) : [port] "N{dx}" (port) );
+}
 
-// inline in16(u16 port) u16 {
-//     u2 rv;
-//     asm volatile ( "inw %1, %0" : "=a"(rv) : "Nd"(port) );
-//     return rv;
-// }
+pub inline fn in16(port: u16) u16 {
+    return asm volatile ("inw %[port], %[rv]" :
+        [rv] "={al}" (-> u16) : [port] "N{dx}" (port) );
+}
 
-// inline in32(u16 port) u32 {
-//     u4 rv;
-//     asm volatile ( "inl %1, %0" : "=a"(rv) : "Nd"(port) );
-//     return rv;
-// }
+pub inline fn in32(port: u16) u32 {
+    return asm volatile ("inl %[port], %[rv]" :
+        [rv] "={al}" (-> u32) : [port] "N{dx}" (port) );
+}
+
+pub inline fn enable_interrupts() void {
+    asm volatile ("sti");
+}
+
+pub inline fn disable_interrupts() void {
+    asm volatile ("cli");
+}
 
 pub fn initialize_io() void {
     // io.console_in = io.new_file() catch |e| null;
