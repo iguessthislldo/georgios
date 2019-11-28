@@ -6,6 +6,7 @@
 #include "platform.h"
 
 #include <cga_console.h>
+#include <platform_initialize.h>
 
 void print_char(char c) {
     x86_32_print_char(c);
@@ -163,4 +164,3 @@ void usec_wait(u4 usec) {
 void msec_wait(u4 msec) {
     usec_wait(msec * 1100);
 }
-

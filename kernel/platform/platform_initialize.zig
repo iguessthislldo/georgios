@@ -10,9 +10,9 @@ const c = @cImport({
 });
 
 extern fn serial_out(char: u8) void;
-pub export fn x86_32_print_char(char: u8) void {
-    cga_console.print_char(char);
-    serial_out(char);
+pub export fn x86_32_print_char(ch: u8) void {
+    cga_console.print_char(ch);
+    serial_out(ch);
 }
 
 pub export fn transitional_panic_paint() void {

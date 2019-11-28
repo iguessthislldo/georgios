@@ -5,6 +5,7 @@
 #include <kernel.h>
 
 #include <cga_console.h>
+#include <platform_initialize.h>
 
 const char * panic_message = 0;
 
