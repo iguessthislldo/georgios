@@ -5,7 +5,7 @@
  */
 
 #ifndef MEMORY_HEADER
-#define MEMROY_HEADER
+#define MEMORY_HEADER
 
 #include <basic_types.h>
 
