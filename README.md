@@ -19,7 +19,6 @@ Building Georgios requires a Unix-like environment with:
 - [Zig](https://ziglang.org/)
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
-- An i686 GNU Toolchain (`i686-elf-gcc`, `i686-elf-as`, etc.)
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
 `make`. This can be written to a CD or USB Flash Drive. If installed, QEMU and
