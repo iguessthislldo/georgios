@@ -9,7 +9,7 @@ pub export fn kernel_main() void {
     c.memory_init();
     io.initialize();
 
-    print_string(c"Done\n");
+    print_string("Done\n");
     var value: u32 = 0;
     while (true) {
         value += 1;

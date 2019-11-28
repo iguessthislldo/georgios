@@ -6,7 +6,7 @@
 
 #include <cga_console.h>
 
-char * panic_message = 0;
+const char * panic_message = 0;
 
 void idt_set(u1 index, u4 offset, u2 selector, u1 flags) {
     idt[index].offset_0_15 = offset & 0xFFFF;

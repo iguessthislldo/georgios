@@ -6,8 +6,8 @@ const k_path = "kernel/";
 const p_path = k_path ++ "platform/";
 
 const c_include_dirs = [_][]const u8 {
-    &k_path,
-    &p_path,
+    k_path,
+    p_path,
 };
 
 const c_sources = [_][]const u8 {

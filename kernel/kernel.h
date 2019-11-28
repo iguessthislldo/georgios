@@ -9,7 +9,7 @@
  */
 
 // Message to print during panic
-char * panic_message;
+const char * panic_message;
 
 // Access to System calls
 void system_call(arg_t call_number, arg_t argument);
