@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+
 const cga_console = @import("cga_console.zig");
 
 pub inline fn enable_interrupts() void {
@@ -7,6 +9,8 @@ pub inline fn enable_interrupts() void {
 const c = @cImport({
     @cInclude("platform.h");
     @cInclude("memory.h");
+    @cInclude("kernel.h");
+    @cInclude("print.h");
 });
 
 extern fn serial_out(char: u8) void;
@@ -32,4 +36,18 @@ pub export fn platform_initialize(mb_info_ptr: usize) void {
     //c.ps2_init();
     c.process_multiboot(mb_info_ptr);
     enable_interrupts();
+}
+
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    c.set_panic_message(&msg[0], msg.len);
+    if (trace) |t| {
+        c.print_format(c"index: {d}\n", t.index);
+        for (t.instruction_addresses) |addr| {
+            c.print_format(c" - {x}\n", addr);
+        }
+    } else {
+        c.print_string(c"No Stack Trace\n");
+    }
+    asm volatile ("pushl $0\n\tint $50");
+    unreachable;
 }

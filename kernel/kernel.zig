@@ -1,5 +1,8 @@
+const builtin = @import("builtin");
+
 const io = @import("io.zig");
 const c = @cImport({
+    @cInclude("kernel.h");
     @cInclude("memory.h");
     @cInclude("print.h");
 });

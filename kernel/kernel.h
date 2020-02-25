@@ -9,7 +9,9 @@
  */
 
 // Message to print during panic
+void set_panic_message(const char * message, unsigned size);
 const char * panic_message;
+u4 panic_message_size;
 
 // Access to System calls
 void system_call(arg_t call_number, arg_t argument);

@@ -8,6 +8,12 @@
 #include <platform_initialize.h>
 
 const char * panic_message = 0;
+u4 panic_message_size = -1;
+
+void set_panic_message(const char * message, unsigned size) {
+    panic_message = message;
+    panic_message_size = size;
+}
 
 void idt_set(u1 index, u4 offset, u2 selector, u1 flags) {
     idt[index].offset_0_15 = offset & 0xFFFF;
@@ -129,7 +135,11 @@ print_string(
 "  Error Code: "); print_uint(ec);
 print_string("\n  Message: ");
     if (panic_message) {
-        print_string(panic_message);
+        if (panic_message_size == -1) {
+            print_string(panic_message);
+        } else {
+            print_nstring(panic_message, panic_message_size);
+        }
     } else {
         if (stack_frame.idt_index < 32) {
             print_string(x86_interrupt_messages[stack_frame.idt_index]);

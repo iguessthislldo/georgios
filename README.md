@@ -66,4 +66,3 @@ Bochs can be run by running `make qemu` or `make bochs` respectively.
 - clib (Maybe glibc?)
 - Tag Based File System
 - Graphics: Would be Nice Eventually
-

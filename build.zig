@@ -57,10 +57,6 @@ const z_sources = [_]ZSource {
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.direct_allocator);
-    defer arena.deinit();
-    const alloc = &arena.allocator;
-
     const target = std.build.Target {
         .Cross = std.build.CrossTarget{
             .arch = .i386,

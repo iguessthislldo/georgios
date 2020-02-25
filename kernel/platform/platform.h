@@ -80,9 +80,11 @@ inline void release_lock(lock_t * lock) {
 
 #define PANIC(message) \
     panic_message = (message); \
+    panic_message_size = -1; \
     asm("pushl $0\n\tint $50");
 #define PANIC_CODE(message, code) \
     panic_message = (message); \
+    panic_message_size = -1; \
     asm("pushl %0\n\tint $50" :: "r" ((code)));
 
 #define enable_interrupts() asm ("sti");
