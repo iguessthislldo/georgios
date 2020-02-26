@@ -7,14 +7,13 @@ const c = @cImport({
     @cInclude("print.h");
 });
 const print_string = c.print_string;
+const platform_panic = @import("platform/panic.zig").panic;
 
 pub export fn kernel_main() void {
     c.memory_init();
     io.initialize();
 
-    print_string("Done\n");
-    var value: u32 = 0;
-    while (true) {
-        value += 1;
-    }
+
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    platform_panic(msg, trace);
 }
