@@ -13,6 +13,8 @@ pub export fn kernel_main() void {
     c.memory_init();
     io.initialize();
 
+    print_string(c"Done\n");
+}
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     platform_panic(msg, trace);
