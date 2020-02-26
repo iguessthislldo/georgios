@@ -6,7 +6,7 @@ ih_irq0:
 .global irq0_return
 irq0_return:
     popal
-    iret 
+    iret
 
 .global ih_irq1
 .type ih_irq1, @function
@@ -16,4 +16,3 @@ ih_irq1:
     call irq1_handle
     popal
     iret
-

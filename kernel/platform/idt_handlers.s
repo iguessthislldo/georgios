@@ -1,4 +1,4 @@
-.section .text 
+.section .text
 ih_common:
     //xchgw %bx, %bx
     // Push General Registers
@@ -9,7 +9,7 @@ ih_common:
 
     popal // Restore Registers
     addl $8, %esp // Error Code
-    iret 
+    iret
 
 .macro IH_NO_CODE value
 .global ih_\value
@@ -55,7 +55,7 @@ IH_NO_CODE 19 // SIMD
 IH_NO_CODE 20 // Virtualiazation
 IH_NO_CODE 21 // Reservered
 IH_NO_CODE 22 // ...
-IH_NO_CODE 23 
+IH_NO_CODE 23
 IH_NO_CODE 24
 IH_NO_CODE 25
 IH_NO_CODE 26
@@ -90,4 +90,3 @@ ih_system_call:
 
     popal // Restore Registers
     iret
-

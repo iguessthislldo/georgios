@@ -13,4 +13,3 @@ void system_call(arg_t call_number, arg_t argument) {
         );
     }
 }
-

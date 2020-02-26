@@ -9,4 +9,3 @@ cpu:             count=1, ips=1000000, reset_on_triple_fault= 0
 magic_break: enabled=1
 display_library: x, options = "gui_debug"
 com1: enabled=1, mode=file, dev=tmp/serial.log
-

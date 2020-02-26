@@ -91,4 +91,3 @@ bool allocate_vmem(mem_t address, mem_t ammount) {
     }
     return true;
 }
-

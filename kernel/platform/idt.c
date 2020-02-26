@@ -197,4 +197,3 @@ print_string("\n  Message: ");
     disable_interrupts();
     halt();
 }
-

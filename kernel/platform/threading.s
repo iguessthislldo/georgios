@@ -93,4 +93,3 @@ usermode:
     pushl %eax // ip
     sti
     iret // jump to ip as ring 3
-
