@@ -16,7 +16,6 @@
 
 typedef enum {
     DO_NOT_USE, // Do not use through allocators
-    BLOCK_ALLOCATOR_USE, // Contigous Buddy System based Allocation (TODO)
     FRAME_STACK_USE // Break up into Frames and Allocate on a stack
 } Memory_Range_Use;
 
@@ -69,37 +68,6 @@ bool deallocate_vmem(void * address, mem_t size);
 
 bool pop_frame(mem_t * address);
 void push_frame(mem_t address);
-
-/*
- * Allocate Phycial Memory Frames at an address, called in peicemeal
- * Used by platform defined virtual memory allocation implementation.
- *
- * left
- *     Pointer to how much memory is left to allocate.
- *     Initialize with ammount desired and run until 0.
- * got
- *     Pointer to how much it got for use in the virutal memory.
- * address
- *     On success is set to the address of the allocated range.
- *
- * Returns true if there was an error
- *
- * Exampe:
- *     mem_t left = KiB(10);
- *     mem_t got;
- *     void * address;
- *     while (left) {
- *         if (allocate_pmem(&left, &got, &address)) continue;
- *         // Set virtual memory using address and got
- *     }
- */
-extern bool allocate_pmem(mem_t * left, mem_t * got, void ** address);
-
-/*
- * Allocate Phycial Memory Frames at an address, called in peicemeal
- * like allocate_pmem,
- */
-extern bool deallocate_pmem(void * address);
 
 /*
  * Stats
