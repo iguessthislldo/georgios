@@ -137,6 +137,7 @@ attempt_lock:
 _start:
     cli
 
+/*
     // Push Multiboot struct pointer on to the future kernel stack
     mov $stack_top, %eax
     sub $_KERNEL_OFFSET, %eax // translate stack into a lower kernel address
@@ -145,6 +146,7 @@ _start:
     // Put the higher address of Multiboot pointer in the first 4 bytes of the
     // stack
     mov %ebx, (%eax)
+*/
 
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET
     //   At 0 and KERNEL_OFFSET
@@ -190,10 +192,7 @@ _start:
 
     // Set Stack Location
     mov $stack_top, %esp
-    sub $4, %esp // Sub 4 bytes for Multiboot pointer
-
-    // Rest of Platform Setup
-    call platform_initialize
+    // sub $4, %esp // Sub 4 bytes for Multiboot pointer
 
     // Start Main Part of Kernel
     call kernel_main

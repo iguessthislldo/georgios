@@ -13,3 +13,7 @@ pub inline fn GiB(x: usize) usize {
 pub inline fn TiB(x: usize) usize {
     return x * (1 << 40);
 }
+
+pub fn isspace(c: u8) bool {
+    return c == ' ' or c == '\n' or c == '\t' or c == '\r';
+}

@@ -1,7 +1,11 @@
-const platform = @import("platform/zplatform.zig");
+const platform = @import("platform/platform.zig");
+
+const FileCount = u8;
+const max_file_count: FileCount = 32;
 
 pub const File = struct {
     valid: bool,
+    index: FileCount,
 
     pub const FileError = error {
         Unsupported,
@@ -127,6 +131,9 @@ pub fn new_file() File.FileError!*File {
 }
 
 pub fn initialize() void {
-    for (files) |*file| file.valid = false;
+    for (files) |*file, i| {
+        file.valid = false;
+        file.index = @intCast(FileCount, i);
+    }
     platform.initialize_io();
 }
