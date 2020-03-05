@@ -69,30 +69,6 @@ kernel_page_table:
 temp_page_table:
 .skip 4096
 
-/*
- * GLOBAL DESCRIPTOR TABLE
- */
-// void gdt_load()
-.section .text
-.global gdt_load
-.type gdt_load, @function
-gdt_load:
-    lgdt gdt_pointer
-    movw (kernel_data_selector), %ax
-    movw %ax, %ds
-    movw %ax, %es
-    movw %ax, %fs
-    movw %ax, %gs
-    movw %ax, %ss
-    pushl (kernel_code_selector)
-    push $.gdt_complete_load
-    ljmp *(%esp)
-  .gdt_complete_load:
-    add $8, %esp
-    movw (tss_selector), %ax
-    ltr %ax
-    ret
-
 // bool attempt_lock(lock_t * lock)
 .section .text
 .global attempt_lock

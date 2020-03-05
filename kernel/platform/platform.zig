@@ -31,5 +31,5 @@ pub fn initialize_io() void {
 pub export fn initialize() void {
     cga_console.initialize();
     io.initialize();
-    segments.kernel_code_selector = 0;
+    segments.initialize();
 }
