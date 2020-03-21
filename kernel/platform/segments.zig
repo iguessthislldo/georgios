@@ -36,7 +36,7 @@ const Entry = packed struct {
     limit_16_19: u8,
     base_24_31: u8,
 };
-var table: [6]Entry = undefined;
+var table: [5]Entry = undefined;
 
 fn set(index: u8, base: u32, limit: u32, access: Access, flags: Flags) u16 {
     table[index].limit_0_15 = @intCast(u16, limit & 0xffff);
@@ -79,9 +79,9 @@ comptime {
         \\     ljmp *(%esp)
         \\   .gdt_complete_load:
         \\     add $8, %esp
-        \\     movw (tss_selector), %ax
-        \\     ltr %ax
         \\     ret
+        // \\     movw (tss_selector), %ax
+        // \\     ltr %ax
     );
 }
 
@@ -94,16 +94,15 @@ pub export var tss_selector: u16 = 0;
 pub fn initialize() void {
     set_null_entry(0);
     const flags = Flags{};
-    const access = Access{};
     kernel_code_selector = set(1, 0, 0xFFFFFFFF,
-        Access{.ring_level = 0, .executable = true}, Flags{});
+        Access{.ring_level = 0, .executable = true}, flags);
     kernel_data_selector = set(2, 0, 0xFFFFFFFF,
-        Access{.ring_level = 0}, Flags{});
+        Access{.ring_level = 0}, flags);
     user_code_selector = set(3, 0, 0xFFFFFFFF,
-        Access{.ring_level = 3, .executable = true}, Flags{});
+        Access{.ring_level = 3, .executable = true}, flags);
     user_data_selector = set(4, 0, 0xFFFFFFFF,
-        Access{.ring_level = 3}, Flags{});
-    set_null_entry(5);
+        Access{.ring_level = 3}, flags);
+    // set_null_entry(5);
 
     const pointer = Pointer {
         .limit = @intCast(u16, @sizeOf(@typeOf(table)) - 1),
