@@ -2,13 +2,8 @@ const io = @import("../io.zig");
 
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
-
-pub export fn transitional_panic_paint() void {
-    const Color = cga_console.Color;
-    cga_console.new_page();
-    cga_console.set_colors(Color.Black, Color.Red);
-    cga_console.fill_screen(' ');
-}
+const interrupts = @import("interrupts.zig");
+pub const panic = @import("panic.zig").panic;
 
 fn console_out_write(file: *io.File,
         from: [*] const u8, size: usize) io.File.FileError!usize {
@@ -32,4 +27,5 @@ pub export fn initialize() void {
     cga_console.initialize();
     io.initialize();
     segments.initialize();
+    interrupts.initialize();
 }

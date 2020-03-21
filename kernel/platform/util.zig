@@ -2,7 +2,7 @@ extern var _KERNEL_OFFSET: u32;
 extern var _KERNEL_LOW_END: u32;
 extern var _KERNEL_LOW_START: u32;
 
-pub fn offset(address: usize) usize {
+pub fn kernel_offset(address: u32) u32{
     return @ptrToInt(&_KERNEL_OFFSET) + address;
 }
 
@@ -42,4 +42,10 @@ pub fn enable_interrupts() void {
 
 pub fn disable_interrupts() void {
     asm volatile ("cli");
+}
+
+pub fn halt() noreturn {
+    disable_interrupts();
+    asm volatile ("hlt");
+    unreachable;
 }

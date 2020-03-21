@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const util = @import("util.zig");
 const out8 = util.out8;
 const in8 = util.in8;
-const offset = util.offset;
+const kernel_offset = util.kernel_offset;
 
 pub const Color = enum {
     Black = 0,
@@ -48,7 +48,7 @@ var buffer: [*]u16 = undefined;
 
 pub fn initialize() void {
     // Screen
-    buffer = @intToPtr([*]u16, offset(0xB8000));
+    buffer = @intToPtr([*]u16, kernel_offset(0xB8000));
     fill_screen(' ');
     cursor(0, 0);
 

@@ -9,7 +9,7 @@ const s_sources = [_][]const u8 {
     p_path ++ "boot.s",
     // p_path ++ "threading.s",
     // p_path ++ "irq_handlers.s",
-    // p_path ++ "idt_handlers.s",
+    p_path ++ "idt_handlers.s",
 };
 
 const boot_path = t_path ++ "iso/boot/";

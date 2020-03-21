@@ -140,7 +140,11 @@ pub fn any(value: var) void {
         builtin.TypeId.Pointer => |ptr_type| {
             const t = ptr_type.child;
             if (t == u8) {
-                cstring(value);
+                if (ptr_type.size == builtin.TypeInfo.Pointer.Size.Slice) {
+                    string(value);
+                } else {
+                    cstring(value);
+                }
             } else {
                 @compileError("Can't Print Pointer to " ++ @typeName(t));
             }

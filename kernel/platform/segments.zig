@@ -1,4 +1,8 @@
 const builtin = @import("builtin");
+const print = @import("../print.zig");
+const putil = @import("util.zig");
+const kernel_offset = putil.kernel_offset;
+const zero_init = @import("../util.zig").zero_init;
 
 const Access = packed struct {
     accessed: bool = false,
@@ -36,9 +40,50 @@ const Entry = packed struct {
     limit_16_19: u8,
     base_24_31: u8,
 };
-var table: [5]Entry = undefined;
+var table: [6]Entry = undefined;
 
-fn set(index: u8, base: u32, limit: u32, access: Access, flags: Flags) u16 {
+pub var names: [table.len][]const u8 = undefined;
+
+pub fn get_name(index: u32) []const u8 {
+    return if (index < names.len) names[index] else
+        "Selector index is out of range";
+}
+
+fn set(name: []const u8, index: u8, base: u32, limit: u32,
+        access: Access, flags: Flags) u16 {
+    names[index] = name;
+    print.format("GDT[{}]: \"{}\" ", index, name);
+    if (access.valid) {
+        print.format("starts at {:x}, size is {:x} {}, {} Ring {} ",
+            base, limit,
+            if (flags.granularity) "b" else "pages",
+            if (flags.pm) "32b" else "16b",
+            access.ring_level);
+        if (access.no_system_segment) {
+            if (access.executable) {
+                print.format(
+                    "Code Segment\n" ++
+                    " - Can{} be read by lower rings.\n" ++
+                    " - Can{} be executed by lower rings\n",
+                    if (access.rw) "" else " NOT",
+                    if (access.dc) "" else " NOT");
+            } else {
+                print.format(
+                    "Data Segment\n" ++
+                    " - Can{} be written to by lower rings.\n" ++
+                    " - Grows {}.\n",
+                    if (access.rw) "" else " NOT",
+                    if (access.dc) "down" else "up");
+            }
+        } else {
+            print.string("System Segment\n");
+        }
+        if (access.accessed) {
+            print.string(" - Accessed\n");
+        }
+    } else {
+        print.char('\n');
+    }
     table[index].limit_0_15 = @intCast(u16, limit & 0xffff);
     table[index].base_0_15 = @intCast(u16, base & 0xffff);
     table[index].base_16_23 = @intCast(u8, (base >> 16) & 0xff);
@@ -51,8 +96,8 @@ fn set(index: u8, base: u32, limit: u32, access: Access, flags: Flags) u16 {
 }
 
 fn set_null_entry(index: u8) void {
-    table[index] =
-        @bitCast(Entry, @intCast(@IntType(false, @sizeOf(Entry) * 8), 0));
+    _ = set("Null", index, 0, 0, zero_init(Access), zero_init(Flags));
+    names[index] = "Null";
 }
 
 const Pointer = packed struct {
@@ -94,15 +139,15 @@ pub export var tss_selector: u16 = 0;
 pub fn initialize() void {
     set_null_entry(0);
     const flags = Flags{};
-    kernel_code_selector = set(1, 0, 0xFFFFFFFF,
+    kernel_code_selector = set("Kernel Code", 1, 0, 0xFFFFFFFF,
         Access{.ring_level = 0, .executable = true}, flags);
-    kernel_data_selector = set(2, 0, 0xFFFFFFFF,
+    kernel_data_selector = set("Kernel Data", 2, 0, 0xFFFFFFFF,
         Access{.ring_level = 0}, flags);
-    user_code_selector = set(3, 0, 0xFFFFFFFF,
+    user_code_selector = set("User Code", 3, 0, kernel_offset(0) - 1,
         Access{.ring_level = 3, .executable = true}, flags);
-    user_data_selector = set(4, 0, 0xFFFFFFFF,
+    user_data_selector = set("User Data", 4, 0, kernel_offset(0) - 1,
         Access{.ring_level = 3}, flags);
-    // set_null_entry(5);
+    set_null_entry(5);
 
     const pointer = Pointer {
         .limit = @intCast(u16, @sizeOf(@typeOf(table)) - 1),

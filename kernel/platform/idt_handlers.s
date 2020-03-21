@@ -1,11 +1,13 @@
 .section .text
-ih_common:
+panic_common:
     //xchgw %bx, %bx
     // Push General Registers
     pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
 
-    // The stack should now be equivalent to x86_exception_t
-    call x86_interrupt_handler
+    // The stack should now be equivalent to PanicStack
+    mov %esp, panic_stack
+
+    call show_panic_message
 
     popal // Restore Registers
     addl $8, %esp // Error Code
@@ -19,7 +21,7 @@ ih_\value:
     cli
     pushl $0
     pushl $\value
-    jmp ih_common
+    jmp panic_common
 .endm
 
 .macro IH_CODE value
@@ -29,7 +31,7 @@ ih_\value:
     //xchgw %bx, %bx
     cli
     pushl $\value
-    jmp ih_common
+    jmp panic_common
 .endm
 
 IH_NO_CODE 0  // Divide By Zero
@@ -72,7 +74,7 @@ ih_panic:
     xchgw %bx, %bx
     pushl 12(%esp)
     pushl $50
-    jmp ih_common
+    jmp panic_common
 
 .global ih_system_call
 // %eax is the call number
@@ -84,7 +86,7 @@ ih_system_call:
 
     pushl %ebx // argument
     pushl %eax // call_number
-    call system_call
+    /* call system_call */
     popl %ecx
     popl %ecx
 
