@@ -16,6 +16,10 @@ pub inline fn TiB(x: usize) usize {
     return x * (1 << 40);
 }
 
+pub inline fn padding(value: usize, alignment: usize) usize {
+    return (value + alignment - 1) & -%(alignment);
+}
+
 pub fn isspace(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\t' or c == '\r';
 }
