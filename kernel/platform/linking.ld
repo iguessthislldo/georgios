@@ -8,31 +8,30 @@ _KERNEL_SIZE = _KERNEL_LOW_END - _KERNEL_LOW_START;
 SECTIONS {
     . = _KERNEL_HIGH_START;
 
-	.text
-        ALIGN(4K) : AT(ADDR(.text) - _KERNEL_OFFSET)
-	{
-		*(.multiboot)
-		*(.text)
-	}
+    .text ALIGN(4K) : AT(ADDR(.text) - _KERNEL_OFFSET)
+    {
+        *(.multiboot)
+        *(.text)
+    }
 
-	/* Read-only data. */
-	.rodata ALIGN(4K) : AT(ADDR(.rodata) - _KERNEL_OFFSET)
-	{
-		*(.rodata)
-	}
+    /* Read-only data. */
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - _KERNEL_OFFSET)
+    {
+        *(.rodata)
+    }
 
-	/* Read-write data (initialized) */
-	.data ALIGN(4K) : AT(ADDR(.data) - _KERNEL_OFFSET)
-	{
-		*(.data)
-	}
+    /* Read-write data (initialized) */
+    .data ALIGN(4K) : AT(ADDR(.data) - _KERNEL_OFFSET)
+    {
+        *(.data)
+    }
 
-	/* Read-write data (uninitialized) and stack */
-	.bss ALIGN(4K) : AT(ADDR(.bss) - _KERNEL_OFFSET)
-	{
-		*(COMMON)
-		*(.bss)
-	}
+    /* Read-write data (uninitialized) and stack */
+    .bss ALIGN(4K) : AT(ADDR(.bss) - _KERNEL_OFFSET)
+    {
+        *(COMMON)
+        *(.bss)
+    }
 
     /*
      * End of Kernel
