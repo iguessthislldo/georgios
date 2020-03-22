@@ -11,6 +11,7 @@
 .set MULTIBOOT_HEADER_TAG_INFORMATION_REQUEST, 1
 .set MULTIBOOT_TAG_TYPE_VBE, 7
 .set MULTIBOOT_HEADER_TAG_END, 0
+.set MULTIBOOT_CHECK, 0x36d76289
 
 .section .multiboot
 .align 8
@@ -34,10 +35,15 @@ multiboot_info_request_end:
 .long 8
 multiboot_header_end:
 
+.section .data
+.global multiboot_info_pointer
+.align 4
+multiboot_info_pointer:
+.long 0
+
 /*
  * STACK
  */
-
 .section .bss
 .align 16
 stack_bottom:
@@ -56,6 +62,7 @@ page_directory:
 /*
  * KERNEL PAGE TABLE
  */
+.section .bss
 .global kernel_page_table
 .align 4096
 kernel_page_table:
@@ -64,6 +71,7 @@ kernel_page_table:
 /*
  * TEMP PAGE TABLE
  */
+.section .bss
 .global temp_page_table
 .align 4096
 temp_page_table:
@@ -113,16 +121,20 @@ attempt_lock:
 _start:
     cli
 
-/*
-    // Push Multiboot struct pointer on to the future kernel stack
-    mov $stack_top, %eax
-    sub $_KERNEL_OFFSET, %eax // translate stack into a lower kernel address
-    sub $4, %eax
-    add $_KERNEL_OFFSET, %ebx // translate pointer to a higher kernel address
-    // Put the higher address of Multiboot pointer in the first 4 bytes of the
-    // stack
+    // Save location of Multiboot2 Info
+    //   Check if Multiboot2 was used
+    //   If we don't have it, this is an error, but we can't report it yet.
+    mov $MULTIBOOT_CHECK, %ecx
+    cmp %eax, %ecx
+    jne failed_multiboot_check
+    //   Translate pointer pointer into a lower kernel address
+    mov $multiboot_info_pointer, %eax
+    sub $_KERNEL_OFFSET, %eax
+    //   Translate pointer to a higher kernel address
+    add $_KERNEL_OFFSET, %ebx
+    //   Store pointer in pointer pointer
     mov %ebx, (%eax)
-*/
+  failed_multiboot_check:
 
     // Set up Double 1:1 paging for the first 4 MiB offset by KERNEL_OFFSET
     //   At 0 and KERNEL_OFFSET
@@ -168,7 +180,6 @@ _start:
 
     // Set Stack Location
     mov $stack_top, %esp
-    // sub $4, %esp // Sub 4 bytes for Multiboot pointer
 
     // Start Main Part of Kernel
     call kernel_main
