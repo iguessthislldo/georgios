@@ -1,6 +1,5 @@
 .section .text
 panic_common:
-    //xchgw %bx, %bx
     // Push General Registers
     pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
 
@@ -17,7 +16,6 @@ panic_common:
 .global ih_\value
 .type ih_\value, @function
 ih_\value:
-    //xchgw %bx, %bx
     cli
     pushl $0
     pushl $\value
@@ -28,7 +26,6 @@ ih_\value:
 .global ih_\value
 .type ih_\value, @function
 ih_\value:
-    //xchgw %bx, %bx
     cli
     pushl $\value
     jmp panic_common
@@ -71,7 +68,6 @@ IH_NO_CODE 31 // Reserved
 .type ih_panic, @function
 ih_panic:
     cli
-    xchgw %bx, %bx
     pushl 12(%esp)
     pushl $50
     jmp panic_common
