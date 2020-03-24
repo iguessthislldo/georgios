@@ -1,19 +1,16 @@
 const platform = @import("platform/platform.zig");
 
-const FileCount = u8;
-const max_file_count: FileCount = 32;
+pub const FileError = error {
+    Unsupported,
+    EndOfFile,
+    PermissionDenied,
+    InternalError,
+    MaxFilesReached,
+};
 
 pub const File = struct {
     valid: bool,
-    index: FileCount,
-
-    pub const FileError = error {
-        Unsupported,
-        EndOfFile,
-        PermissionDenied,
-        InternalError,
-        MaxFilesReached,
-    };
+    index: usize,
 
     /// File Type Identifier Type
     pub const FileType = enum {
@@ -120,7 +117,7 @@ var files: [32]File = undefined;
 pub var console_in: ?*File = null;
 pub var console_out: ?*File = null;
 
-pub fn new_file() File.FileError!*File {
+pub fn new_file() FileError!*File {
     for (files) |*file| {
         if (!file.valid) {
             file.valid = true;
@@ -133,7 +130,7 @@ pub fn new_file() File.FileError!*File {
 pub fn initialize() void {
     for (files) |*file, i| {
         file.valid = false;
-        file.index = @intCast(FileCount, i);
+        file.index = i;
     }
     platform.initialize_io();
 }

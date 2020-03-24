@@ -8,7 +8,7 @@ const interrupts = @import("interrupts.zig");
 const multiboot = @import("multiboot.zig");
 
 fn console_out_write(file: *io.File,
-        from: [*] const u8, size: usize) io.File.FileError!usize {
+        from: [*] const u8, size: usize) io.FileError!usize {
     var i: usize = 0;
     while (i < size) {
         cga_console.print_char(from[i]);
