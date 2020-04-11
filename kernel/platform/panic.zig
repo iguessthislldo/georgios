@@ -9,15 +9,6 @@ const print = @import("../print.zig");
 const kernel = @import("../kernel.zig");
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
-    kernel.panic_message = msg;
-    if (trace) |t| {
-        print.format("index: {}\n", t.index);
-        for (t.instruction_addresses) |addr| {
-            print.format(" - {:x}\n", addr);
-        }
-    } else {
-        print.string("No Stack Trace\n");
-    }
     asm volatile ("pushl $0\n\tint $50");
     unreachable;
 }

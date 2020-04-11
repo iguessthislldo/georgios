@@ -1,11 +1,3 @@
-extern var _KERNEL_OFFSET: u32;
-extern var _KERNEL_LOW_END: u32;
-extern var _KERNEL_LOW_START: u32;
-
-pub fn kernel_offset(address: u32) u32{
-    return @ptrToInt(&_KERNEL_OFFSET) + address;
-}
-
 pub fn out8(port: u16, val: u8) void {
     asm volatile ("outb %[val], %[port]" : :
         [val] "{al}" (val), [port] "N{dx}" (port));

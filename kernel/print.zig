@@ -2,82 +2,95 @@ const builtin = @import("builtin");
 
 const isspace = @import("util.zig").isspace;
 const fprint = @import("fprint.zig");
+const io = @import("io.zig");
+
+var console_file: ?*io.File = null;
+
+pub fn initialize(file: ?*io.File) void {
+    console_file = file;
+}
 
 pub fn char(ch: u8) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.char(o, ch) catch unreachable;
     }
 }
 
 pub fn nstring(str: [*]const u8, size: usize) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.nstring(o, str, size) catch unreachable;
     }
 }
 
 pub fn string(str: []const u8) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.string(o, str) catch unreachable;
     }
 }
 
 pub fn cstring(str: [*]const u8) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.cstring(o, str) catch unreachable;
     }
 }
 
 pub fn stripped_string(str: [*]const u8, size: usize) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.stripped_string(o, str) catch unreachable;
     }
 }
 
 pub fn uint(value: usize) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.uint(o, value) catch unreachable;
     }
 }
 
 pub fn int(value: isize) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.int(o, value) catch unreachable;
     }
 }
 
 pub fn int_sign(value: usize, show_positive: bool) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.int_sign(o, value) catch unreachable;
     }
 }
 
 pub fn hex(value: usize) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.hex(o, value) catch unreachable;
     }
 }
 
 pub fn byte(value: u8) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.byte(o, value) catch unreachable;
     }
 }
 
 pub fn boolean(value: bool) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.boolean(o, value) catch unreachable;
     }
 }
 
 pub fn any(value: var) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.any(o, value) catch unreachable;
     }
 }
 
 pub fn format(comptime fmtstr: []const u8, args: ...) void {
-    if (@import("io.zig").console_out) |o| {
+    if (console_file) |o| {
         fprint.format(o, fmtstr, args) catch unreachable;
+    }
+}
+
+pub fn data(ptr: usize, size: usize) void {
+    if (console_file) |o| {
+        fprint.data(o, ptr, size) catch unreachable;
     }
 }
 

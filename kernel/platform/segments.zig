@@ -1,8 +1,11 @@
 const builtin = @import("builtin");
+
 const print = @import("../print.zig");
-const putil = @import("util.zig");
-const kernel_offset = putil.kernel_offset;
-const zero_init = @import("../util.zig").zero_init;
+const kutil = @import("../util.zig");
+const zero_init = kutil.zero_init;
+
+const platform = @import("platform.zig");
+const kernel_offset = platform.kernel_offset;
 
 const Access = packed struct {
     accessed: bool = false,

@@ -1,5 +1,9 @@
 const io = @import("../io.zig");
+const print = @import("../print.zig");
+const Kernel = @import("../kernel.zig").Kernel;
+const kutil = @import("../util.zig");
 
+pub const frame_size = kutil.KiB(4);
 pub const panic = @import("panic.zig").panic;
 
 const cga_console = @import("cga_console.zig");
@@ -7,7 +11,37 @@ const segments = @import("segments.zig");
 const interrupts = @import("interrupts.zig");
 const multiboot = @import("multiboot.zig");
 
-fn console_out_write(file: *io.File,
+extern var _KERNEL_OFFSET: u32;
+pub fn kernel_offset(address: u32) u32{
+    return @ptrToInt(&_KERNEL_OFFSET) + address;
+}
+
+extern var _KERNEL_LOW_START: u32;
+pub fn kernel_real_start() usize {
+    return @ptrToInt(&_KERNEL_LOW_START);
+}
+
+extern var _KERNEL_LOW_END: u32;
+pub fn kernel_real_end() usize {
+    return @ptrToInt(&_KERNEL_LOW_END);
+}
+
+extern var _KERNEL_HIGH_START: u32;
+pub fn kernel_virtual_start() usize {
+    return @ptrToInt(&_KERNEL_HIGH_START);
+}
+
+extern var _KERNEL_HIGH_END: u32;
+pub fn kernel_virtual_end() usize {
+    return @ptrToInt(&_KERNEL_HIGH_END);
+}
+
+extern var _KERNEL_SIZE: u32;
+pub fn kernel_size() usize {
+    return @ptrToInt(&_KERNEL_SIZE);
+}
+
+fn console_write(file: *io.File,
         from: [*] const u8, size: usize) io.FileError!usize {
     var i: usize = 0;
     while (i < size) {
@@ -17,18 +51,22 @@ fn console_out_write(file: *io.File,
     return size;
 }
 
-pub fn initialize_io() void {
-    io.console_in = io.new_file() catch |e| null;
-    io.console_out = io.new_file() catch |e| null;
-    if (io.console_out) |console_out| {
-        console_out.write_impl = console_out_write;
-    }
-}
-
-pub export fn initialize() void {
+pub fn initialize(kernel: *Kernel) !void {
     cga_console.initialize();
-    io.initialize();
+    if (kernel.console) |f| {
+        f.write_impl = console_write;
+    }
     segments.initialize();
     interrupts.initialize();
-    multiboot.initialize();
+    try multiboot.initialize(kernel);
+    print.format(
+        \\Start of kernel: {:x}
+        \\End of kernel: {:x}
+        \\Size of kernel is {} B ({} KiB)
+        \\
+        ,
+        kernel_virtual_start(),
+        kernel_virtual_end(),
+        kernel_size(),
+        kernel_size() >> 10);
 }

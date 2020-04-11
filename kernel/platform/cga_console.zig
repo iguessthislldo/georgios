@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const util = @import("util.zig");
 const out8 = util.out8;
 const in8 = util.in8;
-const kernel_offset = util.kernel_offset;
+const kernel_offset = @import("platform.zig").kernel_offset;
 
 pub const Color = enum {
     Black = 0,
