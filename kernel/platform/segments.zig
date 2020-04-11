@@ -61,7 +61,7 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
             base, limit,
             if (flags.granularity) "b" else "pages",
             if (flags.pm) "32b" else "16b",
-            access.ring_level);
+            @intCast(usize, access.ring_level));
         if (access.no_system_segment) {
             if (access.executable) {
                 print.format(
