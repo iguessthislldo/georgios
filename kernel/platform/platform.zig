@@ -6,6 +6,7 @@ const kutil = @import("../util.zig");
 pub const frame_size = kutil.KiB(4);
 pub const panic = @import("panic.zig").panic;
 
+const serial_log = @import("serial_log.zig");
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 const interrupts = @import("interrupts.zig");
@@ -45,6 +46,7 @@ fn console_write(file: *io.File,
         from: [*] const u8, size: usize) io.FileError!usize {
     var i: usize = 0;
     while (i < size) {
+        serial_log.print_char(from[i]);
         cga_console.print_char(from[i]);
         i += 1;
     }
@@ -52,6 +54,7 @@ fn console_write(file: *io.File,
 }
 
 pub fn initialize(kernel: *Kernel) !void {
+    serial_log.initialize();
     cga_console.initialize();
     if (kernel.console) |f| {
         f.write_impl = console_write;
