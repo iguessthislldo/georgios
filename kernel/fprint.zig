@@ -266,7 +266,7 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
         ((group_byte_count * byte_sep.len) - 1); // byte_sep Between Bytes
     const group_count = 2;
     const buffer_byte_count = group_byte_count * group_count;
-    const group_sep = " ";
+    const group_sep = "  ";
     const buffer_size =
         group_size * group_count + // Groups
         (group_count - 1) * group_sep.len + // group_sep Between Groups
