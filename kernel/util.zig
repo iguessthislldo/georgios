@@ -68,3 +68,29 @@ pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType
     }
     return null;
 }
+
+test "int_to_enum" {
+    const std = @import("std");
+    const assert = std.debug.assert;
+
+    const Abc = enum(u8) {
+        A = 0,
+        B = 1,
+        C = 12,
+    };
+
+    // Check with Literals
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0)).? == Abc.A);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 1)).? == Abc.B);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 2)) == null);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 11)) == null);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 12)).? == Abc.C);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 13)) == null);
+    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0xFF)) == null);
+
+    // Check with Variable
+    var x: @TagType(Abc) = 0;
+    assert(int_to_enum(Abc, x).? == Abc.A);
+    x = 0xFF;
+    assert(int_to_enum(Abc, x) == null);
+}

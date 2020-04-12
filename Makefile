@@ -17,6 +17,10 @@ all: $(ISO) hd.img
 build_georgios:
 	zig build --cache-dir tmp/zig-cache
 
+.PHONY: test
+test:
+	zig test --cache-dir tmp/zig-cache kernel/util.zig
+
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)
 	cp $< $(GRUB_CFG)
