@@ -17,6 +17,7 @@ I'm also planning on developing called [PiasaFS](docs/piasafs.md).
 
 Building Georgios requires a Unix-like environment with:
 - [Zig](https://ziglang.org/)
+  - Currently using 0.5.0
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 
@@ -36,33 +37,3 @@ Bochs can be run by running `make qemu` or `make bochs` respectively.
 - [xv6](https://github.com/mit-pdos/xv6-public)
 - [The Design and Implementation of the 4.4 BSD Operating System](https://www.amazon.com/Implementation-Operating-paperback-Addison-wesley-Systems/dp/0132317923)
 - [FYSOS: Media Storage Devices](https://www.amazon.com/dp/1514111888/)
-
-## Tasks
-
-### Currently Done
-
-- Getting to a kernel written in C from GRUB.
-- Basic Interrupts (like divide by zero) can be handled.
-- Printing to the screen in Real Mode graphics including a printf-like
-  function.
-- [Higher Half Kernel](http://wiki.osdev.org/Higher\_Half\_Kernel)
-- Primitive Kernel Space Context Switching
-- A "cmpxchg" Lock
-- Better Exception Screen
-- Use GRUB2/Multiboot2 (Able to write ISO to USB Flash Drive)
-
-### In Progress/Fix
-
-- Paging Framework
-- Kernel and Userland Processes with Context Switching and System Calls
-- Keyboard/PS/2 Driver (IRQ1 Works, but Init. acts weird, On Hold)
-- Disk Driver
-
-### Future
-
-- malloc/free for kernel
-- Simple File System: Needs Disk Driver and System Calls (Ideally)
-- ELF Loader: Needs Simple File System, and Userland
-- clib (Maybe glibc?)
-- Tag Based File System
-- Graphics: Would be Nice Eventually
