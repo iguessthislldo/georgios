@@ -9,7 +9,7 @@ GRUB_LOCATION:=$(GRUB_PREFIX)/lib/grub/i386-pc
 GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
 GRUB_MODULES:=vbe font gfxterm echo reboot usb_keyboard multiboot2 fat ls cat ext2 iso9660 reiserfs xfs part_sun part_gpt part_msdos video_bochs video_cirrus all_video
 
-DEBUGGER:=i686-elf-gdb
+DEBUGGER:=gdb
 
 all: $(ISO) hd.img
 
