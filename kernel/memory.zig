@@ -25,6 +25,13 @@ pub const RealMemoryMap = struct {
     /// and a frame group.
     shared_range_size: usize = 0,
 
+    fn invalid(self: *RealMemoryMap) bool {
+        return
+            self.frame_group_count == 0 or
+            self.total_frame_count == 0 or
+            self.shared_range_size == 0;
+    }
+
     /// Directly add a frame group.
     fn add_frame_group_impl(self: *RealMemoryMap,
             start: usize, frame_count: usize) void {
@@ -98,9 +105,42 @@ pub const RealMemoryMap = struct {
 pub const Memory = struct {
     /// To be called by the platform after it can give "map".
     pub fn initialize(self: *Memory, map: *RealMemoryMap) void {
-        map.finalize();
-        for (map.frame_groups[0..map.frame_group_count]) |*i| {
-            print.format("{:x} {}\n", i.start, i.frame_count);
+        print.format(
+            \\ - Initializing Memory System
+            \\   - Start of kernel: {:x}
+            \\   - End of kernel: {:x}
+            \\   - Size of kernel is {} B ({} KiB)
+            \\   - Frame Size: {} B ({} KiB)
+            \\
+            ,
+            platform.kernel_virtual_start(),
+            platform.kernel_virtual_end(),
+            platform.kernel_size(),
+            platform.kernel_size() >> 10,
+            platform.frame_size,
+            platform.frame_size >> 10);
+
+        // Process RealMemoryMap
+        if (map.invalid()) {
+            @panic("ReadMemoryMap is invalid!");
         }
+        map.finalize();
+        print.string("   - Frame Groups:\n");
+        for (map.frame_groups[0..map.frame_group_count]) |*i| {
+            print.format("     - {} Frames starting at {:x} \n",
+                i.frame_count, i.start);
+        }
+        const total_memory: usize = map.total_frame_count * platform.frame_size;
+        print.format(
+            "   - Total Allocatable Memory: {} ({} KiB/{} MiB/{} GiB)\n",
+            total_memory,
+            total_memory >> 10,
+            total_memory >> 20,
+            total_memory >> 30);
+
+        // TODO: Initialize Frame Stack
     }
+
+    // TODO: Real Memory Management
+    // TODO: Virtual Memory Management
 };

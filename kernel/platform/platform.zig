@@ -61,15 +61,9 @@ pub fn initialize(kernel: *Kernel) !void {
     }
     segments.initialize();
     interrupts.initialize();
-    try multiboot.initialize(kernel);
-    print.format(
-        \\Start of kernel: {:x}
-        \\End of kernel: {:x}
-        \\Size of kernel is {} B ({} KiB)
-        \\
-        ,
-        kernel_virtual_start(),
-        kernel_virtual_end(),
-        kernel_size(),
-        kernel_size() >> 10);
+    try multiboot.process_tag(kernel, .End); // List Multiboot Tags
+
+    // Setup Memory
+    try multiboot.process_tag(kernel, .Mmap);
+    // TODO: defer freeing memory containing multiboot structure
 }

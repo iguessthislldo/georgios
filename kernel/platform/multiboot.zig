@@ -9,6 +9,7 @@ extern var multiboot_info_pointer: c_ulong;
 
 const Error = error {
     NullMultibootInfoPointer,
+    TagNotFound,
 };
 
 const TagKind = enum (u32) {
@@ -67,42 +68,61 @@ const TagKind = enum (u32) {
     }
 };
 
-pub fn initialize(kernel: *Kernel) Error!void {
+fn process_mmap(kernel: *Kernel, tag_start: usize, tag_size: usize) void {
+    var map = RealMemoryMap{};
+    const entry_size = @intToPtr(*u32, tag_start + 8).*;
+    const entries_end = tag_start + tag_size;
+    var entry_ptr = tag_start + 16;
+    while (entry_ptr < entries_end) : (entry_ptr += entry_size) {
+    if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
+        map.add_range(
+            @intCast(usize, @intToPtr(*u64, entry_ptr).*),
+            @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
+    }
+    }
+    kernel.memory.initialize(&map);
+    // TODO: Save Multiboot Structure For Now
+}
+
+/// Process part of the Multiboot information given by `find`. If `find` wasn't
+/// found, returns `Error.TagNotFound`. If `find` is `End`, then just list
+/// what's in the Multiboot header.
+pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
     var i = @intCast(usize, multiboot_info_pointer);
     if (i == 0) {
         return Error.NullMultibootInfoPointer;
     }
-    print.string("Multiboot Tags:\n");
+    const list = find == .End;
+    if (list) {
+        print.string(" - Multiboot Tags:\n");
+    }
     var running = true;
     var tag_count: usize = 0;
+    var tag_found = false;
     i += 8; // Move to first tag
     while (running) {
         const kind_raw = @intToPtr(*u32, i).*;
         const size = @intToPtr(*u32, i + 4).*;
         const kind_maybe = TagKind.from_u32(kind_raw);
-        print.format("   - {}\n",
-            if (kind_maybe) |kind|
-                kind.to_string()
-            else
-                "Unkown");
+        if (list) {
+            print.format("   - {}\n",
+                if (kind_maybe) |kind|
+                    kind.to_string()
+                else
+                    "Unkown");
+        }
         if (kind_maybe) |kind| {
+            if (kind == find) {
+                tag_found = true;
+            }
             if (kind == .End) {
                 running = false;
             }
             switch (kind) {
                 .Mmap => {
-                    var map = RealMemoryMap{};
-                    const entry_size = @intToPtr(*u32, i + 8).*;
-                    const entries_end = i + size;
-                    var entry_ptr = i + 16;
-                    while (entry_ptr < entries_end) : (entry_ptr += entry_size) {
-                        if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
-                            map.add_range(
-                                @intCast(usize, @intToPtr(*u64, entry_ptr).*),
-                                @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
-                        }
+                    if (find == .Mmap) {
+                        process_mmap(kernel, i, size);
                     }
-                    kernel.memory.initialize(&map);
                 },
                 else => {
                     // Ignored
@@ -113,5 +133,10 @@ pub fn initialize(kernel: *Kernel) Error!void {
         i += util.align_up(size, 8);
         tag_count += 1;
     }
-    print.format("That was {} tags\n", tag_count);
+    if (list) {
+        print.format("   - That was {} tags\n", tag_count);
+    }
+    if (!tag_found) {
+        return Error.TagNotFound;
+    }
 }
