@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 
 const platform = @import("platform/platform.zig");
 const print = @import("print.zig");
+const Memory = @import("memory.zig").Memory;
 const io = @import("io.zig");
 
 pub var panic_message: []const u8 = "";
@@ -21,6 +22,7 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
 }
 
 pub const Kernel = struct {
+    memory: Memory = Memory{},
     file_io: io.Files = io.Files{},
     console: ?*io.File = null,
 

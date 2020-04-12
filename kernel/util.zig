@@ -16,8 +16,12 @@ pub inline fn TiB(x: usize) usize {
     return x * (1 << 40);
 }
 
-pub inline fn alignment(value: usize, align_by: usize) usize {
-    return (value + align_by - 1) & -%(align_by);
+pub inline fn align_down(value: usize, align_by: usize) usize {
+    return value & -%(align_by);
+}
+
+pub inline fn align_up(value: usize, align_by: usize) usize {
+    return align_down(value + align_by - 1, align_by);
 }
 
 pub inline fn padding(value: usize, align_by: usize) usize {
@@ -51,4 +55,16 @@ pub fn zero_init(comptime Type: type) Type {
         else => CastThrough = @IntType(false, @sizeOf(Type) * 8),
     }
     return @bitCast(Type, @intCast(CastThrough, 0));
+}
+
+/// @intToEnum can't be used to test if a value is a valid Enum, so this wraps
+/// it and gives that functionality.
+pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType {
+    const type_info = @typeInfo(EnumType).Enum;
+    inline for (type_info.fields) |*field| {
+        if (@intCast(type_info.tag_type, field.value) == value) {
+            return @intToEnum(EnumType, value);
+        }
+    }
+    return null;
 }

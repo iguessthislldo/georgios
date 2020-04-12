@@ -2,12 +2,69 @@ const builtin = @import("builtin");
 
 const print = @import("../print.zig");
 const Kernel = @import("../kernel.zig").Kernel;
+const RealMemoryMap = @import("../memory.zig").RealMemoryMap;
 const util = @import("../util.zig");
 
 extern var multiboot_info_pointer: c_ulong;
 
 const Error = error {
-    NullMultibootInfoPointer
+    NullMultibootInfoPointer,
+};
+
+const TagKind = enum (u32) {
+    End = 0,
+    CmdLine = 1,
+    BootLoaderName = 2,
+    Module = 3,
+    BasicMemInfo = 4,
+    BootDev = 5,
+    Mmap = 6,
+    Vbe = 7,
+    Framebuffer = 8,
+    ElfSections = 9,
+    Apm = 10,
+    Efi32 = 11,
+    Efi64 = 12,
+    Smbios = 13,
+    AcpiOld = 14,
+    AcpiNew = 15,
+    Network = 16,
+    EfiMmap = 17,
+    EfiBs = 18,
+    Efi32Ih = 19,
+    Efi64Ih = 20,
+    LoadBaseAddr = 21,
+
+    pub fn from_u32(value: u32) ?TagKind {
+        return util.int_to_enum(TagKind, value);
+    }
+
+    pub fn to_string(self: TagKind) []const u8 {
+        return switch (self) {
+            .End => "End",
+            .CmdLine => "Boot Command",
+            .BootLoaderName => "Boot Loader Name",
+            .Module => "Modules",
+            .BasicMemInfo => "Basic Memory Info",
+            .BootDev => "BIOS Boot Device",
+            .Mmap => "Memory Map",
+            .Vbe => "VBE Info",
+            .Framebuffer => "Framebuffer Info",
+            .ElfSections => "ELF Symbols",
+            .Apm => "APM Table",
+            .Efi32 => "EFI 32-bit Table Pointer",
+            .Efi64 => "EFI 64-bit Table Pointer",
+            .Smbios => "SMBIOS Tables",
+            .AcpiOld => "ACPI v1 RSDP",
+            .AcpiNew => "ACPI v2 RSDP",
+            .Network => "Networking Info",
+            .EfiMmap => "EFI Memory Map",
+            .EfiBs => "EFI Boot Services Not Terminated",
+            .Efi32Ih => "EFI 32-bit Image Handle Pointer",
+            .Efi64Ih => "EFI 64-bit Image Handle Pointer",
+            .LoadBaseAddr => "Image Load Base Physical Address",
+        };
+    }
 };
 
 pub fn initialize(kernel: *Kernel) Error!void {
@@ -16,83 +73,44 @@ pub fn initialize(kernel: *Kernel) Error!void {
         return Error.NullMultibootInfoPointer;
     }
     print.string("Multiboot Tags:\n");
+    var running = true;
     var tag_count: usize = 0;
     i += 8; // Move to first tag
-    var kind = @intToPtr(*u32, i).*;
-    var size = @intToPtr(*u32, i + 4).*;
-    while (kind != 0) {
-        switch (kind) {
-            1 => {
-                print.string(" - Boot Command (Ignored)\n");
-            },
-            2 => {
-                print.string(" - Boot Loader Name(Ignored)\n");
-            },
-            4 => {
-                print.string(" - Basic Memory (Ignored)\n");
-            },
-            3 => {
-                print.string(" - Modules (Ignored)\n");
-            },
-            5 => {
-                print.string(" - BIOS Boot Device (Ignored)\n");
-            },
-            6 => {
-                print.string(" - Memory Ranges (Ignored)\n");
-            },
-            7 => {
-                print.string(" - VBE Info (Ignored)\n");
-            },
-            8 => {
-                print.string(" - Framebuffer Info (Ignored)\n");
-            },
-            9 => {
-                print.string(" - ELF Symbols (Ignored)\n");
-            },
-            10 => {
-                print.string(" - APM Table (Ignored)\n");
-            },
-            11 => {
-                print.string(" - EFI 32-bit Table Pointer (Ignored)\n");
-            },
-            12 => {
-                print.string(" - EFI 64-bit Table Pointer (Ignored)\n");
-            },
-            13 => {
-                print.string(" - SMBIOS Tables (Ignored)\n");
-            },
-            14 => {
-                print.string(" - ACPI v1 RSDP (Ignored)\n");
-            },
-            15 => {
-                print.string(" - ACPI v2 RSDP (Ignored)\n");
-            },
-            16 => {
-                print.string(" - Networking Info (Ignored)\n");
-            },
-            17 => {
-                print.string(" - EFI Memory Map (Ignored)\n");
-            },
-            18 => {
-                print.string(" - EFI Boot Services Not Terminated (Ignored)\n");
-            },
-            19 => {
-                print.string(" - EFI 32-bit Image Handle Pointer (Ignored)\n");
-            },
-            20 => {
-                print.string(" - EFI 64-bit Image Handle Pointer (Ignored)\n");
-            },
-            21 => {
-                print.string(" - Image Load Base Physical Address (Ignored)\n");
-            },
-            else => {
-                print.format(" - Unknown {} (Ignored)\n", kind);
-            },
+    while (running) {
+        const kind_raw = @intToPtr(*u32, i).*;
+        const size = @intToPtr(*u32, i + 4).*;
+        const kind_maybe = TagKind.from_u32(kind_raw);
+        print.format("   - {}\n",
+            if (kind_maybe) |kind|
+                kind.to_string()
+            else
+                "Unkown");
+        if (kind_maybe) |kind| {
+            if (kind == .End) {
+                running = false;
+            }
+            switch (kind) {
+                .Mmap => {
+                    var map = RealMemoryMap{};
+                    const entry_size = @intToPtr(*u32, i + 8).*;
+                    const entries_end = i + size;
+                    var entry_ptr = i + 16;
+                    while (entry_ptr < entries_end) : (entry_ptr += entry_size) {
+                        if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
+                            map.add_range(
+                                @intCast(usize, @intToPtr(*u64, entry_ptr).*),
+                                @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
+                        }
+                    }
+                    kernel.memory.initialize(&map);
+                },
+                else => {
+                    // Ignored
+                },
+            }
         }
         // Move to next tag
-        i += util.alignment(size, 8);
-        kind = @intToPtr(*u32, i).*;
-        size = @intToPtr(*u32, i + 4).*;
+        i += util.align_up(size, 8);
         tag_count += 1;
     }
     print.format("That was {} tags\n", tag_count);
