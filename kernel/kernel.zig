@@ -22,8 +22,10 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
 }
 
 pub const Kernel = struct {
+    const Files = io.Files(32);
+
     memory: Memory = Memory{},
-    file_io: io.Files = io.Files{},
+    file_io: Files = Files{},
     console: ?*io.File = null,
 
     pub fn initialize(self: *Kernel) !void {

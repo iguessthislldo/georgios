@@ -7,17 +7,13 @@ const FileError = io.FileError;
 
 /// Print a char
 pub fn char(file: *File, ch: u8) FileError!void {
-    _ = try file.write(@ptrCast([*]const u8, &ch), 1);
-}
-
-/// Print an exact amount of characters in a string.
-pub fn nstring(file: *File, str: [*]const u8, size: usize) FileError!void {
-    _ = try file.write(str, size);
+    const str = [_]u8{ch};
+    _ = try file.write(str);
 }
 
 /// Print a string.
 pub fn string(file: *File, str: []const u8) FileError!void {
-    try nstring(file, str.ptr, str.len);
+    _ = try file.write(str);
 }
 
 /// Print a string with a null terminator.
@@ -37,7 +33,7 @@ pub fn stripped_string(file: *File, str: [*]const u8, size: usize) FileError!voi
         if (!isspace(str[i])) keep = i + 1;
         i += 1;
     }
-    try nstring(file, str, keep);
+    try string(file, str[0..keep]);
 }
 
 fn uint_recurse(file: *File, value: usize) FileError!void {
@@ -119,10 +115,12 @@ pub fn byte(file: *File, value: u8) FileError!void {
     try string(file, buffer);
 }
 
+/// Print a boolean as "true" or "false".
 pub fn boolean(file: *File, value: bool) FileError!void {
     try string(file, if (value) "true" else "false");
 }
 
+/// Try to guess how to print a value based on its type.
 pub fn any(file: *File, value: var) FileError!void {
     const Type = @typeOf(value);
     const Traits = @typeInfo(Type);
@@ -160,18 +158,29 @@ pub fn any(file: *File, value: var) FileError!void {
     }
 }
 
-/// Print Using Format String
+/// Print Using Format String, meant to work somewhat like Zig's
+/// `std.fmt.format`.
 ///
-/// {} - Insert next argument using default formating.
-/// {:x} - Insert next argument using hexadecimal format. It must be an
-///     unsigned integer.
-/// {{ - Insert '{'.
-/// }} - Insert '}'.
+/// Layout of a valid format marker is `{[specifier:]}`.
+///
+/// TODO: Match std.fmt.format instead of Python string.format and use
+/// {[specifier]:...}
+///
+/// `specifier`:
+///     None
+///         Insert next argument using default formating and `fprint.any()`.
+///     `x` and `X`
+///         Insert next argument using hexadecimal format. It must be an
+///         unsigned integer. The case of the letters A-F of the result depends
+///         on if `x` or `X` was used as the specifier.
+///
+/// Escapes:
+///     `{{` is replaced with `{` and `}}` is replaced by `}`.
 pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!void {
     const State = enum {
-        NoFormat, // Ouside Braces
+        NoFormat, // Outside Braces
         Format, // Inside Braces
-        EscapeEnd, // Epecting }
+        EscapeEnd, // Expecting }
         FormatSpec, // After {:
     };
 

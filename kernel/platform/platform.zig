@@ -42,15 +42,12 @@ pub fn kernel_size() usize {
     return @ptrToInt(&_KERNEL_SIZE);
 }
 
-fn console_write(file: *io.File,
-        from: [*] const u8, size: usize) io.FileError!usize {
-    var i: usize = 0;
-    while (i < size) {
-        serial_log.print_char(from[i]);
-        cga_console.print_char(from[i]);
-        i += 1;
+fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
+    for (from) |value| {
+        serial_log.print_char(value);
+        cga_console.print_char(value);
     }
-    return size;
+    return from.len;
 }
 
 pub fn initialize(kernel: *Kernel) !void {

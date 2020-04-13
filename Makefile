@@ -20,6 +20,7 @@ build_georgios:
 .PHONY: test
 test:
 	zig test --cache-dir tmp/zig-cache kernel/util.zig
+	zig test --cache-dir tmp/zig-cache kernel/io.zig
 
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)

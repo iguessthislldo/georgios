@@ -107,13 +107,19 @@ pub const Memory = struct {
     pub fn initialize(self: *Memory, map: *RealMemoryMap) void {
         print.format(
             \\ - Initializing Memory System
-            \\   - Start of kernel: {:x}
-            \\   - End of kernel: {:x}
+            \\   - Start of kernel:
+            \\      - Real:    {:x}
+            \\      - Virtual: {:x}
+            \\   - End of kernel:
+            \\      - Real:    {:x}
+            \\      - Virtual: {:x}
             \\   - Size of kernel is {} B ({} KiB)
             \\   - Frame Size: {} B ({} KiB)
             \\
             ,
+            platform.kernel_real_start(),
             platform.kernel_virtual_start(),
+            platform.kernel_real_end(),
             platform.kernel_virtual_end(),
             platform.kernel_size(),
             platform.kernel_size() >> 10,
@@ -132,7 +138,7 @@ pub const Memory = struct {
         }
         const total_memory: usize = map.total_frame_count * platform.frame_size;
         print.format(
-            "   - Total Allocatable Memory: {} ({} KiB/{} MiB/{} GiB)\n",
+            "   - Total Allocatable Memory: {} B ({} KiB/{} MiB/{} GiB)\n",
             total_memory,
             total_memory >> 10,
             total_memory >> 20,

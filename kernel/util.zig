@@ -94,3 +94,84 @@ test "int_to_enum" {
     x = 0xFF;
     assert(int_to_enum(Abc, x) == null);
 }
+
+pub fn max(comptime T: type, a: T, b: T) T {
+    return if (a > b) a else b;
+}
+
+pub fn min(comptime T: type, a: T, b: T) T {
+    return if (a < b) a else b;
+}
+
+/// Returns true if the contents of the slices `a` and `b` are the same.
+pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    for (a[0..]) |value, i| {
+        if (value != b[i]) return false;
+    }
+    return true;
+}
+
+/// Copy contents from `source` to `destination`.
+///
+/// If `source.len != destination.len` then the copy is truncated.
+pub inline fn memory_copy(destination: []u8, source: []const u8) void {
+    const size = min(usize, destination.len, source.len);
+    for (destination[0..size]) |*ptr, i| {
+        ptr.* = source[i];
+    }
+}
+
+/// Set all the elements of `destination` to `value`.
+pub inline fn memory_set(destination: []u8, value: u8) void {
+    for (destination[0..]) |*ptr| {
+        ptr.* = value;
+    }
+    return true;
+}
+
+pub fn max_of_int(comptime T: type) T {
+    comptime const Traits = @typeInfo(T);
+    return if (Traits.Int.is_signed)
+        (1 << (Traits.Int.bits - 1)) - 1
+    else
+        T(0) -% 1;
+}
+
+test "max_of_int" {
+    const std = @import("std");
+    std.testing.expect(max_of_int(u16) == 0xffff);
+    std.testing.expect(max_of_int(i16) == 0x7fff);
+}
+
+pub fn add_signed_to_unsigned(
+        comptime uT: type, a: uT, comptime iT: type, b: iT) ?uT {
+    var result: uT = undefined;
+    if (@addWithOverflow(uT, a, @bitCast(uT, b), &result)) {
+        if (b > 0 and result < a) {
+            return null;
+        }
+    } else if (b < 0 and result > a) {
+        return null;
+    }
+    return result;
+}
+
+pub inline fn add_isize_to_usize(a: usize, b: isize) ?usize {
+    return add_signed_to_unsigned(usize, a, isize, b);
+}
+
+test "add_signed_to_unsigned" {
+    const std = @import("std");
+    std.testing.expect(add_isize_to_usize(0, 0).? == 0);
+    std.testing.expect(add_isize_to_usize(0, 10).? == 10);
+    std.testing.expect(add_isize_to_usize(0, -10) == null);
+    const max_usize = max_of_int(usize);
+    std.testing.expect(add_isize_to_usize(max_usize, 0).? == max_usize);
+    std.testing.expect(add_isize_to_usize(max_usize, -10).? == max_usize - 10);
+    std.testing.expect(add_isize_to_usize(max_usize, 10) == null);
+}
+
+//     var x: usize = 0xffffffffffffffff;
+//     var y: isize = 1;
+//     std.debug.warn("result: {}", result);
