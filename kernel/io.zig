@@ -3,8 +3,11 @@ const util = @import("util.zig");
 pub const FileError = error {
     /// The operation is not supported on the file.
     Unsupported,
-    /// The operation would cause the position of the file to became invalid.
+    /// The operation would cause the position of the file stream to became
+    /// invalid without getting anything else done.
     OutOfBounds,
+    /// The source or destination buffer given has a size of zero.
+    EmptyBuffer,
     /// The file manager could not reserve a file.
     MaxFilesReached,
 };
@@ -83,15 +86,49 @@ pub const File = struct {
         self.close_impl = unsupported.close_impl;
     }
 
-    /// Read into `to` array up to `max_size` and return the amount read.
+    /// Tries to read as much as possible into the `to` slice and will return
+    /// the amount read, which may be less than `to.len`. Can return 0 if the
+    /// `to` slice is zero or the end of the file has been reached already. It
+    /// should never return `FileError.OutOfBounds` or `FileError.EmptyBuffer`,
+    /// but `read_or_error` will. The exact return values are defined by the
+    /// file implementation.
     pub inline fn read(file: *File, to: []u8) FileError!usize {
         return file.read_impl(file, to);
     }
 
-    /// Write from `to` array. Tries to read the `size`, but will return the
-    /// amount written.
+    /// Same as `read`, but return `FileError.OutOfBounds` if an empty `to` was
+    /// passed or `FileError.OutOfBounds` if trying to read from a file that's
+    /// already reached the end.
+    pub inline fn read_or_error(file: *File, to: []u8) FileError!usize {
+        if (to.len == 0) {
+            return FileError.EmptyBuffer;
+        }
+        const result = file.read_impl(file, to);
+        if (result == 0) {
+            return FileError.OutOfBounds;
+        }
+        return result;
+    }
+
+    /// Tries the write the entire `from` slice and will return the amount
+    /// written, which may be less than `from.len`. As with `read` this can be
+    /// 0 if the file has a limit of what can be written and that limit was
+    /// already reached. Also like `read` this should never return
+    /// `FileError.OutOfBounds` or `FileError.EmptyBuffer`, but `write_or_error`
+    /// can. The exact return values are defined by the file implementation.
     pub inline fn write(file: *File, from: []const u8) FileError!usize {
         return file.write_impl(file, from);
+    }
+
+    /// Same as `write`, but return `FileError.OutOfBounds` if an empty `from`
+    /// was passed or `FileError.OutOfBounds` if trying to write to a file
+    /// that's already reached the end.
+    pub inline fn write_or_error(file: *File, from: []const u8) FileError!usize {
+        const result = file.write_impl(file, to);
+        if (result == 0 and from.len > 0) {
+            return FileError.OutOfBounds;
+        }
+        return result;
     }
 
     /// Shift where the file is operating from. Returns the new location if
@@ -195,16 +232,26 @@ const BufferFile = struct {
         const self = @intToPtr(*Self, file.impl_data.?);
         const read_size = util.min(usize, to.len,
             self.buffer.len - self.position);
-        const next_position = self.position + read_size;
-        util.memory_copy(to[0..read_size],
-            self.buffer[self.position..next_position]);
-        self.position += read_size;
+        if (read_size > 0) {
+            const next_position = self.position + read_size;
+            util.memory_copy(to[0..read_size],
+                self.buffer[self.position..next_position]);
+            self.position += read_size;
+        }
         return read_size;
     }
 
     pub fn write(file: *File, from: []const u8) FileError!usize {
-        // TODO
-        return FileError.Unsupported;
+        const self = @intToPtr(*Self, file.impl_data.?);
+        const write_size = util.min(usize, from.len,
+            self.buffer.len - self.position);
+        if (write_size > 0) {
+            const next_position = self.position + write_size;
+            util.memory_copy(self.buffer[self.position..next_position],
+                from[0..write_size]);
+            self.position += write_size;
+        }
+        return write_size;
     }
 
     pub fn seek(file: *File,
@@ -241,7 +288,17 @@ test "BufferFile" {
     std.testing.expectEqual(usize(3), try file.read(result_buffer[0..]));
     std.testing.expectEqualSlices(u8, "123123", result_buffer[0..len]);
 
-    // TODO: Test Writing
+    // Try to read again at the end of the file
+    std.testing.expectEqual(usize(0), try file.read(result_buffer[0..]));
+    std.testing.expectEqual(len, buffer_file.position);
+
+    // Try Writing Another String Over It
+    const string2 = "cdef";
+    std.testing.expectEqual(usize(2), try file.seek(2, .FromStart));
+    std.testing.expectEqual(usize(string2.len), try file.write(string2));
+    std.testing.expectEqual(usize(0), try file.seek(0, .FromStart));
+    std.testing.expectEqual(len, try file.read(result_buffer[0..]));
+    std.testing.expectEqualSlices(u8, "abcdef", result_buffer[0..len]);
 }
 
 // TODO: open for BufferFile
