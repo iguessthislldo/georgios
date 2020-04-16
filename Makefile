@@ -7,7 +7,6 @@ ZIG_OUTPUT:=tmp/zig-cache/bin
 GRUB_PREFIX:=/usr
 GRUB_LOCATION:=$(GRUB_PREFIX)/lib/grub/i386-pc
 GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
-GRUB_MODULES:=vbe font gfxterm echo reboot usb_keyboard multiboot2 fat ls cat ext2 iso9660 reiserfs xfs part_sun part_gpt part_msdos video_bochs video_cirrus all_video
 
 DEBUGGER:=gdb
 
@@ -19,8 +18,7 @@ build_georgios:
 
 .PHONY: test
 test:
-	zig test --cache-dir tmp/zig-cache kernel/util.zig
-	zig test --cache-dir tmp/zig-cache kernel/io.zig
+	zig test --cache-dir tmp/zig-cache kernel/test.zig
 
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)
