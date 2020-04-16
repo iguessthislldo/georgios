@@ -1,9 +1,7 @@
 const io = @import("../io.zig");
 const print = @import("../print.zig");
 const Kernel = @import("../kernel.zig").Kernel;
-const kutil = @import("../util.zig");
 
-pub const frame_size = kutil.KiB(4);
 pub const panic = @import("panic.zig").panic;
 
 const serial_log = @import("serial_log.zig");
@@ -11,6 +9,8 @@ const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 const interrupts = @import("interrupts.zig");
 const multiboot = @import("multiboot.zig");
+const paging = @import("paging.zig");
+const putil = @import("util.zig");
 
 extern var _KERNEL_OFFSET: u32;
 pub fn kernel_offset(address: u32) u32{
@@ -42,6 +42,8 @@ pub fn kernel_size() usize {
     return @ptrToInt(&_KERNEL_SIZE);
 }
 
+pub const frame_size = paging.frame_size;
+
 fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     for (from) |value| {
         serial_log.print_char(value);
@@ -63,4 +65,5 @@ pub fn initialize(kernel: *Kernel) !void {
     // Setup Memory
     try multiboot.process_tag(kernel, .Mmap);
     // TODO: defer freeing memory containing multiboot structure
+//     paging.enable_paging();
 }

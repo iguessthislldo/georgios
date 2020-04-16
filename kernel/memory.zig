@@ -2,8 +2,18 @@ const kutil = @import("util.zig");
 const print = @import("print.zig");
 const platform = @import("platform/platform.zig");
 
-const Error = error {
+const MemoryError = error {
     OutOfMemory,
+    InvalidArguments,
+};
+
+const Range = struct {
+    start: usize = 0,
+    size: usize = 0,
+
+    pub fn end(self: *Range) usize {
+        return self.start + self.size;
+    }
 };
 
 /// Used by the platform to provide what real memory can be used for the real
@@ -17,19 +27,15 @@ pub const RealMemoryMap = struct {
     frame_group_count: usize = 0,
     total_frame_count: usize = 0,
 
-    /// Start of the range of memory that will be shared between the frame
-    /// stack and a frame group.
-    shared_range_start: usize = 0,
-
-    /// Size of the range of memory that will be shared between the frame stack
-    /// and a frame group.
-    shared_range_size: usize = 0,
+    /// Range of memory that will be shared between the frame stack and a
+    /// frame group.
+    shared_range: Range = Range{},
 
     fn invalid(self: *RealMemoryMap) bool {
         return
             self.frame_group_count == 0 or
             self.total_frame_count == 0 or
-            self.shared_range_size == 0;
+            self.shared_range.size == 0;
     }
 
     /// Directly add a frame group.
@@ -69,8 +75,8 @@ pub const RealMemoryMap = struct {
             // The area after the kernel is going to be shared by the frame
             // stack and a frame group. A calculation of the optimal proportion
             // between the two will be attempted in finalize().
-            self.shared_range_start = kernel_end;
-            self.shared_range_size = end - kernel_end;
+            self.shared_range.start = kernel_end;
+            self.shared_range.size = end - kernel_end;
         } else { // Range that will just be used for frames.
             self.add_frame_group(start, size);
         }
@@ -80,7 +86,7 @@ pub const RealMemoryMap = struct {
     pub fn finalize(self: *RealMemoryMap) void {
         // Calculate layout of shared frame stack/frame group range.
         // Subtract a frame's worth of bytes so we can align the frame group.
-        const effective_space = self.shared_range_size - platform.frame_size;
+        const effective_space = self.shared_range.size - platform.frame_size;
         const ptr_size = @sizeOf(usize);
         // Size taken by frame stack pointers for "other" frame groups
         const other_ptr_size = ptr_size * self.total_frame_count;
@@ -90,8 +96,7 @@ pub const RealMemoryMap = struct {
         // Now add this frame group.
         const this_frame_group_size =
             this_frame_group_count * platform.frame_size;
-        const shared_range_end =
-            self.shared_range_start + self.shared_range_size;
+        const shared_range_end = self.shared_range.end();
         const this_frame_group_start =
             shared_range_end - this_frame_group_size;
         self.add_frame_group(this_frame_group_start, shared_range_end);
@@ -103,6 +108,10 @@ pub const RealMemoryMap = struct {
 
 /// Used by the kernel to manage system memory
 pub const Memory = struct {
+    frame_stack_top: usize = 0,
+    frame_stack_bottom: usize = 0,
+    frame_stack_count: usize = 0,
+
     /// To be called by the platform after it can give "map".
     pub fn initialize(self: *Memory, map: *RealMemoryMap) void {
         print.format(
@@ -131,22 +140,59 @@ pub const Memory = struct {
             @panic("ReadMemoryMap is invalid!");
         }
         map.finalize();
+
+        // Setup the frame stack
+        const frame_stack_size = map.total_frame_count * @sizeOf(usize);
+        self.frame_stack_bottom =
+            platform.kernel_virtual_end() + frame_stack_size;
+        self.frame_stack_top = self.frame_stack_bottom;
         print.string("   - Frame Groups:\n");
         for (map.frame_groups[0..map.frame_group_count]) |*i| {
             print.format("     - {} Frames starting at {:a} \n",
                 i.frame_count, i.start);
+            var frame: usize = 0;
+            while (frame < i.frame_count) {
+                self.free_pmem(i.start + frame * platform.frame_size);
+                frame += 1;
+            }
         }
         const total_memory: usize = map.total_frame_count * platform.frame_size;
         print.format(
+            "   - Frame Stack\n" ++
+            "     - Top:    {:a}\n" ++
+            "     - Bottom: {:a}\n" ++
             "   - Total Allocatable Memory: {} B ({} KiB/{} MiB/{} GiB)\n",
+            self.frame_stack_top,
+            self.frame_stack_bottom,
             total_memory,
             total_memory >> 10,
             total_memory >> 20,
             total_memory >> 30);
-
-        // TODO: Initialize Frame Stack
     }
 
-    // TODO: Real Memory Management
+    pub fn free_pmem(self: *Memory, frame: usize) void {
+        // TODO: Check for stack overflow?
+        // Maybe a safety mode where we also check for valid frame and that it
+        // hasn't already been freed.
+        @intToPtr(*usize, self.frame_stack_top).* = frame;
+        self.frame_stack_top -= @sizeOf(usize);
+        self.frame_stack_count += 1;
+    }
+
+    pub fn alloc_pmem(self: *Memory) MemoryError!usize {
+        if (self.frame_stack_count == 0) {
+            return MemoryError.OutOfMemory;
+        }
+        self.frame_stack_top += @sizeOf(usize);
+        const frame = @intToPtr(*usize, self.frame_stack_top).*;
+        self.frame_stack_count -= 1;
+        return frame;
+    }
+
     // TODO: Virtual Memory Management
+    // pub fn alloc_vmem(self: *Memory, what: Range) MemoryError!void {
+    // }
+
+    // pub fn free_vmem(self: *Memory, what: Range) MemoryError!void {
+    // }
 };

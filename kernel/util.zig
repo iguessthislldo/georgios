@@ -1,18 +1,18 @@
 const builtin = @import("builtin");
 
-pub inline fn KiB(x: usize) usize {
+pub inline fn Ki(x: usize) usize {
     return x * (1 << 10);
 }
 
-pub inline fn MiB(x: usize) usize {
+pub inline fn Mi(x: usize) usize {
     return x * (1 << 20);
 }
 
-pub inline fn GiB(x: usize) usize {
+pub inline fn Gi(x: usize) usize {
     return x * (1 << 30);
 }
 
-pub inline fn TiB(x: usize) usize {
+pub inline fn Ti(x: usize) usize {
     return x * (1 << 40);
 }
 
