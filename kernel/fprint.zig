@@ -1,6 +1,6 @@
 const builtin = @import("builtin");
 
-const isspace = @import("util.zig").isspace;
+const util = @import("util.zig");
 const io = @import("io.zig");
 const File = io.File;
 const FileError = io.FileError;
@@ -30,7 +30,7 @@ pub fn stripped_string(file: *File, str: [*]const u8, size: usize) FileError!voi
     var i: usize = 0;
     var keep: usize = 0;
     while (i < size and str[i] > 0) {
-        if (!isspace(str[i])) keep = i + 1;
+        if (!util.isspace(str[i])) keep = i + 1;
         i += 1;
     }
     try string(file, str[0..keep]);
@@ -102,6 +102,46 @@ pub fn hex(file: *File, value: usize) FileError!void {
     try hex_recurse(file, value);
 }
 
+/// Print a unsigned integer as a hexadecimal number a padded to usize and
+/// prefixed with "@".
+pub fn address(file: *File, value: usize) FileError!void {
+    // For 32b: @XXXXXXXX
+    // For 64b: @XXXXXXXXXXXXXXXX
+    const nibble_count = @sizeOf(usize) * 2;
+    const char_count = 1 + nibble_count;
+    var buffer: [char_count]u8 = undefined;
+    buffer[0] = '@';
+
+    for (buffer[1..]) |*ptr, i| {
+        const nibble_index: usize = (nibble_count - 1) - i;
+        ptr.* = nibble_char(util.select_nibble(usize, value, nibble_index));
+    }
+
+    try string(file, buffer);
+}
+
+test "address" {
+    const std = @import("std");
+    const BufferFile = io.BufferFile;
+
+    var file_buffer: [128]u8 = undefined;
+    util.memory_set(file_buffer[0..], 0);
+    var file = File{};
+    var buffer_file = BufferFile{};
+    buffer_file.initialize(&file, file_buffer[0..]);
+
+    try address(&file, 0x7bc75e39);
+    const length = util.string_length(file_buffer[0..]);
+
+    const expected = if (@sizeOf(usize) == 4)
+        "@7BC75E39"
+    else if (@sizeOf(usize) == 8)
+        "@000000007BC75E39"
+    else
+        @compileError("usize size missing in this test");
+    std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
+}
+
 /// Insert a hex byte to into a buffer. Common to byte() and data().
 fn byte_buffer(buffer: []u8, value: u8) void {
     buffer[0] = nibble_char(@intCast(u4, value >> 4));
@@ -111,7 +151,7 @@ fn byte_buffer(buffer: []u8, value: u8) void {
 /// Print a hexadecimal representation of a byte (no "0x" prefix)
 pub fn byte(file: *File, value: u8) FileError!void {
     var buffer: [2]u8 = undefined;
-    byte_buffer(buffer[0..buffer.len], value);
+    byte_buffer(buffer[0..], value);
     try string(file, buffer);
 }
 
@@ -172,7 +212,9 @@ pub fn any(file: *File, value: var) FileError!void {
 ///     `x` and `X`
 ///         Insert next argument using hexadecimal format. It must be an
 ///         unsigned integer. The case of the letters A-F of the result depends
-///         on if `x` or `X` was used as the specifier.
+///         on if `x` or `X` was used as the specifier (TODO).
+///     'a'
+///         Like "x", but prints the full address value prefixed with "@".
 ///
 /// Escapes:
 ///     `{{` is replaced with `{` and `}}` is replaced by `}`.
@@ -187,6 +229,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!voi
     const Spec = enum {
         Default,
         Hex,
+        Address,
     };
 
     comptime var arg: usize = 0;
@@ -220,6 +263,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!voi
                 '}' => {
                     switch (spec) {
                         Spec.Hex => try hex(file, args[arg]),
+                        Spec.Address => try address(file, args[arg]),
                         Spec.Default => try any(file, args[arg]),
                     }
                     arg += 1;
@@ -235,6 +279,10 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!voi
             State.FormatSpec => switch (ch) {
                 'x' => {
                     spec = Spec.Hex;
+                    state = State.Format;
+                },
+                'a' => {
+                    spec = Spec.Address;
                     state = State.Format;
                 },
                 else => @compileError(

@@ -92,14 +92,18 @@ fn load() void {
 fn set(name: []const u8, index: u8, handler: extern fn() void, selector: u16, flags: u8) void {
     const offset: u32 = @ptrToInt(handler);
     names[index] = name;
-    print.format("IDT[{}]: \"{}\" selector: {:x} address: {:x} flags: {:x}\n",
+    print.format(
+        "   - [{}]: \"{}\"\n" ++
+        "     - selector: {:x} address: {:a} flags: {:x}\n",
         index, name, selector, offset,  flags);
+    // TODO: Print flag and selector meanings
     table[index].offset_0_15 = @intCast(u16, offset & 0xffff);
     table[index].offset_16_31= @intCast(u16, (offset & 0xffff0000) >> 16);
     table[index].selector = selector;
     table[index].flags = flags;
 }
 
+// TODO: Figure out what these are...
 const kernel_flags: u8 = 0x8e;
 const user_flags: u8 = kernel_flags | (3 << 5);
 
@@ -107,6 +111,8 @@ pub fn initialize() void {
     table_pointer.limit = @sizeOf(Entry) * table.len;
     table_pointer.base = @ptrToInt(&table);
     const kernel_code_selector = @import("segments.zig").kernel_code_selector;
+
+    print.string(" - Filling the Interrupt Descriptor Table (IDT)\n");
 
     set("Divide by Zero Fault",
         0,  ih_0,  kernel_code_selector, kernel_flags);

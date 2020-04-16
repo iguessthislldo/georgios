@@ -210,7 +210,7 @@ test "File.generic_seek" {
 }
 
 /// File that reads from and writes to a provided buffer.
-const BufferFile = struct {
+pub const BufferFile = struct {
     const Self = @This();
 
     file: *File = undefined,

@@ -67,6 +67,12 @@ pub fn hex(value: usize) void {
     }
 }
 
+pub fn address(value: usize) void {
+    if (console_file) |o| {
+        fprint.address(o, value) catch unreachable;
+    }
+}
+
 pub fn byte(value: u8) void {
     if (console_file) |o| {
         fprint.byte(o, value) catch unreachable;

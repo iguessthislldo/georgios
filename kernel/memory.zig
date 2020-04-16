@@ -108,11 +108,11 @@ pub const Memory = struct {
         print.format(
             \\ - Initializing Memory System
             \\   - Start of kernel:
-            \\      - Real:    {:x}
-            \\      - Virtual: {:x}
+            \\      - Real:    {:a}
+            \\      - Virtual: {:a}
             \\   - End of kernel:
-            \\      - Real:    {:x}
-            \\      - Virtual: {:x}
+            \\      - Real:    {:a}
+            \\      - Virtual: {:a}
             \\   - Size of kernel is {} B ({} KiB)
             \\   - Frame Size: {} B ({} KiB)
             \\
@@ -133,7 +133,7 @@ pub const Memory = struct {
         map.finalize();
         print.string("   - Frame Groups:\n");
         for (map.frame_groups[0..map.frame_group_count]) |*i| {
-            print.format("     - {} Frames starting at {:x} \n",
+            print.format("     - {} Frames starting at {:a} \n",
                 i.frame_count, i.start);
         }
         const total_memory: usize = map.total_frame_count * platform.frame_size;

@@ -13,7 +13,7 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
         print.format("index: {}\n", t.index);
         for (t.instruction_addresses) |addr| {
             if (addr == 0) break;
-            print.format(" - {:x}\n", addr);
+            print.format(" - {:a}\n", addr);
         }
     } else {
         print.string("No Stack Trace\n");

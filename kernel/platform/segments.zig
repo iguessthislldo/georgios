@@ -55,9 +55,9 @@ pub fn get_name(index: u32) []const u8 {
 fn set(name: []const u8, index: u8, base: u32, limit: u32,
         access: Access, flags: Flags) u16 {
     names[index] = name;
-    print.format("GDT[{}]: \"{}\" ", index, name);
+    print.format("   - [{}]: \"{}\" ", index, name);
     if (access.valid) {
-        print.format("starts at {:x}, size is {:x} {}, {} Ring {} ",
+        print.format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ",
             base, limit,
             if (flags.granularity) "b" else "pages",
             if (flags.pm) "32b" else "16b",
@@ -66,15 +66,15 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
             if (access.executable) {
                 print.format(
                     "Code Segment\n" ++
-                    " - Can{} be read by lower rings.\n" ++
-                    " - Can{} be executed by lower rings\n",
+                    "     - Can{} be read by lower rings.\n" ++
+                    "     - Can{} be executed by lower rings\n",
                     if (access.rw) "" else " NOT",
                     if (access.dc) "" else " NOT");
             } else {
                 print.format(
                     "Data Segment\n" ++
-                    " - Can{} be written to by lower rings.\n" ++
-                    " - Grows {}.\n",
+                    "     - Can{} be written to by lower rings.\n" ++
+                    "     - Grows {}.\n",
                     if (access.rw) "" else " NOT",
                     if (access.dc) "down" else "up");
             }
@@ -82,7 +82,7 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
             print.string("System Segment\n");
         }
         if (access.accessed) {
-            print.string(" - Accessed\n");
+            print.string("     - Accessed\n");
         }
     } else {
         print.char('\n');
@@ -140,6 +140,7 @@ pub export var user_data_selector: u16 = 0;
 pub export var tss_selector: u16 = 0;
 
 pub fn initialize() void {
+    print.string(" - Filling the Global Descriptor Table (GDT)\n");
     set_null_entry(0);
     const flags = Flags{};
     kernel_code_selector = set("Kernel Code", 1, 0, 0xFFFFFFFF,

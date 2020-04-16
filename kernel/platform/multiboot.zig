@@ -94,7 +94,9 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
     }
     const list = find == .End;
     if (list) {
-        print.string(" - Multiboot Tags:\n");
+        print.string(
+            " - Multiboot Tags Available:\n" ++
+            "   - Tags:\n");
     }
     var running = true;
     var tag_count: usize = 0;
@@ -105,7 +107,7 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
         const size = @intToPtr(*u32, i + 4).*;
         const kind_maybe = TagKind.from_u32(kind_raw);
         if (list) {
-            print.format("   - {}\n",
+            print.format("     - {}\n",
                 if (kind_maybe) |kind|
                     kind.to_string()
                 else

@@ -127,7 +127,6 @@ pub inline fn memory_set(destination: []u8, value: u8) void {
     for (destination[0..]) |*ptr| {
         ptr.* = value;
     }
-    return true;
 }
 
 pub fn max_of_int(comptime T: type) T {
@@ -172,6 +171,73 @@ test "add_signed_to_unsigned" {
     std.testing.expect(add_isize_to_usize(max_usize, 10) == null);
 }
 
-//     var x: usize = 0xffffffffffffffff;
-//     var y: isize = 1;
-//     std.debug.warn("result: {}", result);
+pub inline fn string_length(bytes: []const u8) usize {
+    for (bytes[0..]) |*ptr, i| {
+        if (ptr.* == 0) {
+            return i;
+        }
+    }
+    return bytes.len;
+}
+
+pub fn int_log2(comptime Type: type, value: Type) Type {
+    return @sizeOf(Type) * 8 - 1 - @clz(Type, value);
+}
+
+fn test_int_log2(value: usize, expected: usize) void {
+    const std = @import("std");
+    std.testing.expectEqual(expected, int_log2(usize, value));
+}
+
+test "int_log2" {
+    test_int_log2(1, 0);
+    test_int_log2(2, 1);
+    test_int_log2(4, 2);
+    test_int_log2(8, 3);
+    test_int_log2(16, 4);
+    test_int_log2(32, 5);
+    test_int_log2(64, 6);
+    test_int_log2(128, 7);
+}
+
+pub fn int_bit_size(comptime IntType: type) usize {
+    return @typeInfo(IntType).Int.bits;
+}
+
+pub fn IntLog2Type(comptime IntType: type) type {
+    return @Type(builtin.TypeInfo{.Int = builtin.TypeInfo.Int{
+        .is_signed = false,
+        .bits = int_log2(usize, int_bit_size(IntType)),
+    }});
+}
+
+fn test_IntLog2Type(comptime IntType: type, expected: usize) void {
+    const std = @import("std");
+    std.testing.expectEqual(expected, int_bit_size(IntLog2Type(IntType)));
+}
+
+test "Log2IntType" {
+    test_IntLog2Type(u2, 1);
+    test_IntLog2Type(u32, 5);
+    test_IntLog2Type(u64, 6);
+}
+
+pub fn select_nibble(comptime IntType: type, value: IntType, which: usize) u4 {
+    return @intCast(u4,
+        (value >> (@intCast(IntLog2Type(IntType), which) * 4)) & 0xf);
+}
+
+fn test_select_nibble(comptime IntType: type,
+        value: IntType, which: usize, expected: u4) void {
+    const std = @import("std");
+    std.testing.expectEqual(expected, select_nibble(IntType, value, which));
+}
+
+test "select_nibble" {
+    test_select_nibble(u8, 0xaf, 0, 0xf);
+    test_select_nibble(u8, 0xaf, 1, 0xa);
+    test_select_nibble(u16, 0x1234, 0, 0x4);
+    test_select_nibble(u16, 0x1234, 1, 0x3);
+    test_select_nibble(u16, 0x1234, 2, 0x2);
+    test_select_nibble(u16, 0x1234, 3, 0x1);
+}

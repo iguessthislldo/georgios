@@ -3,4 +3,5 @@
 test "dummy" {
     const util = @import("util.zig");
     const io = @import("io.zig");
+    const fprint = @import("fprint.zig");
 }

@@ -88,14 +88,14 @@ pub export fn show_panic_message() void {
         \\
         \\
         \\--Registers-------------------------------------------------------------------
-        \\    EIP: {:x}
+        \\    EIP: {:a}
         \\    EFLAGS: {:x}
         \\    EAX: {:x}
         \\    ECX: {:x}
         \\    EDX: {:x}
         \\    EBX: {:x}
-        \\    ESP: {:x}
-        \\    EBP: {:x}
+        \\    ESP: {:a}
+        \\    EBP: {:a}
         \\    ESI: {:x}
         \\    EDI: {:x}
         \\    CS: {:x} ({})
