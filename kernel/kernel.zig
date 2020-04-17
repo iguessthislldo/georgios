@@ -1,6 +1,6 @@
 const builtin = @import("builtin");
 
-const platform = @import("platform/platform.zig");
+const platform = @import("platform.zig");
 const print = @import("print.zig");
 const Memory = @import("memory.zig").Memory;
 const io = @import("io.zig");

@@ -1,6 +1,6 @@
 const kutil = @import("util.zig");
 const print = @import("print.zig");
-const platform = @import("platform/platform.zig");
+const platform = @import("platform.zig");
 
 const MemoryError = error {
     OutOfMemory,
