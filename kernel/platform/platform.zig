@@ -2,8 +2,6 @@ const io = @import("../io.zig");
 const print = @import("../print.zig");
 const Kernel = @import("../kernel.zig").Kernel;
 
-pub const panic = @import("panic.zig").panic;
-
 const serial_log = @import("serial_log.zig");
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
@@ -12,29 +10,38 @@ const multiboot = @import("multiboot.zig");
 const paging = @import("paging.zig");
 const putil = @import("util.zig");
 
+pub const panic = @import("panic.zig").panic;
+
+pub fn done() noreturn {
+    asm volatile ("cli");
+    while (true) {
+        asm volatile ("hlt");
+    }
+}
+
 extern var _KERNEL_OFFSET: u32;
 pub fn kernel_offset(address: u32) u32{
     return @ptrToInt(&_KERNEL_OFFSET) + address;
 }
 
-extern var _KERNEL_LOW_START: u32;
+extern var _KERNEL_REAL_START: u32;
 pub fn kernel_real_start() usize {
-    return @ptrToInt(&_KERNEL_LOW_START);
+    return @ptrToInt(&_KERNEL_REAL_START);
 }
 
-extern var _KERNEL_LOW_END: u32;
+extern var _KERNEL_REAL_END: u32;
 pub fn kernel_real_end() usize {
-    return @ptrToInt(&_KERNEL_LOW_END);
+    return @ptrToInt(&_KERNEL_REAL_END);
 }
 
-extern var _KERNEL_HIGH_START: u32;
+extern var _KERNEL_VIRTUAL_START: u32;
 pub fn kernel_virtual_start() usize {
-    return @ptrToInt(&_KERNEL_HIGH_START);
+    return @ptrToInt(&_KERNEL_VIRTUAL_START);
 }
 
-extern var _KERNEL_HIGH_END: u32;
+extern var _KERNEL_VIRTUAL_END: u32;
 pub fn kernel_virtual_end() usize {
-    return @ptrToInt(&_KERNEL_HIGH_END);
+    return @ptrToInt(&_KERNEL_VIRTUAL_END);
 }
 
 extern var _KERNEL_SIZE: u32;

@@ -1,9 +1,9 @@
 const builtin = @import("builtin");
 
-const platform = @import("platform.zig");
-const print = @import("print.zig");
-const Memory = @import("memory.zig").Memory;
-const io = @import("io.zig");
+pub const platform = @import("platform.zig");
+pub const print = @import("print.zig");
+pub const Memory = @import("memory.zig").Memory;
+pub const io = @import("io.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -42,4 +42,5 @@ pub export fn kernel_main() void {
         panic(@errorName(e), @errorReturnTrace());
     }
     print.string("Done\n");
+    platform.done();
 }

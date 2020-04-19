@@ -5,7 +5,7 @@ const Kernel = @import("../kernel.zig").Kernel;
 const RealMemoryMap = @import("../memory.zig").RealMemoryMap;
 const util = @import("../util.zig");
 
-extern var multiboot_info_pointer: c_ulong;
+export var multiboot_info_pointer: u32 = 0;
 
 const Error = error {
     NullMultibootInfoPointer,
@@ -82,6 +82,8 @@ fn process_mmap(kernel: *Kernel, tag_start: usize, tag_size: usize) void {
     }
     kernel.memory.initialize(&map);
     // TODO: Save Multiboot Structure For Now
+    // TODO: Reclaim space of low_stack
+    // TODO: Unmap low kernel
 }
 
 /// Process part of the Multiboot information given by `find`. If `find` wasn't

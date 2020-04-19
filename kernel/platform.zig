@@ -14,3 +14,4 @@ pub const kernel_real_end = platform_impl.kernel_real_end;
 pub const kernel_virtual_start = platform_impl.kernel_virtual_start;
 pub const kernel_virtual_end = platform_impl.kernel_virtual_end;
 pub const kernel_size = platform_impl.kernel_size;
+pub const done = platform_impl.done;

@@ -6,7 +6,6 @@ const k_path = "kernel/";
 const p_path = k_path ++ "platform/";
 
 const s_sources = [_][]const u8 {
-    p_path ++ "boot.s",
     // p_path ++ "threading.s",
     // p_path ++ "irq_handlers.s",
     p_path ++ "idt_handlers.s",
@@ -15,6 +14,8 @@ const s_sources = [_][]const u8 {
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
+    const zig_arch = builtin.Arch.i386;
+    const georgios_arch = "x86_32";
     const target = std.build.Target {
         .Cross = std.build.CrossTarget{
             .arch = .i386,
@@ -24,7 +25,8 @@ pub fn build(b: *std.build.Builder) void {
     };
 
     // Kernel
-    const kernel = b.addExecutable("kernel.elf", k_path ++ "kernel.zig");
+    const kernel = b.addExecutable("kernel.elf",
+        k_path ++ "kernel_start_" ++ georgios_arch ++ ".zig");
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTheTarget(target);
     for (s_sources) |s_source| {
