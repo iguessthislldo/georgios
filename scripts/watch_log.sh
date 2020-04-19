@@ -1,4 +1,4 @@
 set -e
-cmd="tail --retry --follow"
 file="tmp/serial.log"
-$cmd $file || $cmd ../$file
+rm -f $file
+tail --retry --follow $file
