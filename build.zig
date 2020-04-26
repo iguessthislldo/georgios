@@ -14,6 +14,9 @@ const s_sources = [_][]const u8 {
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
+    const build_mode = b.standardReleaseOptions();
+
+    // TODO: Make Controllable
     const zig_arch = builtin.Arch.i386;
     const georgios_arch = "x86_32";
     const target = std.build.Target {
@@ -29,6 +32,7 @@ pub fn build(b: *std.build.Builder) void {
         k_path ++ "kernel_start_" ++ georgios_arch ++ ".zig");
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTheTarget(target);
+    kernel.setBuildMode(build_mode);
     for (s_sources) |s_source| {
         kernel.addAssemblyFile(s_source);
     }
