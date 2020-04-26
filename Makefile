@@ -28,7 +28,8 @@ $(KERNEL): build_georgios
 	@mkdir -p $(dir $@)
 	cp $(ZIG_OUTPUT)/kernel.elf $(KERNEL)
 	grub-file --is-x86-multiboot2 $(KERNEL)
-	objdump -S $(KERNEL) > tmp/annotated_kernel
+	nm --print-size --numeric-sort tmp/iso/boot/kernel.elf | grep -v '__' > tmp/annotated_kernel
+	objdump -S $(KERNEL) >> tmp/annotated_kernel
 
 $(ISO): $(KERNEL) $(GRUB_CFG)
 	cp $(GRUB_PREFIX)/share/grub/unicode.pf2 $(ISO_BOOT_DIR)/grub
