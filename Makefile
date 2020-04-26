@@ -10,11 +10,15 @@ GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
 
 DEBUGGER:=gdb
 
+multiboot_vga_request?=false
+
 all: $(ISO) hd.img
 
 .PHONY: build_georgios
 build_georgios:
-	zig build --cache-dir tmp/zig-cache
+	zig build \
+		--cache-dir tmp/zig-cache \
+		-Dmultiboot_vga_request=$(multiboot_vga_request) \
 
 .PHONY: test
 test:
@@ -50,4 +54,4 @@ qemu:
 
 .PHONY: clean
 clean:
-	rm -fr tmp $(ISO) hd.img
+	rm -fr tmp $(ISO) hd.img zig-cache

@@ -15,6 +15,9 @@ const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
     const build_mode = b.standardReleaseOptions();
+    const multiboot_vga_request = b.option(bool, "multiboot_vga_request",
+        \\Ask the bootloader to switch to a graphics mode for us.
+        ) orelse false;
 
     // TODO: Make Controllable
     const zig_arch = builtin.Arch.i386;
@@ -33,6 +36,8 @@ pub fn build(b: *std.build.Builder) void {
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTheTarget(target);
     kernel.setBuildMode(build_mode);
+    kernel.addBuildOption(bool,
+        "multiboot_vga_request", multiboot_vga_request);
     for (s_sources) |s_source| {
         kernel.addAssemblyFile(s_source);
     }

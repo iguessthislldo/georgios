@@ -16,9 +16,8 @@ const util = @import("util.zig");
 
 pub const panic = kernel.panic;
 
-// TODO: Be able to toggle without changing source
 // TODO: Be able to use VGA
-const request_vga_mode = false;
+const multiboot_vga_request = @import("build_options").multiboot_vga_request;
 
 // TODO: Maybe refactor when struct fields get custom alignment
 const Multiboot2Header = packed struct {
@@ -34,7 +33,7 @@ const Multiboot2Header = packed struct {
     const tag_flag_must_understand: u16 = 0;
     const tag_flag_optional: u16 = 1;
 
-    const VgaMode = if (request_vga_mode) packed struct {
+    const VgaMode = if (multiboot_vga_request) packed struct {
         const InfoRequestTag = packed struct {
             kind: u16 = tag_kind_info_request,
             flags: u16 = tag_flag_must_understand,

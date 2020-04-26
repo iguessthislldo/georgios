@@ -1,5 +1,6 @@
-tmp
-*.iso
-bochslog.txt
-bx_enh_dbg.ini
-hd.img
+/tmp
+/*.iso
+/bochslog.txt
+/bx_enh_dbg.ini
+/hd.img
+/zig-cache
