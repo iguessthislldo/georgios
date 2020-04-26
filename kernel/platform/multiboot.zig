@@ -74,11 +74,11 @@ fn process_mmap(kernel: *Kernel, tag_start: usize, tag_size: usize) void {
     const entries_end = tag_start + tag_size;
     var entry_ptr = tag_start + 16;
     while (entry_ptr < entries_end) : (entry_ptr += entry_size) {
-    if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
-        map.add_range(
-            @intCast(usize, @intToPtr(*u64, entry_ptr).*),
-            @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
-    }
+        if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
+            map.add_range(
+                @intCast(usize, @intToPtr(*u64, entry_ptr).*),
+                @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
+        }
     }
     kernel.memory.initialize(&map);
     // TODO: Save Multiboot Structure For Now
@@ -96,13 +96,19 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
     }
     const list = find == .End;
     if (list) {
-        print.string(
-            " - Multiboot Tags Available:\n" ++
-            "   - Tags:\n");
+        print.string(" - Multiboot Tags Available:\n");
     }
     var running = true;
     var tag_count: usize = 0;
     var tag_found = false;
+    if (list) {
+        const size = @intToPtr(*u32, i).*;
+        print.format(
+            \\   - Total Size: {} B ({} KiB)
+            \\   - Tags:
+            \\
+            , size, size >> 10);
+    }
     i += 8; // Move to first tag
     while (running) {
         const kind_raw = @intToPtr(*u32, i).*;
