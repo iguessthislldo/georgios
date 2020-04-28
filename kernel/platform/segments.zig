@@ -1,3 +1,7 @@
+// Code for managing up the Global Descriptor Table (GDT). We must define the
+// segment selectors required 80286 memory protection scheme and also the Task
+// State Segment (TSS) required for context switching.
+
 const builtin = @import("builtin");
 
 const print = @import("../print.zig");
@@ -12,9 +16,9 @@ const Access = packed struct {
     /// Readable Flag for Code Selectors, Writable Bit for Data Selectors
     rw: bool = true,
     /// Direction/Conforming Flag
-    /// For data selectors sets the direciton of segment growth. I don't think
+    /// For data selectors sets the direction of segment growth. I don't think
     /// I care about that. For code selectors true means code in this segment
-    /// can be excuted by lower rings.
+    /// can be executed by lower rings.
     dc: bool = false,
     /// True for Code Selectors, False for Data Selectors
     executable: bool = false,
