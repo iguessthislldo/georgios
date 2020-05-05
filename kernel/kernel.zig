@@ -29,9 +29,12 @@ pub const Kernel = struct {
     console: ?*io.File = null,
 
     pub fn initialize(self: *Kernel) !void {
+        // Get the Console Ready
         try self.file_io.initialize();
         self.console = try self.file_io.new_file();
         print.initialize(self.console);
+
+        // Do a Whole Bunch of Stuff
         try platform.initialize(self);
     }
 };

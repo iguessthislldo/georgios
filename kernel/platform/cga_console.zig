@@ -1,9 +1,11 @@
+// Interface to use the IBM PC Color Graphics Adapter (CGA)'s 80x25 text mode.
+
 const builtin = @import("builtin");
 
 const util = @import("util.zig");
 const out8 = util.out8;
 const in8 = util.in8;
-const kernel_offset = @import("platform.zig").kernel_offset;
+const platform = @import("platform.zig");
 
 pub const Color = enum {
     Black = 0,
@@ -46,7 +48,7 @@ var default_colors: u8 = combine_colors(Color.LightGrey, Color.Black);
 var buffer: [*]u16 = undefined;
 
 pub fn initialize() void {
-    buffer = @intToPtr([*]u16, kernel_offset(0xB8000));
+    buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
     fill_screen(' ');
     cursor(0, 0);
 }

@@ -1,11 +1,13 @@
 const builtin = @import("builtin");
 
+const paging = @import("paging.zig");
+const platform = @import("platform.zig");
+
 const print = @import("../print.zig");
-const Kernel = @import("../kernel.zig").Kernel;
-const RealMemoryMap = @import("../memory.zig").RealMemoryMap;
+const Range = @import("../memory.zig").Range;
 const util = @import("../util.zig");
 
-export var multiboot_info_pointer: u32 = 0;
+export var multiboot_info: []u32 = undefined;
 
 const Error = error {
     NullMultibootInfoPointer,
@@ -68,29 +70,11 @@ const TagKind = enum (u32) {
     }
 };
 
-fn process_mmap(kernel: *Kernel, tag_start: usize, tag_size: usize) void {
-    var map = RealMemoryMap{};
-    const entry_size = @intToPtr(*u32, tag_start + 8).*;
-    const entries_end = tag_start + tag_size;
-    var entry_ptr = tag_start + 16;
-    while (entry_ptr < entries_end) : (entry_ptr += entry_size) {
-        if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
-            map.add_range(
-                @intCast(usize, @intToPtr(*u64, entry_ptr).*),
-                @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*));
-        }
-    }
-    kernel.memory.initialize(&map);
-    // TODO: Save Multiboot Structure For Now
-    // TODO: Reclaim space of low_stack
-    // TODO: Unmap low kernel
-}
-
 /// Process part of the Multiboot information given by `find`. If `find` wasn't
 /// found, returns `Error.TagNotFound`. If `find` is `End`, then just list
 /// what's in the Multiboot header.
-pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
-    var i = @intCast(usize, multiboot_info_pointer);
+pub fn find_tag(find: TagKind) Error!Range {
+    var i = @intCast(usize, @ptrToInt(multiboot_info.ptr));
     if (i == 0) {
         return Error.NullMultibootInfoPointer;
     }
@@ -100,7 +84,6 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
     }
     var running = true;
     var tag_count: usize = 0;
-    var tag_found = false;
     if (list) {
         const size = @intToPtr(*u32, i).*;
         print.format(
@@ -122,16 +105,13 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
                     "Unkown");
         }
         if (kind_maybe) |kind| {
-            if (kind == find) {
-                tag_found = true;
-            }
             if (kind == .End) {
                 running = false;
             }
             switch (kind) {
                 .Mmap => {
                     if (find == .Mmap) {
-                        process_mmap(kernel, i, size);
+                        return Range{.start = i, .size = size};
                     }
                 },
                 else => {
@@ -145,8 +125,7 @@ pub fn process_tag(kernel: *Kernel, find: TagKind) Error!void {
     }
     if (list) {
         print.format("   - That was {} tags\n", tag_count);
+        return Range{.start = i, .size = 0};
     }
-    if (!tag_found) {
-        return Error.TagNotFound;
-    }
+    return Error.TagNotFound;
 }

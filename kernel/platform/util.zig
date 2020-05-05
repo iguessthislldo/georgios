@@ -41,3 +41,7 @@ pub fn halt() noreturn {
     asm volatile ("hlt");
     unreachable;
 }
+
+pub fn cr2() u32 {
+    return asm volatile ("mov %%cr2, %[rv]" : [rv] "={eax}" (-> u32));
+}

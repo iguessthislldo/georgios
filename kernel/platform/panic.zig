@@ -62,8 +62,8 @@ pub export fn show_panic_message() void {
         print.string(kernel.panic_message);
     } else {
         print.string(interrupts.get_name(index));
-        // Explain General Protection Fault Cause
-        if (panic_stack.idt_index == 13) {
+        if (index == 13) {
+            // Explain General Protection Fault Cause
             const table = @intCast(u2, (ec >> 1) & 3);
             const table_index = (ec >> 3) & 8191;
             print.format("{} Caused By {}[{}]",
@@ -81,6 +81,18 @@ pub export fn show_panic_message() void {
                 // Print Interrupt if IDT
                 print.format(" ({})", interrupts.get_name(table_index));
             }
+
+        } else if (index == 14) {
+            // Explain Page Fault Cause
+            print.format("\n    {}{} While {} {:a} while in {} Ring",
+                if ((ec & 1) > 0) "Page Protection Violation" else "Missing Page",
+                if ((ec & 8) > 0) " (Reserved bits set in directory entry)" else "",
+                if ((ec & 16) > 0)
+                    "Fetching an Instruction From"
+                else
+                    (if ((ec & 2) > 0) "Writing to" else "Reading From"),
+                util.cr2(),
+                if ((ec & 4) > 0) "User" else "Non-User");
         }
     }
 

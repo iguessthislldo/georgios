@@ -1,60 +1,71 @@
 ENTRY(kernel_start)
 
-_KERNEL_REAL_START = 1M;
+/* Basic constants */
+_REAL_START = 1M;
+_VIRTUAL_OFFSET = 3 << 30; /* 3 Gi */
+_FRAME_SIZE = 4K;
 
-Gi = 1M * 1K;
-_KERNEL_OFFSET = 3 * Gi;
+/* Derived Values */
+_VIRTUAL_START = _REAL_START + _VIRTUAL_OFFSET;
+_REAL_END = _VIRTUAL_END - _VIRTUAL_OFFSET;
+_KERNEL_SIZE = _REAL_END - _REAL_START;
+_VIRTUAL_LOW_START = _REAL_LOW_START + _VIRTUAL_OFFSET;
+_VIRTUAL_LOW_END = _REAL_LOW_END + _VIRTUAL_OFFSET;
 
-_KERNEL_VIRTUAL_START = _KERNEL_REAL_START + _KERNEL_OFFSET;
-_KERNEL_REAL_END = _KERNEL_VIRTUAL_END - _KERNEL_OFFSET;
-_KERNEL_SIZE = _KERNEL_REAL_END - _KERNEL_REAL_START;
-
-low_kernel_page_table = kernel_page_table - _KERNEL_OFFSET;
-low_page_directory = page_directory - _KERNEL_OFFSET;
-low_multiboot_info_pointer = multiboot_info_pointer - _KERNEL_OFFSET;
+/* Create some low versions of symbols we need */
+low_page_directory = page_directory - _VIRTUAL_OFFSET;
+low_multiboot_info = multiboot_info - _VIRTUAL_OFFSET;
+low_kernel_range_start_available =
+    kernel_range_start_available - _VIRTUAL_OFFSET;
+low_kernel_page_table_count = kernel_page_table_count - _VIRTUAL_OFFSET;
+low_kernel_page_tables = kernel_page_tables - _VIRTUAL_OFFSET;
 
 SECTIONS {
     /*
-     * Start of the "low" kernel, which is mapped to < _KERNEL_OFFSET
+     * Start of the "low" kernel, which is mapped to < _VIRTUAL_OFFSET.
+     * This memory will be recycled after it is no longer needed.
      */
-    . = _KERNEL_REAL_START;
+    . = _REAL_START;
+    _REAL_LOW_START = .;
 
-    .low_text ALIGN(4K) :
+    .low_text ALIGN(_FRAME_SIZE) :
     {
         *(.multiboot)
         *(.low_text)
     }
 
-    .low_bss ALIGN(4K) :
+    .low_bss ALIGN(_FRAME_SIZE) :
     {
         *(.low_bss)
     }
 
-    /*
-     * Start of the "high" kernel, which is mapped to >= _KERNEL_OFFSET
-     */
-    . += _KERNEL_OFFSET;
+    _REAL_LOW_END = .;
 
-    .text ALIGN(4K) : AT(ADDR(.text) - _KERNEL_OFFSET)
+    /*
+     * Start of the "high" kernel, which is mapped to >= _VIRTUAL_OFFSET.
+     */
+    . += _VIRTUAL_OFFSET;
+
+    .text ALIGN(_FRAME_SIZE) : AT(ADDR(.text) - _VIRTUAL_OFFSET)
     {
         *(.text)
     }
 
-    .rodata ALIGN(4K) : AT(ADDR(.rodata) - _KERNEL_OFFSET)
+    .rodata ALIGN(_FRAME_SIZE) : AT(ADDR(.rodata) - _VIRTUAL_OFFSET)
     {
         *(.rodata)
     }
 
-    .data ALIGN(4K) : AT(ADDR(.data) - _KERNEL_OFFSET)
+    .data ALIGN(_FRAME_SIZE) : AT(ADDR(.data) - _VIRTUAL_OFFSET)
     {
         *(.data)
     }
 
-    .bss ALIGN(4K) : AT(ADDR(.bss) - _KERNEL_OFFSET)
+    .bss ALIGN(_FRAME_SIZE) : AT(ADDR(.bss) - _VIRTUAL_OFFSET)
     {
         *(COMMON)
         *(.bss)
     }
 
-    _KERNEL_VIRTUAL_END = .;
+    _VIRTUAL_END = .;
 }

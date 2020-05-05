@@ -10,14 +10,19 @@
 // a subdirectory of a zig package. I'm fine with such an important file being
 // an exception for platforms.
 
+const builtin = @import("builtin");
+const build_options = @import("build_options");
+
 const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
 const util = @import("util.zig");
 
-pub const panic = kernel.panic;
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    kernel.panic(msg, trace);
+}
 
 // TODO: Be able to use VGA
-const multiboot_vga_request = @import("build_options").multiboot_vga_request;
+const multiboot_vga_request = build_options.multiboot_vga_request;
 
 // TODO: Maybe refactor when struct fields get custom alignment
 const Multiboot2Header = packed struct {
@@ -69,29 +74,37 @@ const Multiboot2Header = packed struct {
 export var multiboot2_header align(8) linksection(".multiboot") =
     Multiboot2Header{};
 
-/// Real Address of multiboot_info_pointer
-extern var low_multiboot_info_pointer: u32;
+/// Real Address of multiboot_info
+extern var low_multiboot_info: []u32;
+
+/// Real Address of kernel_range_start_available
+extern var low_kernel_range_start_available: u32;
+
+/// Real Address of kernel_page_table_count
+extern var low_kernel_page_table_count: u32;
+
+/// Real Address of kernel_page_tables
+extern var low_kernel_page_tables: []u32;
+
+/// Real Address of page_directory
+extern var low_page_directory: [util.Ki(1)]u32;
 
 /// Stack for kernel_main_wrapper(). This will be reclaimed later as a frame
 /// when the memory system is initialized.
-export var temp_stack: [util.Ki(4)]u8 align(util.Ki(4)) linksection(".low_bss") = undefined;
+pub export var temp_stack: [util.Ki(4)]u8
+    align(util.Ki(4)) linksection(".low_bss") = undefined;
 
 /// Stack for kernel_main()
 /// TODO: Allow this to grow later or what ever kernel stacks are supposed to
 /// do?
 export var stack: [util.Ki(16)]u8 align(16) linksection(".bss") = undefined;
 
-export var page_directory: [util.Ki(1)]u32 align(util.Ki(4)) linksection(".data") = undefined;
-extern var low_page_directory: [util.Ki(1)]u32;
-export var kernel_page_table: [util.Ki(1)]u32 align(util.Ki(4)) linksection(".bss") = undefined;
-extern var low_kernel_page_table: [util.Ki(1)]u32;
-
 /// Entry Point
 export nakedcc fn kernel_start() linksection(".low_text") noreturn {
     @setRuntimeSafety(false);
 
     // Save location of Multiboot2 Info
-    low_multiboot_info_pointer = asm volatile (
+    low_multiboot_info.ptr = asm volatile (
         // Check for the Multiboot2 magic value in eax. If we don't have it,
         // then is a fatal error, but we can't report it yet so set the pointer
         // to 0 and we will panic later when we first try to use it.
@@ -101,10 +114,17 @@ export nakedcc fn kernel_start() linksection(".low_text") noreturn {
         \\ mov $0, %%ebx
         \\ passed_multiboot_check:
     :
-        [rv] "={ebx}" (-> u32)
+        [rv] "={ebx}" (-> [*]u32)
     );
 
-    // Not using @newStackCall as that seems to not work when
+    // This just forces Zig to include multiboot2_header, which export isn't
+    // doing for some reason. TODO: Report as bug?
+    if (multiboot2_header.magic != 0xe85250d6) {
+        asm volatile ("nop");
+    }
+
+    // Not using @newStackCall as it seems to assume there is an existing
+    // stack.
     asm volatile (
         \\ mov %[temp_stack_end], %%esp
         \\ jmp kernel_main_wrapper
@@ -112,20 +132,23 @@ export nakedcc fn kernel_start() linksection(".low_text") noreturn {
         [temp_stack_end] "{eax}" (
             @ptrToInt(&temp_stack[0]) + temp_stack.len)
     );
-
-    // This should never be ran, forces Zig to include multiboot2_header, which
-    // export isn't doing for some reason.
-    // TODO: Report as bug?
-    if (multiboot2_header.magic != 0xe85250d6) {
-        unreachable;
-    }
-
     unreachable;
 }
 
-extern var _KERNEL_OFFSET: u32;
+extern var _VIRTUAL_OFFSET: u32;
+extern var _REAL_START: u32;
+extern var _REAL_END: u32;
+extern var _FRAME_SIZE: u32;
 
-/// Make it possible to run kernel_main in high virtual memory, then run it.
+fn align_down(value: u32, align_by: u32) linksection(".low_text") u32 {
+    return value & -%(align_by);
+}
+
+fn align_up(value: u32, align_by: u32) linksection(".low_text") u32 {
+    return align_down(value + align_by - 1, align_by);
+}
+
+/// Get setup for kernel_main
 export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     @setRuntimeSafety(false);
     // Otherwise Zig inserts a call to a high kernel linked internal function
@@ -133,24 +156,73 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     // good before kernel_main anyway.
     // TODO: Report as bug?
 
+    const offset = @ptrToInt(&_VIRTUAL_OFFSET);
+    const kernel_end = @ptrToInt(&_REAL_END);
+    const frame_size = @ptrToInt(&_FRAME_SIZE);
+    const after_kernel = align_up(kernel_end, frame_size);
+    const pages_per_table = 1 << 10;
+
+    // If we have it, copy Multiboot information because we could accidentally
+    // overwrite it. Otherwise continue to defer the error.
+    var page_tables_start: u32 = after_kernel;
+    if (@ptrToInt(low_multiboot_info.ptr) != 0) {
+        const multiboot_info_size = low_multiboot_info[0];
+        low_multiboot_info.len = multiboot_info_size >> 2;
+        var multiboot_info_dest = after_kernel;
+        for (low_multiboot_info) |*ptr, i| {
+            @intToPtr([*]u32, multiboot_info_dest)[i] = ptr.*;
+        }
+        low_multiboot_info.ptr = @intToPtr([*]u32, multiboot_info_dest + offset);
+        const multiboot_info_end = multiboot_info_dest + multiboot_info_size;
+        page_tables_start = align_up(multiboot_info_end, frame_size);
+    }
+
+    // Create Page Tables for First 1MiB + Kernel + Multiboot + Page Tables
+    // This is an iterative process for now. Start with 1 table, see if that's
+    // enough. If not add another table.
+    var frame_count: usize = (page_tables_start / frame_size) + 1;
+    while (true) {
+        low_kernel_page_table_count =
+            align_up(frame_count, pages_per_table) / pages_per_table;
+        if (frame_count <= low_kernel_page_table_count * pages_per_table) {
+            break;
+        }
+        frame_count += 1;
+    }
+    const low_page_tables_end = page_tables_start +
+        low_kernel_page_table_count * frame_size;
+
+    // Set the start of what the memory system can work with.
+    low_kernel_range_start_available = low_page_tables_end;
+
+    // Get Slice for the Intitial Page Tables
+    low_kernel_page_tables.ptr =
+        @intToPtr([*]u32, @intCast(usize, page_tables_start));
+    low_kernel_page_tables.len = pages_per_table * low_kernel_page_table_count;
+
     // Initialize Paging Structures to Zeros
     for (low_page_directory[0..]) |*ptr| {
         ptr.* = 0;
     }
-    for (low_kernel_page_table[0..]) |*ptr| {
+    for (low_kernel_page_tables[0..]) |*ptr| {
         ptr.* = 0;
     }
 
     // Virtually Map Kernel to the Real Location and the Kernel Offset
-    // TODO: Do so dynamically based on the size of the kernel
-    const offset = @ptrToInt(&_KERNEL_OFFSET);
-    const kernel_entry =
-        (@ptrToInt(&low_kernel_page_table[0]) & 0xFFFFF000) | 1;
-    low_page_directory[0] = kernel_entry;
-    low_page_directory[offset >> 22] = kernel_entry; // Div by 4MiB
-    for (low_kernel_page_table[0..]) |*ptr, i| {
+    var table_i: usize = 0;
+    while (table_i < low_kernel_page_table_count) {
+        const table_start = &low_kernel_page_tables[table_i * util.Ki(1)];
+        const entry = (@ptrToInt(table_start) & 0xFFFFF000) | 1;
+        low_page_directory[table_i] = entry;
+        low_page_directory[(offset >> 22) + table_i] = entry; // Div by 4MiB
+        table_i += 1;
+    }
+    for (low_kernel_page_tables[0..frame_count]) |*ptr, i| {
         ptr.* = i * util.Ki(4) + 1;
     }
+    // Translate for high mode
+    low_kernel_page_tables.ptr =
+        @intToPtr([*]u32, @ptrToInt(low_kernel_page_tables.ptr) + offset);
 
     // Use that Paging Scheme
     asm volatile (
@@ -162,16 +234,12 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
         \\ mov %%cr0, %%eax
         \\ or $0x80000001, %%eax
         \\ mov %%eax, %%cr0
-
-        \\ // Jump to Higher Kernel
-        \\ movl $higher_kernel, %%eax
-        \\ jmp * %%eax
-        \\ higher_kernel:
     :::
         "eax"
     );
 
-    // Start the main platform agnostic function
+    // Start the generic main function, jumping to high memory kernel at the
+    // same time.
     @newStackCall(stack[0..], kernel_main);
     unreachable;
 }

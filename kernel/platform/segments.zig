@@ -9,7 +9,7 @@ const kutil = @import("../util.zig");
 const zero_init = kutil.zero_init;
 
 const platform = @import("platform.zig");
-const kernel_offset = platform.kernel_offset;
+const kernel_to_virtual = platform.kernel_to_virtual;
 
 const Access = packed struct {
     accessed: bool = false,
@@ -151,9 +151,9 @@ pub fn initialize() void {
         Access{.ring_level = 0, .executable = true}, flags);
     kernel_data_selector = set("Kernel Data", 2, 0, 0xFFFFFFFF,
         Access{.ring_level = 0}, flags);
-    user_code_selector = set("User Code", 3, 0, kernel_offset(0) - 1,
+    user_code_selector = set("User Code", 3, 0, kernel_to_virtual(0) - 1,
         Access{.ring_level = 3, .executable = true}, flags);
-    user_data_selector = set("User Data", 4, 0, kernel_offset(0) - 1,
+    user_data_selector = set("User Data", 4, 0, kernel_to_virtual(0) - 1,
         Access{.ring_level = 3}, flags);
     set_null_entry(5);
 
