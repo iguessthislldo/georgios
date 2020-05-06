@@ -10,6 +10,7 @@ pub const interrupts = @import("interrupts.zig");
 pub const multiboot = @import("multiboot.zig");
 pub const pmemory = @import("memory.zig");
 pub const putil = @import("util.zig");
+pub const pci = @import("pci.zig");
 
 pub const panic = @import("panic.zig").panic;
 pub const frame_size = pmemory.frame_size;
@@ -98,4 +99,7 @@ pub fn initialize(kernel: *Kernel) !void {
     const mmap_tag = try multiboot.find_tag(.Mmap);
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
     kernel.memory.initialize(&real_memory_map);
+
+    // Setup Devices
+    pci.find_pci_devices();
 }
