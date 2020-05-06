@@ -18,6 +18,9 @@ pub fn build(b: *std.build.Builder) void {
     const multiboot_vga_request = b.option(bool, "multiboot_vga_request",
         \\Ask the bootloader to switch to a graphics mode for us.
         ) orelse false;
+    const debug_log = b.option(bool, "debug_log",
+        \\Print debug information by default
+        ) orelse true;
 
     // TODO: Make Controllable
     const zig_arch = builtin.Arch.i386;
@@ -38,6 +41,7 @@ pub fn build(b: *std.build.Builder) void {
     kernel.setBuildMode(build_mode);
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
+    kernel.addBuildOption(bool, "debug_log", debug_log);
     for (s_sources) |s_source| {
         kernel.addAssemblyFile(s_source);
     }

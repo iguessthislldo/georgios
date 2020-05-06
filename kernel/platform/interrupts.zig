@@ -92,7 +92,7 @@ fn load() void {
 fn set(name: []const u8, index: u8, handler: extern fn() void, selector: u16, flags: u8) void {
     const offset: u32 = @ptrToInt(handler);
     names[index] = name;
-    print.format(
+    print.debug_format(
         "   - [{}]: \"{}\"\n" ++
         "     - selector: {:x} address: {:a} flags: {:x}\n",
         index, name, selector, offset,  flags);
@@ -112,7 +112,7 @@ pub fn initialize() void {
     table_pointer.base = @ptrToInt(&table);
     const kernel_code_selector = @import("segments.zig").kernel_code_selector;
 
-    print.string(" - Filling the Interrupt Descriptor Table (IDT)\n");
+    print.debug_string(" - Filling the Interrupt Descriptor Table (IDT)\n");
 
     set("Divide by Zero Fault",
         0,  ih_0,  kernel_code_selector, kernel_flags);

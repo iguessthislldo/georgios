@@ -8,9 +8,11 @@ const fprint = @import("fprint.zig");
 const io = @import("io.zig");
 
 var console_file: ?*io.File = null;
+pub var debug_print = false;
 
-pub fn initialize(file: ?*io.File) void {
+pub fn initialize(file: ?*io.File, debug: bool) void {
     console_file = file;
+    debug_print = debug;
 }
 
 pub fn char(ch: u8) void {
@@ -146,3 +148,93 @@ pub fn data(ptr: usize, size: usize) void {
 // print.format("Strings {} {}\n", "Hello1", c"Hello2");
 // print.format("{{These braces are escaped}}\n");
 // print.format("{:x}\n", x);
+
+pub fn debug_char(ch: u8) void {
+    if (debug_print) {
+        char(ch);
+    }
+}
+
+pub fn debug_nstring(str: [*]const u8, size: usize) void {
+    if (debug_print) {
+        nstring(str, size);
+    }
+}
+
+pub fn debug_string(str: []const u8) void {
+    if (debug_print) {
+        string(str);
+    }
+}
+
+pub fn debug_cstring(str: [*]const u8) void {
+    if (debug_print) {
+        cstring(str);
+    }
+}
+
+pub fn debug_stripped_string(str: [*]const u8, size: usize) void {
+    if (debug_print) {
+        stripped_string(str);
+    }
+}
+
+pub fn debug_uint(value: usize) void {
+    if (debug_print) {
+        uint(value);
+    }
+}
+
+pub fn debug_int(value: isize) void {
+    if (debug_print) {
+        int(value);
+    }
+}
+
+pub fn debug_int_sign(value: usize, show_positive: bool) void {
+    if (debug_print) {
+        int_sign(value, show_positive);
+    }
+}
+
+pub fn debug_hex(value: usize) void {
+    if (debug_print) {
+        hex(value);
+    }
+}
+
+pub fn debug_address(value: usize) void {
+    if (debug_print) {
+        address(value);
+    }
+}
+
+pub fn debug_byte(value: u8) void {
+    if (debug_print) {
+        byte(value);
+    }
+}
+
+pub fn debug_boolean(value: bool) void {
+    if (debug_print) {
+        boolean(value);
+    }
+}
+
+pub fn debug_any(value: var) void {
+    if (debug_print) {
+        any(value);
+    }
+}
+
+pub fn debug_format(comptime fmtstr: []const u8, args: ...) void {
+    if (debug_print) {
+        format(fmtstr, args);
+    }
+}
+
+pub fn debug_data(ptr: usize, size: usize) void {
+    if (debug_print) {
+        data(ptr, size);
+    }
+}

@@ -89,7 +89,9 @@ pub fn initialize(kernel: *Kernel) !void {
     interrupts.initialize();
 
     // List Multiboot Tags
-    _ = try multiboot.find_tag(.End);
+    if (print.debug_print) {
+        _ = try multiboot.find_tag(.End);
+    }
 
     // Setup Global Memory Management
     var real_memory_map = kmemory.RealMemoryMap{};

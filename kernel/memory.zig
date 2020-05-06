@@ -68,7 +68,7 @@ pub const Memory = struct {
 
     /// To be called by the platform after it can give "map".
     pub fn initialize(self: *Memory, map: *RealMemoryMap) void {
-        print.format(
+        print.debug_format(
             \\ - Initializing Memory System
             \\   - Start of kernel:
             \\      - Real:    {:a}
@@ -93,9 +93,9 @@ pub const Memory = struct {
         if (map.invalid()) {
             @panic("RealMemoryMap is invalid!");
         }
-        print.string("   - Frame Groups:\n");
+        print.debug_string("   - Frame Groups:\n");
         for (map.frame_groups[0..map.frame_group_count]) |*i| {
-            print.format("     - {} Frames starting at {:a} \n",
+            print.debug_format("     - {} Frames starting at {:a} \n",
                 i.frame_count, i.start);
         }
 
@@ -106,7 +106,8 @@ pub const Memory = struct {
         // List Memory
         const total_memory: usize = map.total_frame_count * platform.frame_size;
         print.format(
-            "   - Total Available Memory: {} B ({} KiB/{} MiB/{} GiB)\n",
+            "{}Total Available Memory: {} B ({} KiB/{} MiB/{} GiB)\n",
+            if (print.debug_print) "   - " else "",
             total_memory,
             total_memory >> 10,
             total_memory >> 20,

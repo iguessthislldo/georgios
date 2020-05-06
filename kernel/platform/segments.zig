@@ -59,23 +59,23 @@ pub fn get_name(index: u32) []const u8 {
 fn set(name: []const u8, index: u8, base: u32, limit: u32,
         access: Access, flags: Flags) u16 {
     names[index] = name;
-    print.format("   - [{}]: \"{}\" ", index, name);
+    print.debug_format("   - [{}]: \"{}\" ", index, name);
     if (access.valid) {
-        print.format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ",
+        print.debug_format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ",
             base, limit,
             if (flags.granularity) "b" else "pages",
             if (flags.pm) "32b" else "16b",
             @intCast(usize, access.ring_level));
         if (access.no_system_segment) {
             if (access.executable) {
-                print.format(
+                print.debug_format(
                     "Code Segment\n" ++
                     "     - Can{} be read by lower rings.\n" ++
                     "     - Can{} be executed by lower rings\n",
                     if (access.rw) "" else " NOT",
                     if (access.dc) "" else " NOT");
             } else {
-                print.format(
+                print.debug_format(
                     "Data Segment\n" ++
                     "     - Can{} be written to by lower rings.\n" ++
                     "     - Grows {}.\n",
@@ -83,13 +83,13 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
                     if (access.dc) "down" else "up");
             }
         } else {
-            print.string("System Segment\n");
+            print.debug_string("System Segment\n");
         }
         if (access.accessed) {
-            print.string("     - Accessed\n");
+            print.debug_string("     - Accessed\n");
         }
     } else {
-        print.char('\n');
+        print.debug_char('\n');
     }
     table[index].limit_0_15 = @intCast(u16, limit & 0xffff);
     table[index].base_0_15 = @intCast(u16, base & 0xffff);
@@ -144,7 +144,7 @@ pub export var user_data_selector: u16 = 0;
 pub export var tss_selector: u16 = 0;
 
 pub fn initialize() void {
-    print.string(" - Filling the Global Descriptor Table (GDT)\n");
+    print.debug_string(" - Filling the Global Descriptor Table (GDT)\n");
     set_null_entry(0);
     const flags = Flags{};
     kernel_code_selector = set("Kernel Code", 1, 0, 0xFFFFFFFF,

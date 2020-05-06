@@ -11,6 +11,7 @@ GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
 DEBUGGER:=gdb
 
 multiboot_vga_request?=false
+debug_log?=true
 
 all: $(ISO) hd.img
 
@@ -19,6 +20,7 @@ build_georgios:
 	zig build \
 		--cache-dir tmp/zig-cache \
 		-Dmultiboot_vga_request=$(multiboot_vga_request) \
+		-Ddebug_log=$(debug_log) \
 
 .PHONY: test
 test:

@@ -80,13 +80,13 @@ pub fn find_tag(find: TagKind) Error!Range {
     }
     const list = find == .End;
     if (list) {
-        print.string(" - Multiboot Tags Available:\n");
+        print.debug_string(" - Multiboot Tags Available:\n");
     }
     var running = true;
     var tag_count: usize = 0;
     if (list) {
         const size = @intToPtr(*u32, i).*;
-        print.format(
+        print.debug_format(
             \\   - Total Size: {} B ({} KiB)
             \\   - Tags:
             \\
@@ -98,7 +98,7 @@ pub fn find_tag(find: TagKind) Error!Range {
         const size = @intToPtr(*u32, i + 4).*;
         const kind_maybe = TagKind.from_u32(kind_raw);
         if (list) {
-            print.format("     - {}\n",
+            print.debug_format("     - {}\n",
                 if (kind_maybe) |kind|
                     kind.to_string()
                 else
@@ -124,7 +124,7 @@ pub fn find_tag(find: TagKind) Error!Range {
         tag_count += 1;
     }
     if (list) {
-        print.format("   - That was {} tags\n", tag_count);
+        print.debug_format("   - That was {} tags\n", tag_count);
         return Range{.start = i, .size = 0};
     }
     return Error.TagNotFound;

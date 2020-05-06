@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 pub const platform = @import("platform.zig");
 pub const print = @import("print.zig");
@@ -32,7 +33,7 @@ pub const Kernel = struct {
         // Get the Console Ready
         try self.file_io.initialize();
         self.console = try self.file_io.new_file();
-        print.initialize(self.console);
+        print.initialize(self.console, build_options.debug_log);
 
         // Do a Whole Bunch of Stuff
         try platform.initialize(self);
