@@ -108,15 +108,8 @@ pub fn find_tag(find: TagKind) Error!Range {
             if (kind == .End) {
                 running = false;
             }
-            switch (kind) {
-                .Mmap => {
-                    if (find == .Mmap) {
-                        return Range{.start = i, .size = size};
-                    }
-                },
-                else => {
-                    // Ignored
-                },
+            if (find == kind) {
+                return Range{.start = i, .size = size};
             }
         }
         // Move to next tag
