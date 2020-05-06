@@ -83,13 +83,13 @@ pub inline fn read_config16(bus: Bus, device: Device, function: Function,
     putil.out32(0x0CF8, @bitCast(u32, config));
 
     return @intCast(u16, (putil.in32(0x0CFC) >>
-        @intCast(u5, (offset & 2) * 8) & 0xFFFF));
+        @intCast(u5, (offset & 2) * 8) & 0xFFFF) & 0xFFFF);
 }
 
 pub inline fn read_config8(bus: Bus, device: Device, function: Function,
         offset: Offset) u8 {
-    const x: u8 = @intCast(u8, read_config16(
-        bus, device, function, offset) >> @intCast(u4, offset * 8));
+    const x: u8 = @intCast(u8, (read_config16(
+        bus, device, function, offset) >> @intCast(u4, (offset * 8) & 0xF)) & 0xFFFF);
     print.debug_format("{}\n", x);
     return x;
 }
