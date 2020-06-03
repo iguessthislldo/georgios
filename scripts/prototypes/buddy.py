@@ -23,22 +23,24 @@ def pot(value):
     return value
 
 class Memory:
-    def __init__(self, size):
+    def __init__(self, size, start = 0):
         self.size = size
+        self.start = start
+        self.end = start + size
         self.contents = [None] * size
 
     def get(self, address):
-        if address >= self.size:
+        if address >= self.end:
             raise ValueError("Tried to get invalid address " + str(address))
-        value = self.contents[address]
+        value = self.contents[address - self.start]
         if value is None:
             raise ValueError("Tried to get uninitialized address " + str(address))
         return value
 
     def set(self, address, value):
-        if address >= self.size:
+        if address >= self.end:
             raise ValueError("Tried to set invalid address " + str(address))
-        self.contents[address] = value
+        self.contents[address - self.start] = value
 
     def __repr__(self):
         rv = []
@@ -55,9 +57,9 @@ nil=(None,)
 
 class BlockStatus(Enum):
     invalid = 0
-    split = 2
-    free = 3
-    used = 4
+    split = 1
+    free = 2
+    used = 3
 
     def __repr__(self):
         if self == self.invalid:
@@ -73,7 +75,7 @@ class BlockStatus(Enum):
 # Example
 #
 # size = 32
-# minsize = 4
+# min_size = 4
 #
 # Index by Level
 #
@@ -111,14 +113,14 @@ class Buddy:
     def __init__(self, start, size):
         self.start = start
         self.size = size
-        self.minsize = 4
+        self.min_size = 4
 
-        self.max_level_block_count = self.size // self.minsize
+        self.max_level_block_count = self.size // self.min_size
         self.level_count = int(math.log2(self.max_level_block_count)) + 1
         self.unique_block_count = (1 << self.level_count) - 1
 
         # Simulated Memory Range to Control
-        self.memory = Memory(size)
+        self.memory = Memory(size, start)
 
         # Intitialze Free List
         self.free_lists = Memory(self.level_count + 1)
@@ -162,13 +164,10 @@ class Buddy:
     def set_next_pointer(self, address, value):
         return self.set_free_list_pointer(address + self.next_offset, value)
 
-    def size_of_level(self, level):
+    def level_to_block_size(self, level):
         return self.size // (1 << level)
 
-    def size_of_block(self, level):
-        return self.size // self.size_of_level(level)
-
-    def size_to_level(self, size):
+    def block_size_to_level(self, size):
         return self.level_count + 1 - int(math.log2(size))
 
     @staticmethod
@@ -185,10 +184,10 @@ class Buddy:
         return unique_id
 
     def get_index(self, level, address):
-        return (address - self.start) // self.size_of_level(level)
+        return (address - self.start) // self.level_to_block_size(level)
 
     def get_pointer(self, level, index):
-        return index * self.size_of_level(level) + self.start
+        return index * self.level_to_block_size(level) + self.start
 
     @staticmethod
     def get_buddy_index(index):
@@ -237,7 +236,7 @@ class Buddy:
         self.block_statuses[self.unique_id(new_level, buddy_index)] = BlockStatus.free
 
     def alloc(self, size):
-        if size < self.minsize:
+        if size < self.min_size:
             raise ValueError(
                 "Asked for size smaller than what the alloctor supports: " +
                 size)
@@ -247,7 +246,7 @@ class Buddy:
                 size)
 
         target_size = pot(size)
-        target_level = self.size_to_level(target_size)
+        target_level = self.block_size_to_level(target_size)
         print(' - alloc(', size, '), Target Size:', target_size, 'Target Level:', target_level)
 
         # Figure out how many (if any) levels we need to split a block in to
@@ -280,7 +279,7 @@ class Buddy:
         self.block_statuses[unique_id] = BlockStatus.used
 
         print(" - Got", address)
-        print(repr(b))
+        print(repr(self))
         return address
 
     def merge(self, level, index):
@@ -297,7 +296,7 @@ class Buddy:
         this_unique_id = self.get_unique_id(level, index, BlockStatus.free)
         buddy_unique_id = self.get_unique_id(level, buddy_index, BlockStatus.free)
         new_unique_id = self.get_unique_id(new_level, new_index, BlockStatus.split)
-        
+
         # Remove pointers to the old blocks
         this_ptr = self.get_pointer(level, index)
         buddy_ptr = self.get_pointer(level, buddy_index)
@@ -359,68 +358,85 @@ class Buddy:
             repr(self.memory),
             repr(self.block_statuses))
 
-try:
-    b = Buddy(0, 32)
-    print(repr(b))
-
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-    b.alloc(4)
-
+def buddy_test(start):
     try:
+        b = Buddy(start, 32)
+        print(repr(b))
+
         b.alloc(4)
-        assert(False)
-    except OutOfMemory:
-        pass
+        b.alloc(4)
+        b.alloc(4)
+        b.alloc(4)
+        b.alloc(4)
+        b.alloc(4)
+        b.alloc(4)
+        b.alloc(4)
 
-except:
-    print('State At Error:', repr(b))
-    raise
+        try:
+            b.alloc(4)
+            assert(False)
+        except OutOfMemory:
+            pass
 
-try:
-    b = Buddy(0, 32)
-    print(repr(b))
+    except:
+        print('State At Error:', repr(b))
+        raise
 
-    p = b.alloc(4)
-    b.free(p)
-
-except:
-    print('State At Error:', repr(b))
-    raise
-
-try:
-    b = Buddy(0, 32)
-    print(repr(b))
-
-    p1 = b.alloc(8)
-    p2 = b.alloc(4)
-    p3 = b.alloc(16)
-    b.free(p2)
-    p4 = b.alloc(8)
-    b.free(p3)
-    b.free(p4)
-    b.free(p1)
-
-except:
-    print('State At Error:', repr(b))
-    raise
-
-try:
-    b = Buddy(0, 32)
-    print(repr(b))
-
-    p = b.alloc(16)
-    b.free(p)
     try:
+        b = Buddy(start, 32)
+        print(repr(b))
+
+        p = b.alloc(4)
         b.free(p)
-        assert(False)
-    except InvalidPointer:
-        print('Caught Expected InvalidPointer')
+
+    except:
+        print('State At Error:', repr(b))
+        raise
+
+    try:
+        b = Buddy(start, 32)
+        print(repr(b))
+
+        p1 = b.alloc(8)
+        p2 = b.alloc(4)
+        p3 = b.alloc(16)
+        b.free(p2)
+        p4 = b.alloc(8)
+        b.free(p3)
+        b.free(p4)
+        b.free(p1)
+
+    except:
+        print('State At Error:', repr(b))
+        raise
+
+    try:
+        b = Buddy(start, 32)
+        print(repr(b))
+
+        p = b.alloc(16)
+        b.free(p)
+        try:
+            b.free(p)
+            assert(False)
+        except InvalidPointer:
+            print('Caught Expected InvalidPointer')
+
+    except:
+        print('State At Error:', repr(b))
+        raise
+
+buddy_test(0)
+buddy_test(1)
+buddy_test(7)
+buddy_test(8)
+buddy_test(127)
+
+try:
+    b = Buddy(0, 128)
+    print(repr(b))
+
+    b.alloc(64)
 
 except:
     print('State At Error:', repr(b))
