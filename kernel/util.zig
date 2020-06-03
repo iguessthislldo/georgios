@@ -1,26 +1,30 @@
 const builtin = @import("builtin");
 
+pub const Error = error {
+    OutOfBounds,
+};
+
 pub inline fn Ki(x: usize) usize {
-    return x * (1 << 10);
+    return x << 10;
 }
 
 pub inline fn Mi(x: usize) usize {
-    return x * (1 << 20);
+    return x << 20;
 }
 
 pub inline fn Gi(x: usize) usize {
-    return x * (1 << 30);
+    return x << 30;
 }
 
 pub inline fn Ti(x: usize) usize {
-    return x * (1 << 40);
+    return x << 40;
 }
 
-pub inline fn align_down(value: usize, align_by: usize) usize {
-    return value & -%(align_by);
+pub fn align_down(value: usize, align_by: usize) usize {
+    return value & (~align_by + 1);
 }
 
-pub inline fn align_up(value: usize, align_by: usize) usize {
+pub fn align_up(value: usize, align_by: usize) usize {
     return align_down(value + align_by - 1, align_by);
 }
 
@@ -240,4 +244,161 @@ test "select_nibble" {
     test_select_nibble(u16, 0x1234, 1, 0x3);
     test_select_nibble(u16, 0x1234, 2, 0x2);
     test_select_nibble(u16, 0x1234, 3, 0x1);
+}
+
+pub fn PackedArray(comptime T: type, count: usize) type {
+    comptime const Traits = @typeInfo(T);
+    comptime const T2 = switch (Traits) {
+        builtin.TypeId.Int => T,
+        builtin.TypeId.Bool => u1,
+        builtin.TypeId.Enum => |enum_type| enum_type.tag_type,
+        else => @compileError("Invalid Type"),
+    };
+
+    return struct {
+        const Self = @This();
+
+        const len = count;
+        const Type = T;
+        const InnerType = T2;
+        const type_bit_size = int_bit_size(InnerType);
+        const Word = usize;
+        const word_bit_size = int_bit_size(Word);
+        const WordShiftType = IntLog2Type(Word);
+        const values_per_word = word_bit_size / type_bit_size;
+        const word_count =
+            align_up(count * type_bit_size, word_bit_size) / word_bit_size;
+        const mask: Word = (1 << type_bit_size) - 1;
+
+        contents: [word_count]Word = undefined,
+
+        fn get(self: *const Self, index: usize) Error!Type {
+            if (index >= len) {
+                return Error.OutOfBounds;
+            }
+            const array_index = index / values_per_word;
+            const shift = @intCast(WordShiftType,
+                (index % values_per_word) * type_bit_size);
+            return @bitCast(Type, @intCast(InnerType,
+                (self.contents[array_index] >> shift) & mask));
+        }
+
+        fn set(self: *Self, index: usize, value: Type) Error!void {
+            if (index >= len) {
+                return Error.OutOfBounds;
+            }
+            const array_index = index / values_per_word;
+            const shift = @intCast(WordShiftType,
+                (index % values_per_word) * type_bit_size);
+            self.contents[array_index] =
+                (self.contents[array_index] & ~(mask << shift)) |
+                (@intCast(Word, @bitCast(InnerType, value)) << shift);
+        }
+
+        fn reset(self: *Self) void {
+            for (self.contents[0..]) |*ptr| {
+                ptr.* = 0;
+            }
+        }
+    };
+}
+
+fn test_PackedBoolArray(comptime size: usize) !void {
+    const std = @import("std");
+
+    var pa: PackedArray(bool, size) = undefined;
+    pa.reset();
+
+    // Make sure get works
+    std.testing.expectEqual(false, try pa.get(0));
+    std.testing.expectEqual(false, try pa.get(1));
+    std.testing.expectEqual(false, try pa.get(size - 3));
+    std.testing.expectEqual(false, try pa.get(size - 2));
+    std.testing.expectEqual(false, try pa.get(size - 1));
+
+    // Set and unset the first bit and check it
+    try pa.set(0, true);
+    std.testing.expectEqual(true, try pa.get(0));
+    try pa.set(0, false);
+    std.testing.expectEqual(false, try pa.get(0));
+
+    // Set a spot near the end
+    try pa.set(size - 2, true);
+    std.testing.expectEqual(false, try pa.get(0));
+    std.testing.expectEqual(false, try pa.get(1));
+    std.testing.expectEqual(false, try pa.get(size - 3));
+    std.testing.expectEqual(true, try pa.get(size - 2));
+    std.testing.expectEqual(false, try pa.get(size - 1));
+
+    // Invalid Operations
+    std.testing.expectError(Error.OutOfBounds, pa.get(size));
+    std.testing.expectError(Error.OutOfBounds, pa.get(size + 100));
+    std.testing.expectError(Error.OutOfBounds, pa.set(size, true));
+    std.testing.expectError(Error.OutOfBounds, pa.set(size + 100, true));
+}
+
+test "PackedArray" {
+    const std = @import("std");
+
+    try test_PackedBoolArray(5);
+    try test_PackedBoolArray(8);
+    try test_PackedBoolArray(13);
+    try test_PackedBoolArray(400);
+
+    // Int Type
+    {
+        var pa: PackedArray(u7, 9) = undefined;
+        pa.reset();
+        try pa.set(0, 13);
+        std.testing.expectEqual(u7(13), try pa.get(0));
+        try pa.set(1, 12);
+        std.testing.expectEqual(u7(12), try pa.get(1));
+        std.testing.expectEqual(u7(13), try pa.get(0));
+        try pa.set(8, 47);
+        std.testing.expectEqual(u7(47), try pa.get(8));
+    }
+
+    // Enum Type
+    {
+        const Type = enum (u2) {
+            a,
+            b,
+            c,
+            d,
+        };
+        var pa: PackedArray(Type, 9) = undefined;
+        pa.reset();
+        try pa.set(0, .a);
+        std.testing.expectEqual(Type.a, try pa.get(0));
+        try pa.set(1, .b);
+        std.testing.expectEqual(Type.b, try pa.get(1));
+        std.testing.expectEqual(Type.a, try pa.get(0));
+        try pa.set(8, .d);
+        std.testing.expectEqual(Type.d, try pa.get(8));
+    }
+}
+
+pub fn pow2_round_up(comptime Type: type, value: Type) Type {
+    if (value < 3) {
+        return value;
+    } else {
+        return @intCast(Type, 1) <<
+            @intCast(IntLog2Type(Type), (int_log2(Type, value - 1) + 1));
+    }
+}
+
+test "pow2_round_up" {
+    const std = @import("std");
+    std.testing.expectEqual(u8(0), pow2_round_up(u8, 0));
+    std.testing.expectEqual(u8(1), pow2_round_up(u8, 1));
+    std.testing.expectEqual(u8(2), pow2_round_up(u8, 2));
+    std.testing.expectEqual(u8(4), pow2_round_up(u8, 3));
+    std.testing.expectEqual(u8(4), pow2_round_up(u8, 4));
+    std.testing.expectEqual(u8(8), pow2_round_up(u8, 5));
+    std.testing.expectEqual(u8(8), pow2_round_up(u8, 6));
+    std.testing.expectEqual(u8(8), pow2_round_up(u8, 7));
+    std.testing.expectEqual(u8(8), pow2_round_up(u8, 8));
+    std.testing.expectEqual(u8(16), pow2_round_up(u8, 9));
+    std.testing.expectEqual(u8(16), pow2_round_up(u8, 16));
+    std.testing.expectEqual(u8(32), pow2_round_up(u8, 17));
 }
