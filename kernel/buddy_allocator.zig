@@ -5,10 +5,10 @@
 const util = @import("util.zig");
 
 const BlockStatus = packed enum(u2) {
-    invalid,
-    split,
-    free,
-    used,
+    Invalid = 0,
+    Split,
+    Free,
+    Used,
 };
 
 const Error = error {
@@ -36,8 +36,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
         const max_level_block_count = max_size / min_size;
         const level_count: usize = util.int_log2(usize, max_level_block_count) + 1;
-        const UsizeShift = util.IntLog2Type(usize);
-        const unique_block_count: usize = (1 << @truncate(UsizeShift, level_count)) - 1;
+        const unique_block_count: usize = level_block_count(level_count);
 
         const FreeBlocks = struct {
             lists: [level_count]?FreeBlock.Ptr = undefined,
@@ -106,11 +105,15 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             self.start = start;
             self.free_blocks.initialize(start);
             self.block_statuses.reset();
-            self.block_statuses.set(0, .free) catch unreachable;
+            self.block_statuses.set(0, .Free) catch unreachable;
+        }
+
+        fn level_block_count(level: usize) usize {
+            return (usize(1) << @truncate(util.UsizeLog2Type, level)) - 1;
         }
 
         fn level_to_block_size(level: usize) usize {
-            return max_size / (usize(1) << @truncate(UsizeShift, level));
+            return max_size >> @truncate(util.UsizeLog2Type, level);
         }
 
         fn block_size_to_level(size: usize) usize {
@@ -118,7 +121,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         fn unique_id(level: usize, index: usize) usize {
-            return (usize(1) << @truncate(UsizeShift, level)) + index - 1;
+            return level_block_count(level) + index;
         }
 
         fn get_index(self: *const Self, level: usize,
@@ -133,7 +136,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         fn get_buddy_index(index: usize) usize {
-            return if (index % 2) (index - 1) else (index + 1);
+            return if ((index % 2) == 1) (index - 1) else (index + 1);
         }
 
         fn assert_unique_id(self: *Self, level: usize, index: usize,
@@ -148,7 +151,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
         fn split(self: *Self, level: usize, index: usize) Error!void {
             const this_unique_id = try self.assert_unique_id(
-                level, index, .free);
+                level, index, .Free);
 
             const this_ptr = self.get_pointer(level, index);
             const new_level: usize = level + 1;
@@ -162,11 +165,11 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             try self.free_blocks.push(new_level, this_ptr);
 
             // Update Statuses
-            try self.block_statuses.set(this_unique_id, BlockStatus.split);
+            try self.block_statuses.set(this_unique_id, BlockStatus.Split);
             try self.block_statuses.set(
-                unique_id(new_level, new_index), BlockStatus.free);
+                unique_id(new_level, new_index), BlockStatus.Free);
             try self.block_statuses.set(
-                unique_id(new_level, buddy_index), BlockStatus.free);
+                unique_id(new_level, buddy_index), BlockStatus.Free);
         }
 
         pub fn alloc(self: *Self, size: usize) Error!usize {
@@ -211,9 +214,86 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             self.free_blocks.remove_block(target_level, address);
             const index = self.get_index(target_level, address);
             const id = unique_id(target_level, index);
-            try self.block_statuses.set(id, .used);
+            try self.block_statuses.set(id, .Used);
 
             return @ptrToInt(address);
+        }
+
+        fn merge(self: *Self, level: usize, index: usize) Error!void {
+            if (level == 0) {
+                return Error.OutOfBounds;
+            }
+
+            const buddy_index = get_buddy_index(index);
+            const new_level = level - 1;
+            const new_index = index << 1;
+
+            // Assert existing blocks are free and new/parrent block is split
+            const this_unique_id = try self.assert_unique_id(level, index, .Free);
+            const buddy_unique_id = try self.assert_unique_id(level, buddy_index, .Free);
+            const new_unique_id = try self.assert_unique_id(new_level, new_index, .Split);
+
+            // Remove pointers to the old blocks
+            const this_ptr = self.get_pointer(level, index);
+            const buddy_ptr = self.get_pointer(level, buddy_index);
+            self.free_blocks.remove_block(level, this_ptr);
+            self.free_blocks.remove_block(level, buddy_ptr);
+
+            // Push New Block into List
+            try self.free_blocks.push(new_level, self.get_pointer(new_level, new_index));
+
+            // Set New Statuses
+            try self.block_statuses.set(this_unique_id, .Invalid);
+            try self.block_statuses.set(buddy_unique_id, .Invalid);
+            try self.block_statuses.set(new_unique_id, .Free);
+        }
+
+        fn free(self: *Self, address: usize) Error!void {
+
+            const block = @intToPtr(FreeBlock.Ptr, address);
+
+            // Find the level
+            var level = level_count - 1;
+            var id_maybe: ?usize = null;
+            var index: usize = undefined;
+            while (id_maybe == null) {
+                index = self.get_index(level, block);
+                if (self.assert_unique_id(level, index, .Used)) |i| {
+                    id_maybe = i;
+                } else |e| switch (e) {
+                    Error.WrongBlockStatus => {
+                        if (level == 0) {
+                            break;
+                        }
+                        level -= 1;
+                    },
+                    else => {
+                        return e;
+                    },
+                }
+            }
+            if (id_maybe == null) {
+                return Error.OutOfMemory;
+            }
+            const id = id_maybe.?;
+
+            // Insert Block into List and Mark as Free
+            try self.free_blocks.push(level, block);
+            try self.block_statuses.set(id, .Free);
+
+            // Merge Until Buddy isn't Free or Level Is 0
+            while (level > 0) {
+                const buddy_index = get_buddy_index(index);
+                const buddy_unique_id = unique_id(level, buddy_index);
+                const buddy_status = try self.block_statuses.get(buddy_unique_id);
+                if (buddy_status == .Free) {
+                    try self.merge(level, index);
+                    index >>= 1;
+                } else {
+                    break;
+                }
+                level -= 1;
+            }
         }
     };
 }
@@ -254,18 +334,39 @@ test "BuddyAllocator" {
         @memset(p, 0x04, s);
     }
     {
-        const s = 64;
-        const p = @intToPtr([*]u8, try b.alloc(s));
-        @memset(p, 0xff, s);
+        const s1 = 64;
+        const p1 = @intToPtr([*]u8, try b.alloc(s1));
+        @memset(p1, 0xff, s1);
+        const expected1 =
+            "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
+            "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
+            "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
+            "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
+            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff";
+        std.testing.expectEqualSlices(u8, expected1[0..], memory[0..]);
+        try b.free(@ptrToInt(p1));
     }
-    const expected =
+    {
+        const s = 32;
+        const p = @intToPtr([*]u8, try b.alloc(s));
+        @memset(p, 0x88, s);
+    }
+    {
+        const s = 32;
+        const p = @intToPtr([*]u8, try b.alloc(s));
+        @memset(p, 0x77, s);
+    }
+    const expected2 =
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
         "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff";
-    std.testing.expectEqualSlices(u8, expected[0..], memory[0..]);
+        "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
+        "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
+        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77" ++
+        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77";
+    std.testing.expectEqualSlices(u8, expected2[0..], memory[0..]);
 }

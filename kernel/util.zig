@@ -226,6 +226,8 @@ test "Log2IntType" {
     test_IntLog2Type(u64, 6);
 }
 
+pub const UsizeLog2Type = IntLog2Type(usize);
+
 pub fn select_nibble(comptime IntType: type, value: IntType, which: usize) u4 {
     return @intCast(u4,
         (value >> (@intCast(IntLog2Type(IntType), which) * 4)) & 0xf);
