@@ -6,7 +6,7 @@ const PlatformMemory = platform.Memory;
 
 pub const MemoryError = error {
     OutOfMemory,
-    InvalidArguments,
+    InvalidPointerArgument,
 };
 
 pub const Range = struct {
@@ -131,4 +131,17 @@ pub const Memory = struct {
 
     // pub fn free_vmem(self: *Memory, what: Range) MemoryError!void {
     // }
+};
+
+pub const Allocator = struct {
+    alloc_impl: fn(self: *Allocator, size: usize) MemoryError!usize,
+    free_impl: fn(self: *Allocator, address: usize) MemoryError!void,
+
+    pub fn alloc(self: *Allocator, comptime Type: type) MemoryError!*Type {
+        return @intToPtr(*Type, try self.alloc_impl(self, @sizeOf(Type)));
+    }
+
+    pub fn free(self: *Allocator, comptime Type: type, address: *Type) MemoryError!void {
+        return self.free_impl(self, @ptrToInt(address));
+    }
 };
