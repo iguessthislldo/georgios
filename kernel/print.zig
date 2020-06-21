@@ -15,6 +15,10 @@ pub fn initialize(file: ?*io.File, debug: bool) void {
     debug_print = debug;
 }
 
+pub fn get_console_file() ?*io.File {
+    return console_file;
+}
+
 pub fn char(ch: u8) void {
     if (console_file) |o| {
         fprint.char(o, ch) catch unreachable;
@@ -102,6 +106,12 @@ pub fn format(comptime fmtstr: []const u8, args: ...) void {
 pub fn data(ptr: usize, size: usize) void {
     if (console_file) |o| {
         fprint.data(o, ptr, size) catch unreachable;
+    }
+}
+
+pub fn bytes(comptime Type: type, value: *Type) void {
+    if (console_file) |o| {
+        fprint.bytes(o, Type, value) catch unreachable;
     }
 }
 
@@ -236,5 +246,11 @@ pub fn debug_format(comptime fmtstr: []const u8, args: ...) void {
 pub fn debug_data(ptr: usize, size: usize) void {
     if (debug_print) {
         data(ptr, size);
+    }
+}
+
+pub fn debug_bytes(comptime Type: type, value: *Type) void {
+    if (debug_print) {
+        bytes(Type, value);
     }
 }

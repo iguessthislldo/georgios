@@ -339,6 +339,7 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
     while (has_next) {
         const next_i = i + 1;
         has_next = next_i < size;
+        print_buffer = !has_next;
         {
             const new_pos = buffer_pos + 2;
             byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*u8, ptr + i).*);
@@ -362,8 +363,6 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
                 buffer[buffer_pos] = b;
                 buffer_pos += 1;
             }
-        } else { // Done In Middle Of Row
-            print_buffer = true;
         }
         if (print_buffer) {
             buffer[buffer_pos] = '\n';
@@ -374,4 +373,11 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
         }
         i = next_i;
     }
+}
+
+pub fn bytes(file: *File, comptime Type: type, value: *Type) FileError!void {
+    const size: usize = @sizeOf(Type);
+    const ptr: usize = @ptrToInt(value);
+    try format(file, "type: {} at {:a} size: {} data: ", @typeName(Type), ptr, size);
+    try data(file, ptr, size);
 }
