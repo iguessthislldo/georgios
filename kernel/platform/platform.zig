@@ -9,7 +9,7 @@ pub const segments = @import("segments.zig");
 pub const interrupts = @import("interrupts.zig");
 pub const multiboot = @import("multiboot.zig");
 pub const pmemory = @import("memory.zig");
-pub const putil = @import("util.zig");
+pub const util = @import("util.zig");
 pub const pci = @import("pci.zig");
 
 pub const panic = @import("panic.zig").panic;
@@ -88,6 +88,7 @@ pub fn initialize(kernel: *Kernel) !void {
     // Setup Basic CPU Utilities
     segments.initialize();
     interrupts.initialize();
+    util.estimate_cpu_speed();
 
     // List Multiboot Tags
     if (print.debug_print) {

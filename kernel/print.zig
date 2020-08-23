@@ -55,6 +55,12 @@ pub fn uint(value: usize) void {
     }
 }
 
+pub fn uint64(value: u64) void {
+    if (console_file) |o| {
+        fprint.uint64(o, value) catch unreachable;
+    }
+}
+
 pub fn int(value: isize) void {
     if (console_file) |o| {
         fprint.int(o, value) catch unreachable;
@@ -192,6 +198,12 @@ pub fn debug_stripped_string(str: [*]const u8, size: usize) void {
 pub fn debug_uint(value: usize) void {
     if (debug_print) {
         uint(value);
+    }
+}
+
+pub fn debug_uint64(value: u64) void {
+    if (debug_print) {
+        uint64(value);
     }
 }
 

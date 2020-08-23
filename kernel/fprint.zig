@@ -36,11 +36,11 @@ pub fn stripped_string(file: *File, str: [*]const u8, size: usize) FileError!voi
     try string(file, str[0..keep]);
 }
 
-fn uint_recurse(file: *File, value: usize) FileError!void {
+fn uint_recurse(comptime uint_type: type, file: *File, value: uint_type) FileError!void {
     const digit: u8 = @intCast(u8, value % 10);
     const next = value / 10;
     if (next > 0) {
-        try uint_recurse(file, next);
+        try uint_recurse(uint_type, file, next);
     }
     try char(file, '0' + digit);
 }
@@ -51,7 +51,15 @@ pub fn uint(file: *File, value: usize) FileError!void {
         try char(file, '0');
         return;
     }
-    try uint_recurse(file, value);
+    try uint_recurse(usize, file, value);
+}
+
+pub fn uint64(file: *File, value: u64) FileError!void {
+    if (value == 0) {
+        try char(file, '0');
+        return;
+    }
+    try uint_recurse(u64, file, value);
 }
 
 /// Print a signed integer
