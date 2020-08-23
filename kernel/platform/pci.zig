@@ -27,7 +27,7 @@ const Class = enum (u16) {
     pub fn from_u16(value: u16) ?Class {
         return kutil.int_to_enum(@This(), value);
     }
-    
+
     pub fn to_string(self: Class) []const u8 {
         return switch (self) {
             .IDE_Controller => "IDE Controller",
@@ -76,7 +76,7 @@ pub inline fn read_config16(bus: Bus, device: Device, function: Function,
 pub inline fn read_config8(bus: Bus, device: Device, function: Function,
         offset: Offset) u8 {
     return @intCast(u8, (read_config16(
-        bus, device, function, offset) >> @intCast(u4, (offset * 8) & 0xF)) & 0xFF);
+        bus, device, function, offset) >> @intCast(u4, (offset *% 8) & 0xF)) & 0xFF);
 }
 
 const Header = packed struct {
@@ -104,7 +104,7 @@ const Header = packed struct {
                     "Multi-Function CardBus Bridge",
             };
         }
-        
+
         pub fn is_multifunction(self: Kind) bool {
             return switch (self) {
                 .MultiFunctionNormal => true,
@@ -137,7 +137,7 @@ const Header = packed struct {
         ProcessingAccelerator = 0x12,
         NonEssentialInstrumentation = 0x13,
         Coprocessor = 0x40,
-        
+
         pub fn from_u8(value: u8) ?SuperClass {
             return kutil.int_to_enum(@This(), value);
         }
@@ -244,7 +244,38 @@ const Header = packed struct {
         const Self = @This();
         var rv: [@sizeOf(Self)]u8 = undefined;
         for (rv[0..]) |*ptr, i| {
-            ptr.* = read_config8(bus, device, function, @intCast(u8, i));
+            ptr.* = read_config8(bus, device, function, @intCast(Offset, i));
+        }
+        return @bitCast(Self, rv);
+    }
+};
+
+const NormalHeader = packed struct {
+    bars: [6]u32 = undefined,
+
+    pub fn print(self: *const NormalHeader, file: *io.File) io.FileError!void {
+        try fprint.format(file,
+            \\     - bar0: {:x}
+            \\     - bar1: {:x}
+            \\     - bar2: {:x}
+            \\     - bar3: {:x}
+            \\     - bar4: {:x}
+            \\     - bar5: {:x}
+            \\
+            ,
+            self.bars[0],
+            self.bars[1],
+            self.bars[2],
+            self.bars[3],
+            self.bars[4],
+            self.bars[5]);
+    }
+
+    pub fn get(bus: Bus, device: Device, function: Function) NormalHeader {
+        const Self = @This();
+        var rv: [@sizeOf(Self)]u8 = undefined;
+        for (rv[0..]) |*ptr, i| {
+            ptr.* = read_config8(bus, device, function, @sizeOf(Header) + @intCast(Offset, i));
         }
         return @bitCast(Self, rv);
     }
@@ -257,6 +288,10 @@ pub inline fn check_function(bus: Bus, device: Device, function: Function, heade
     if (header.get_class()) |class| {
         if (class == .BridgeDevice and header.subclass == 0x04) {
             check_bus(read_config8(bus, device, function, 0x19));
+        }
+        if (class == .MassStorageController and header.subclass == 0x01) {
+            const normal_header = NormalHeader.get(bus, device, function);
+            _ = normal_header.print(print.get_console_file().?) catch {};
         }
     }
 }
