@@ -9,6 +9,7 @@ const fprint = @import("../fprint.zig");
 const io = @import("../io.zig");
 
 const putil = @import("util.zig");
+const ata = @import("ata.zig");
 
 const Class = enum (u16) {
     IDE_Controller = 0x0101,
@@ -46,13 +47,18 @@ const Class = enum (u16) {
     }
 };
 
-const Bus = u8;
-const Device = u5;
-const Function = u3;
-const Offset = u8;
+pub const Bus = u8;
+pub const Device = u5;
+pub const Function = u3;
+pub const Offset = u8;
 
-pub inline fn read_config16(bus: Bus, device: Device, function: Function,
-        offset: Offset) u16 {
+pub const Location = struct {
+    bus: Bus,
+    device: Device,
+    function: Function,
+};
+
+inline fn read_config16(location: Location, offset: Offset) u16 {
     const Config = packed struct {
         offset: Offset,
         function: Function,
@@ -62,9 +68,9 @@ pub inline fn read_config16(bus: Bus, device: Device, function: Function,
         enabled: bool = true,
     };
     const config = Config{
-        .bus = bus,
-        .device = device,
-        .function = function,
+        .bus = location.bus,
+        .device = location.device,
+        .function = location.function,
         .offset = offset & 0xFC,
     };
     putil.out32(0x0CF8, @bitCast(u32, config));
@@ -73,13 +79,12 @@ pub inline fn read_config16(bus: Bus, device: Device, function: Function,
         @intCast(u5, (offset & 2) * 8) & 0xFFFF) & 0xFFFF);
 }
 
-pub inline fn read_config8(bus: Bus, device: Device, function: Function,
-        offset: Offset) u8 {
+inline fn read_config8(location: Location, offset: Offset) u8 {
     return @intCast(u8, (read_config16(
-        bus, device, function, offset) >> @intCast(u4, (offset *% 8) & 0xF)) & 0xFF);
+        location, offset) >> @intCast(u4, (offset *% 8) & 0xF)) & 0xFF);
 }
 
-const Header = packed struct {
+pub const Header = packed struct {
     pub const Kind = packed enum (u8) {
         Normal = 0x00,
         MultiFunctionNormal = 0x80,
@@ -199,14 +204,15 @@ const Header = packed struct {
 
     pub fn print(self: *const Header, file: *io.File) io.FileError!void {
         try fprint.format(file,
-            \\     - vendor_id: {:x}
-            \\     - device_id: {:x}
-            \\     - command: {:x}
-            \\     - status: {:x}
-            \\     - revision_id: {:x}
-            \\     - prog_if: {:x}
-            \\     - subclass: {:x}
-            \\     - class:
+            \\     - PCI Header:
+            \\       - vendor_id: {:x}
+            \\       - device_id: {:x}
+            \\       - command: {:x}
+            \\       - status: {:x}
+            \\       - revision_id: {:x}
+            \\       - prog_if: {:x}
+            \\       - subclass: {:x}
+            \\       - class:
             ,
             self.vendor_id,
             self.device_id,
@@ -222,9 +228,9 @@ const Header = packed struct {
         }
         try fprint.format(file,
             \\
-            \\     - cache_line_size: {:x}
-            \\     - latency_timer: {:x}
-            \\     - header_type:
+            \\       - cache_line_size: {:x}
+            \\       - latency_timer: {:x}
+            \\       - header_type:
             ,
             self.cache_line_size,
             self.latency_timer);
@@ -235,22 +241,22 @@ const Header = packed struct {
         }
         try fprint.format(file,
             \\
-            \\     - bist: {:x}
+            \\       - bist: {:x}
             \\
             , self.bist);
     }
 
-    pub fn get(bus: Bus, device: Device, function: Function) Header {
+    pub fn get(location: Location) Header {
         const Self = @This();
         var rv: [@sizeOf(Self)]u8 = undefined;
         for (rv[0..]) |*ptr, i| {
-            ptr.* = read_config8(bus, device, function, @intCast(Offset, i));
+            ptr.* = read_config8(location, @intCast(Offset, i));
         }
         return @bitCast(Self, rv);
     }
 };
 
-const NormalHeader = packed struct {
+pub const NormalHeader = packed struct {
     bars: [6]u32 = undefined,
 
     pub fn print(self: *const NormalHeader, file: *io.File) io.FileError!void {
@@ -271,48 +277,51 @@ const NormalHeader = packed struct {
             self.bars[5]);
     }
 
-    pub fn get(bus: Bus, device: Device, function: Function) NormalHeader {
+    pub fn get(location: Location) NormalHeader {
         const Self = @This();
         var rv: [@sizeOf(Self)]u8 = undefined;
         for (rv[0..]) |*ptr, i| {
-            ptr.* = read_config8(bus, device, function, @sizeOf(Header) + @intCast(Offset, i));
+            ptr.* = read_config8(location, @sizeOf(Header) + @intCast(Offset, i));
         }
         return @bitCast(Self, rv);
     }
 };
 
-pub inline fn check_function(bus: Bus, device: Device, function: Function, header: *const Header) void {
+inline fn check_function(location: Location, header: *const Header) void {
     if (header.is_invalid()) return;
-    print.format("   - Bus {}, Device {}, Function {}\n", bus, device, function);
+    print.format("   - Bus {}, Device {}, Function {}\n",
+        location.bus, location.device, location.function);
     _ = header.print(print.get_console_file().?) catch {};
     if (header.get_class()) |class| {
         if (class == .BridgeDevice and header.subclass == 0x04) {
-            check_bus(read_config8(bus, device, function, 0x19));
+            check_bus(read_config8(location, 0x19));
         }
         if (class == .MassStorageController and header.subclass == 0x01) {
-            const normal_header = NormalHeader.get(bus, device, function);
-            _ = normal_header.print(print.get_console_file().?) catch {};
+            ata.initialize(location, header);
         }
     }
 }
 
-pub inline fn check_device(bus: Bus, device: Device) void {
-    const header = Header.get(bus, device, 0);
-    check_function(bus, device, 0, &header);
+inline fn check_device(bus: Bus, device: Device) void {
+    const root_location = Location{.bus = bus, .device = device, .function = 0};
+    const header = Header.get(root_location);
+    check_function(root_location, &header);
     if (header.get_header_type()) |header_type| {
         if (header_type.is_multifunction()) {
             // Header Type is Multi-Function, Check Them
             var i: Function = 1;
             while (true) : (i += 1) {
-                const subheader = Header.get(bus, device, i);
-                check_function(bus, device, i, &subheader);
+                const location = Location{
+                    .bus = bus, .device = device, .function = i};
+                const subheader = Header.get(location);
+                check_function(location, &subheader);
                 if (i == 7) break;
             }
         }
     }
 }
 
-pub fn check_bus(bus: u8) void {
+fn check_bus(bus: u8) void {
     var i: Device = 0;
     while (true) : (i += 1) {
         check_device(bus, i);
