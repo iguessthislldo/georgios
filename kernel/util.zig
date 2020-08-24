@@ -2,6 +2,8 @@ const builtin = @import("builtin");
 
 pub const Error = error {
     OutOfBounds,
+    NotEnoughSource,
+    NotEnoughDestination,
 };
 
 pub inline fn Ki(x: usize) usize {
@@ -119,8 +121,17 @@ pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
 /// Copy contents from `source` to `destination`.
 ///
 /// If `source.len != destination.len` then the copy is truncated.
-pub inline fn memory_copy(destination: []u8, source: []const u8) void {
+pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) void {
     const size = min(usize, destination.len, source.len);
+    for (destination[0..size]) |*ptr, i| {
+        ptr.* = source[i];
+    }
+}
+
+pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!void {
+    if (destination.len < source.len) {
+        return Error.NotEnougDestination;
+    }
     for (destination[0..size]) |*ptr, i| {
         ptr.* = source[i];
     }

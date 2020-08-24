@@ -234,7 +234,7 @@ pub const BufferFile = struct {
             self.buffer.len - self.position);
         if (read_size > 0) {
             const next_position = self.position + read_size;
-            util.memory_copy(to[0..read_size],
+            util.memory_copy_truncate(to[0..read_size],
                 self.buffer[self.position..next_position]);
             self.position += read_size;
         }
@@ -247,7 +247,7 @@ pub const BufferFile = struct {
             self.buffer.len - self.position);
         if (write_size > 0) {
             const next_position = self.position + write_size;
-            util.memory_copy(self.buffer[self.position..next_position],
+            util.memory_copy_truncate(self.buffer[self.position..next_position],
                 from[0..write_size]);
             self.position += write_size;
         }
@@ -277,7 +277,7 @@ test "BufferFile" {
     const string = "abc123";
     const len = string.len;
     var result_buffer: [128]u8 = undefined;
-    util.memory_copy(file_buffer[0..], string[0..]);
+    util.memory_copy_truncate(file_buffer[0..], string[0..]);
     buffer_file.buffer.len = string.len;
     std.testing.expectEqual(len, try file.read(result_buffer[0..]));
     // TODO: Show strings if fail?
