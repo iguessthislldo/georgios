@@ -20,4 +20,8 @@ target remote | qemu-system-i386 \
     -d int,cpu_reset,guest_errors \
     hd.img
 
+#    -trace 'ide_*' \
+#    -trace '*irq*' \
+#    -trace '*apic*' \
+
 continue

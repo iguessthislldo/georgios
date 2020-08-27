@@ -34,6 +34,49 @@ const CommandStatus = packed struct {
             return Error.FailedToSelectDrive;
         }
     }
+
+    // TODO: Make these checks simpler?
+    pub fn drive_is_ready(self: *CommandStatus) Error!bool {
+        if (self.busy) {
+            return false;
+        }
+        if (self.in_error or self.fault) {
+            return Error.OperationError;
+        }
+        return self.drive_ready;
+    }
+
+    pub fn data_is_ready(self: *CommandStatus) Error!bool {
+        if (self.busy) {
+            return false;
+        }
+        if (self.in_error or self.fault) {
+            return Error.OperationError;
+        }
+        return self.data_ready;
+    }
+
+    pub fn print(self: *const CommandStatus) void {
+        print.format(
+            \\in_error: {}
+            \\unused_index: {}
+            \\unused_corrected: {}
+            \\data_ready: {}
+            \\unused_seek_complete: {}
+            \\fault: {}
+            \\drive_ready: {}
+            \\busy: {}
+            \\
+            ,
+            self.in_error,
+            self.unused_index,
+            self.unused_corrected,
+            self.data_ready,
+            self.unused_seek_complete,
+            self.fault,
+            self.drive_ready,
+            self.busy);
+    }
 };
 
 const Control = packed struct {
@@ -45,7 +88,7 @@ const Control = packed struct {
 
 const DriveHeadSelect = packed struct {
     lba28_bits_24_27: u4 = 0,
-    master: bool,
+    select_slave: bool,
     always_1_bit_5: bool = true,
     lba: bool = false,
     always_1_bit_7: bool = true,
@@ -73,32 +116,60 @@ const Controller = struct {
                 else @fieldParentPtr(Channel, "slave", self);
         }
 
-        pub fn force_select(self: *Device) void {
-            const channel = self.get_channel();
-            channel.write_select(self.id);
-            putil.wait_microseconds(1);
-            _ = channel.read_command_status();
-        }
-
         pub fn select(self: *Device) Error!void {
+            // TODO
             // if (self.selected) return;
 
             const channel = self.get_channel();
 
             try channel.read_command_status().assert_selectable();
-            self.force_select();
+            channel.write_select(self.id);
+            putil.wait_microseconds(1);
+            _ = channel.read_command_status();
             try channel.read_command_status().assert_selectable();
             // self.selected = true;
             // channel.selected(self.id);
         }
 
+        const wait_timeout_ms = 5000;
+
+        // TODO: Merge these wait functions?
         pub fn wait_while_busy(self: *Device) Error!void {
             const channel = self.get_channel();
-            var milliseconds_left: u64 = 30000;
+            var milliseconds_left: u64 = wait_timeout_ms;
             while (channel.read_command_status().busy) {
                 milliseconds_left -= 1;
                 if (milliseconds_left == 0) {
                     print.string("wait_while_busy Timeout\n");
+                    return Error.Timeout;
+                }
+                putil.wait_milliseconds(1);
+            }
+        }
+
+        pub fn wait_for_drive(self: *Device) Error!void {
+            const channel = self.get_channel();
+            var milliseconds_left: u64 = wait_timeout_ms;
+            _ = channel.read_control_status();
+            while (!try channel.read_control_status().drive_is_ready()) {
+                milliseconds_left -= 1;
+                if (milliseconds_left == 0) {
+                    print.string("wait_for_drive Timeout\n");
+                    channel.read_control_status().print();
+                    return Error.Timeout;
+                }
+                putil.wait_milliseconds(1);
+            }
+        }
+
+        pub fn wait_for_data(self: *Device) Error!void {
+            const channel = self.get_channel();
+            var milliseconds_left: u64 = wait_timeout_ms;
+            _ = channel.read_control_status();
+            while (!try channel.read_control_status().data_is_ready()) {
+                milliseconds_left -= 1;
+                if (milliseconds_left == 0) {
+                    print.string("wait_for_data Timeout\n");
                     return Error.Timeout;
                 }
                 putil.wait_milliseconds(1);
@@ -142,8 +213,11 @@ const Controller = struct {
                 if (self.id == .Master) "Master" else "Slave");
             const channel = self.get_channel();
             try self.reset();
+
+            try self.wait_for_drive();
             channel.identify_command();
-            try self.wait_while_busy();
+            _ = channel.read_command_status();
+            try self.wait_for_data();
             var sector: Sector = undefined;
             channel.read_sector(&sector);
             print.data(@ptrToInt(&sector.data[0]), sector.data.len);
@@ -194,6 +268,10 @@ const Controller = struct {
             return @bitCast(CommandStatus, putil.in8(self.io_base_port + 7));
         }
 
+        pub fn read_control_status(self: *Channel) CommandStatus {
+            return @bitCast(CommandStatus, putil.in8(self.control_base_port + 2));
+        }
+
         pub fn read_error(self: *Channel) u8 { // TODO: Create Struct?
             return putil.in8(self.io_base_port + 1);
         }
@@ -207,7 +285,7 @@ const Controller = struct {
         }
 
         pub fn read_sector_number(self: *Channel) u8 {
-            return putil.in8(self.io_base_port + 2);
+            return putil.in8(self.io_base_port + 3);
         }
 
         pub fn read_cylinder(self: *Channel) u16 {
@@ -221,7 +299,7 @@ const Controller = struct {
         }
 
         pub fn write_select(self: *Channel, value: Device.Id) void {
-            self.write_drive_head_select(DriveHeadSelect{.master = value == Device.Id.Master});
+            self.write_drive_head_select(DriveHeadSelect{.select_slave = value == Device.Id.Slave});
         }
 
         pub fn write_lba(self: *Channel, device: Device.Id, lba: u32) void {
@@ -248,7 +326,7 @@ const Controller = struct {
         }
 
         pub fn read_sector(self: *Channel, sector: *Sector) void {
-            putil.insb(self.io_base_port + 0, sector.data[0..]);
+            putil.insw(self.io_base_port + 0, sector.data[0..]);
         }
 
         pub fn initialize(self: *Channel) void {
@@ -301,4 +379,3 @@ var controller = Controller{};
 pub fn initialize(location: pci.Location, header: *const pci.Header) void {
     controller.initialize(location, header);
 }
-

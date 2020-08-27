@@ -28,11 +28,11 @@ pub fn in32(port: u16) u32 {
         [rv] "={al}" (-> u32) : [port] "N{dx}" (port) );
 }
 
-pub fn insb(port: u16, destination: []u8) void {
-    asm volatile ("rep insb" : :
+pub fn insw(port: u16, destination: []u8) void {
+    asm volatile ("rep insw" : :
         [port] "{dx}" (port),
-        [dest_ptr] "{edi}" (@truncate(u32, @ptrToInt(destination.ptr))),
-        [dest_size] "{ecx}"  (@truncate(u32, destination.len)) :
+        [dest_ptr] "{di}" (@truncate(u32, @ptrToInt(destination.ptr))),
+        [dest_size] "{ecx}"  (@truncate(u32, destination.len) >> 1) :
         "memory");
 }
 
