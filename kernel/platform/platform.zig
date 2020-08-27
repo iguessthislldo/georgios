@@ -75,6 +75,12 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     return from.len;
 }
 
+extern var stack: [util.Ki(16)]u8 align(16) linksection(".bss");
+pub fn print_stack_left() void {
+    print.format("stack left: {}\n",
+        asm volatile ("mov %%esp, %[x]" : [x] "=r" (-> usize)) - @ptrToInt(&stack));
+}
+
 pub fn initialize(kernel: *Kernel) !void {
     // Finish Setup of Console Logging
     serial_log.initialize();
