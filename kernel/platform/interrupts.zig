@@ -1,54 +1,12 @@
 const builtin = @import("builtin");
+
 const print = @import("../print.zig");
+
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
 
-// ===========================================================================
-// Interrupt Handlers Defined in idt_handlers.s
-// ===========================================================================
-
-// Hardware Interrupt Handlers
-extern fn ih_0() void;
-extern fn ih_1() void;
-extern fn ih_2() void;
-extern fn ih_3() void;
-extern fn ih_4() void;
-extern fn ih_5() void;
-extern fn ih_6() void;
-extern fn ih_7() void;
-extern fn ih_8() void;
-extern fn ih_9() void;
-extern fn ih_10() void;
-extern fn ih_11() void;
-extern fn ih_12() void;
-extern fn ih_13() void;
-extern fn ih_14() void;
-extern fn ih_15() void;
-extern fn ih_16() void;
-extern fn ih_17() void;
-extern fn ih_18() void;
-extern fn ih_19() void;
-extern fn ih_20() void;
-extern fn ih_21() void;
-extern fn ih_22() void;
-extern fn ih_23() void;
-extern fn ih_24() void;
-extern fn ih_25() void;
-extern fn ih_26() void;
-extern fn ih_27() void;
-extern fn ih_28() void;
-extern fn ih_29() void;
-extern fn ih_30() void;
-extern fn ih_31() void;
-
-// Software Interrupt Handlers
-extern fn ih_panic() void;
-extern fn ih_system_call() void;
-
-// ===========================================================================
-// Interrupt Descriptor Table
-// ===========================================================================
+// Interrupt Descriptor Table ================================================
 
 const Entry = packed struct {
     offset_0_15: u16 = 0,
@@ -74,11 +32,6 @@ var names = names_init: {
     break :names_init the_names;
 };
 
-pub fn get_name(index: u32) []const u8 {
-    return if (index < names.len) names[index] else
-        invalid_index ++ " and out of range";
-}
-
 const TablePointer = packed struct {
     limit: u16,
     base: u32,
@@ -89,7 +42,9 @@ fn load() void {
     asm volatile ("lidtl (%[p])" : : [p] "{ax}" (&table_pointer));
 }
 
-fn set(name: []const u8, index: u8, handler: extern fn() void, selector: u16, flags: u8) void {
+fn set_entry(
+        name: []const u8, index: u8, handler: extern fn() void,
+        selector: u16, flags: u8) void {
     const offset: u32 = @ptrToInt(handler);
     names[index] = name;
     print.debug_format(
@@ -107,6 +62,95 @@ fn set(name: []const u8, index: u8, handler: extern fn() void, selector: u16, fl
 const kernel_flags: u8 = 0x8e;
 const user_flags: u8 = kernel_flags | (3 << 5);
 
+// Interrupt Handler Generation ==============================================
+
+fn BaseInterruptHandler(
+        comptime i: u32, comptime dummy_error_code: bool, comptime software: bool) type {
+    return struct {
+        const index: u8 = i;
+
+        pub nakedcc fn handler() noreturn {
+            asm volatile ("cli");
+            if (dummy_error_code) {
+                if (software) {
+                    // This is a left over from being able to set the error
+                    // code for the C panic.
+                    // Also see panic function that puts this value in the
+                    // stack in ./panic.zig.
+                    // TODO: Remove or Reuse?
+                    asm volatile ("pushl 12(%%esp)");
+                } else {
+                    asm volatile ("pushl $0");
+                }
+            }
+            asm volatile (
+                \\pushl %[interrupt_number]
+                \\
+                \\// Push General Registers
+                \\pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
+                \\
+                \\// The stack should now be equivalent to PanicStack
+                \\mov %%esp, panic_stack
+                \\
+                \\call show_panic_message
+                \\
+                \\popal // Restore Registers
+                \\addl $8, %%esp // Pop Error Code
+                \\iret
+            ::
+                [interrupt_number] "{eax}" (i));
+            unreachable;
+        }
+
+        pub fn get() extern fn() void {
+            return @ptrCast(extern fn() void, handler);
+        }
+
+        pub fn set(name: []const u8, selector: u16, flags: u8) void {
+            set_entry(name, index, @ptrCast(extern fn() void, handler), selector, flags);
+        }
+    };
+}
+
+fn InterruptHandler(
+        comptime i: u32, comptime dummy_error_code: bool) type {
+    return BaseInterruptHandler(i, dummy_error_code, false);
+}
+
+// CPU Exception Interrupts ==================================================
+
+const Exception = struct {
+    name: []const u8,
+    index: u32,
+    error_code: bool,
+};
+
+const exceptions = [_]Exception {
+  Exception{.name = "Divide by Zero Fault", .index = 0, .error_code = false},
+  Exception{.name = "Debug Trap", .index = 1, .error_code = false},
+  Exception{.name = "Nonmaskable Interrupt", .index = 2, .error_code = false},
+  Exception{.name = "Breakpoint Trap", .index = 3, .error_code = false},
+  Exception{.name = "Overflow Trap", .index = 4, .error_code = false},
+  Exception{.name = "Bounds Fault", .index = 5, .error_code = false},
+  Exception{.name = "Invalid Opcode", .index = 6, .error_code = false},
+  Exception{.name = "Device Not Available", .index = 7, .error_code = false},
+  Exception{.name = "Double Fault", .index = 8, .error_code = true},
+  Exception{.name = "Coprocessor Segment Overrun", .index = 9, .error_code = false},
+  Exception{.name = "Invalid TSS", .index = 10, .error_code = true},
+  Exception{.name = "Segment Not Present", .index = 11, .error_code = true},
+  Exception{.name = "Stack-Segment Fault", .index = 12, .error_code = true},
+  Exception{.name = "General Protection Fault", .index = 13, .error_code = true},
+  Exception{.name = "Page Fault", .index = 14, .error_code = true},
+  Exception{.name = "x87 Floating-Point Exception", .index = 16, .error_code = false},
+  Exception{.name = "Alignment Check", .index = 17, .error_code = true},
+  Exception{.name = "Machine Check", .index = 18, .error_code = false},
+  Exception{.name = "SIMD Floating-Point Exception", .index = 19, .error_code = false},
+  Exception{.name = "Virtualization Exception", .index = 20, .error_code = false},
+  Exception{.name = "Security Exception", .index = 30, .error_code = true},
+};
+
+// Public Interface ==========================================================
+
 pub fn initialize() void {
     table_pointer.limit = @sizeOf(Entry) * table.len;
     table_pointer.base = @ptrToInt(&table);
@@ -114,75 +158,19 @@ pub fn initialize() void {
 
     print.debug_string(" - Filling the Interrupt Descriptor Table (IDT)\n");
 
-    set("Divide by Zero Fault",
-        0,  ih_0,  kernel_code_selector, kernel_flags);
-    set("Debug Trap",
-        1,  ih_1,  kernel_code_selector, kernel_flags);
-    set("Nonmaskable Interrupt",
-        2,  ih_2,  kernel_code_selector, kernel_flags);
-    set("Breakpoint Trap",
-        3,  ih_3,  kernel_code_selector, kernel_flags);
-    set("Overflow Trap",
-        4,  ih_4,  kernel_code_selector, kernel_flags);
-    set("Bounds Fault",
-        5,  ih_5,  kernel_code_selector, kernel_flags);
-    set("Invalid Opcode",
-        6,  ih_6,  kernel_code_selector, kernel_flags);
-    set("Device Not Available",
-        7,  ih_7,  kernel_code_selector, kernel_flags);
-    set("Double Fault",
-        8,  ih_8,  kernel_code_selector, kernel_flags);
-    set("Coprocessor Segment Overrun",
-        9,  ih_9,  kernel_code_selector, kernel_flags);
-    set("Invalid TSS",
-        10, ih_10, kernel_code_selector, kernel_flags);
-    set("Segment Not Present",
-        11, ih_11, kernel_code_selector, kernel_flags);
-    set("Stack-Segment Fault",
-        12, ih_12, kernel_code_selector, kernel_flags);
-    set("General Protection Fault",
-        13, ih_13, kernel_code_selector, kernel_flags);
-    set("Page Fault",
-        14, ih_14, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        15, ih_15, kernel_code_selector, kernel_flags);
-    set("x87 Floating-Point Exception",
-        16, ih_16, kernel_code_selector, kernel_flags);
-    set("Alignment Check",
-        17, ih_17, kernel_code_selector, kernel_flags);
-    set("Machine Check",
-        18, ih_18, kernel_code_selector, kernel_flags);
-    set("SIMD Floating-Point Exception",
-        19, ih_19, kernel_code_selector, kernel_flags);
-    set("Virtualization Exception",
-        20, ih_20, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        21, ih_21, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        22, ih_22, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        23, ih_23, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        24, ih_24, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        25, ih_25, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        26, ih_26, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        27, ih_27, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        28, ih_28, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        29, ih_29, kernel_code_selector, kernel_flags);
-    set("Security Exception",
-        30, ih_30, kernel_code_selector, kernel_flags);
-    set("Reserved",
-        31, ih_31, kernel_code_selector, kernel_flags);
+    comptime var index = 0;
+    inline while (index < 256) {
+        InterruptHandler(index, false).set(
+            "Unknown Interrupt", kernel_code_selector, kernel_flags);
+        index += 1;
+    }
+    inline for (exceptions) |ex| {
+        InterruptHandler(ex.index, !ex.error_code).set(
+            ex.name, kernel_code_selector, kernel_flags);
+    }
 
-    set("Software Panic",
-        50, ih_panic, kernel_code_selector, kernel_flags);
-    set("System Call",
-        100, ih_system_call, kernel_code_selector, user_flags);
+    BaseInterruptHandler(50, true, true).set(
+        "Software Panic", kernel_code_selector, kernel_flags);
 
     load();
 }
@@ -195,4 +183,13 @@ pub fn set_kernel_handler(index: u8, handler: extern fn() void) void {
 pub fn set_user_handler(index: u8, handler: extern fn() void) void {
     set(index, handler, @import("segments.zig").user_code_selector, user_flags);
     load();
+}
+
+pub fn get_name(index: u32) []const u8 {
+    return if (index < names.len) names[index] else
+        invalid_index ++ " and out of range";
+}
+
+pub fn is_exception(index: u32) bool {
+    return index <= exceptions.len;
 }

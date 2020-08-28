@@ -9,6 +9,10 @@ const print = @import("../print.zig");
 const kernel = @import("../kernel.zig");
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    // The push $0 is a left over from being able to set the error code for the
+    // C panic.
+    // Also see handler code for this in ./interrupts.zig.
+    // TODO: Remove or Reuse?
     asm volatile ("pushl $0\n\tint $50");
     unreachable;
 }
@@ -40,25 +44,18 @@ pub export fn show_panic_message() void {
     cga_console.new_page();
     cga_console.set_colors(Color.Black, Color.Red);
     cga_console.fill_screen(' ');
-    const software_error = kernel.panic_message.len > 0;
     const ec = panic_stack.error_code;
     const index = panic_stack.idt_index;
     print.format(
         \\==============================<!>Kernel Panic<!>==============================
-        \\The system has encountered an unrecoverable {}:
+        \\The system has encountered an unrecoverable error:
         \\  Interrupt Number: {}
         \\  Error Code: {}
         \\  Message:
-        ,
-        if (software_error)
-            "software error"
-        else
-            "hardware exception",
-        index, ec,
-    );
+        , index, ec);
     print.char(' ');
 
-    if (software_error) {
+    if (!interrupts.is_exception(index)) {
         print.string(kernel.panic_message);
     } else {
         print.string(interrupts.get_name(index));
