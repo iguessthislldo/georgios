@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 
 const print = @import("../print.zig");
 
+const putil = @import("util.zig");
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
@@ -149,6 +150,57 @@ const exceptions = [_]Exception {
   Exception{.name = "Security Exception", .index = 30, .error_code = true},
 };
 
+// 8259 Programmable Interrupt Controller (PIC) ==============================
+
+const pic = struct {
+    const irq_0_7_interrupt_offset = @intCast(u8, exceptions.len);
+    const irq_8_15_interrupt_offset: u8 = irq_0_7_interrupt_offset + 8;
+
+    const channel_port: u16 = 0x40;
+    const mode_port: u16 = 0x43;
+    const irq_0_7_command_port: u16 = 0x20;
+    const irq_0_7_data_port: u16 = 0x21;
+    const irq_8_15_command_port: u16 = 0xA0;
+    const irq_8_15_data_port: u16 = 0xA1;
+
+    const init_command: u8 = 0x11;
+    const reset_command: u8 = 0x20;
+
+    pub fn silence_irq(irq: u8) void {
+        if (irq >= 8) putil.out8(irq_8_15_data_port, reset_command);
+        putil.out8(irq_0_7_command_port, reset_command);
+    }
+
+    fn busywork() void {
+        asm volatile (
+            \\add %%ch, %%bl
+            \\add %%ch, %%bl
+        );
+    }
+
+    pub fn initialize() void {
+        // Start Initialization of PICs
+        putil.out8(irq_0_7_command_port, init_command);
+        busywork();
+        putil.out8(irq_8_15_command_port, init_command);
+        busywork();
+        // Set Interrupt Number Offsets for IRQs
+        putil.out8(irq_0_7_data_port, irq_0_7_interrupt_offset);
+        busywork();
+        putil.out8(irq_8_15_data_port, irq_8_15_interrupt_offset);
+        // Tell PICs About Each Other
+        busywork();
+        putil.out8(irq_0_7_data_port, 4);
+        busywork();
+        putil.out8(irq_8_15_data_port, 2);
+        // Set Mode of PICs
+        busywork();
+        putil.out8(irq_0_7_data_port, 1);
+        busywork();
+        putil.out8(irq_8_15_data_port, 1);
+    }
+};
+
 // Public Interface ==========================================================
 
 pub fn initialize() void {
@@ -173,6 +225,8 @@ pub fn initialize() void {
         "Software Panic", kernel_code_selector, kernel_flags);
 
     load();
+
+    pic.initialize();
 }
 
 pub fn set_kernel_handler(index: u8, handler: extern fn() void) void {
