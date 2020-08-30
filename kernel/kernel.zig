@@ -41,6 +41,7 @@ pub const Kernel = struct {
 };
 
 pub export fn kernel_main() void {
+    panic_message = ""; // TODO: This is garbage when a panic happens
     var kernel = Kernel{};
     if (kernel.initialize()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
