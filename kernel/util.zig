@@ -38,6 +38,14 @@ pub fn isspace(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\t' or c == '\r';
 }
 
+pub inline fn stripped_string_size(str: []const u8) usize {
+    var stripped_size: usize = 0;
+    for (str) |c, i| {
+        if (!isspace(c)) stripped_size = i + 1;
+    }
+    return stripped_size;
+}
+
 pub fn zero_init(comptime Type: type) Type {
     comptime const Traits = @typeInfo(Type);
     comptime var CastThrough = Type;
@@ -61,6 +69,35 @@ pub fn zero_init(comptime Type: type) Type {
         else => CastThrough = @IntType(false, @sizeOf(Type) * 8),
     }
     return @bitCast(Type, @intCast(CastThrough, 0));
+}
+
+pub fn packed_bit_size(comptime Type: type) comptime_int {
+    comptime const Traits = @typeInfo(Type);
+    switch (Traits) {
+        builtin.TypeId.Int => |int_type| {
+            return int_type.bits;
+        },
+        builtin.TypeId.Bool => {
+            return 1;
+        },
+        builtin.TypeId.Array => |array_type| {
+            return packed_bit_size(array_type.child) * array_type.len;
+        },
+        builtin.TypeId.Struct => |struct_type| {
+            if (struct_type.layout != builtin.TypeInfo.ContainerLayout.Packed) {
+                @compileError("Struct must be packed!");
+            }
+            comptime var total_size: comptime_int = 0;
+            inline for (struct_type.fields) |field| {
+                total_size += packed_bit_size(field.field_type);
+            }
+            return total_size;
+        },
+        else => {
+            @compileLog("Unsupported Type is ", @typeName(Type));
+            @compileError("Unsupported Type");
+        }
+    }
 }
 
 /// @intToEnum can't be used to test if a value is a valid Enum, so this wraps

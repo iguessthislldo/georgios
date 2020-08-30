@@ -27,13 +27,7 @@ pub fn cstring(file: *File, str: [*]const u8) FileError!void {
 
 /// Print string stripped of trailing whitespace.
 pub fn stripped_string(file: *File, str: [*]const u8, size: usize) FileError!void {
-    var i: usize = 0;
-    var keep: usize = 0;
-    while (i < size and str[i] > 0) {
-        if (!util.isspace(str[i])) keep = i + 1;
-        i += 1;
-    }
-    try string(file, str[0..keep]);
+    try string(file, str[0..util.stripped_string_size(str[0..size])]);
 }
 
 fn uint_recurse(comptime uint_type: type, file: *File, value: uint_type) FileError!void {

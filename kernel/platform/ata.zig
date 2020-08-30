@@ -1,4 +1,5 @@
 const print = @import("../print.zig");
+const kutil = @import("../util.zig");
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
@@ -16,7 +17,11 @@ const Sector = struct {
     pub const size = 512;
 
     address: u32,
-    data: [size]u8,
+    data: [size]u8 = undefined,
+
+    pub fn dump(self: *const Sector) void {
+        print.data(@ptrToInt(&self.data[0]), self.data.len);
+    }
 };
 
 const CommandStatus = packed struct {
@@ -92,6 +97,100 @@ const DriveHeadSelect = packed struct {
     always_1_bit_5: bool = true,
     lba: bool = false,
     always_1_bit_7: bool = true,
+};
+
+const IndentifyResults = struct {
+    const Raw = packed struct {
+        // Word 0
+        unused_word_0_bits_0_14: u15,
+        is_atapi: bool,
+        // Words 1 - 9
+        unused_words_1_9: [9]u16,
+        // Words 10 - 19
+        serial_number: [10]u16,
+        // Words 20 - 22
+        used_words_20_22: [3]u16,
+        // Words 23 - 26
+        firmware_revision: [4]u16,
+        // Words 27 - 46
+        model: [20]u16,
+        // Words 47 - 48
+        used_words_47_48: [2]u16,
+        // Word 49
+        unused_word_49_bits_0_8: u9,
+        lba: bool,
+        unused_word_49_bits_10_15: u6,
+        // Words 50 - 59
+        unused_words_50_59: [10]u16,
+        // Words 60 - 61
+        lba28_sector_count: u32,
+        // Words 62 - 85
+        unused_words_62_85: [24]u16,
+        // Word 86
+        unused_word_86_bits_0_9: u10,
+        lba48: bool,
+        unused_word_86_bits_11_15: u5,
+        // Words 87 - 99
+        unused_words_87_99: [13]u16,
+        // Words 100 - 103
+        lba48_sector_count: u64,
+        // Words 104 - 255
+        unused_words_104_255: [152]u16,
+    };
+
+    comptime {
+        const raw_bit_size = kutil.packed_bit_size(Raw);
+        const sector_bit_size = Sector.size * 8;
+        if (raw_bit_size != sector_bit_size) {
+            @compileLog("Indentifyraw is ", raw_bit_size, " bits");
+            @compileLog("Sector is ", sector_bit_size, " bits");
+            @compileError("Indentifyraw must match the size of a sector");
+        }
+    }
+
+    const AddressType = enum(u8) {
+        Lba28,
+        Lba48,
+
+        pub fn to_string(self: AddressType) []const u8 {
+            return switch (self) {
+                .Lba28 => "LBA 28",
+                .Lba48 => "LBA 48",
+            };
+        }
+    };
+
+    model: []u8,
+    sector_count: u64,
+    address_type: AddressType,
+
+    pub fn from_sector(sector: *Sector) Error!IndentifyResults {
+        var results: IndentifyResults = undefined;
+        const raw = @ptrCast(*Raw, &sector.data[0]);
+
+        results.model.ptr = @ptrCast([*]u8, &raw.model[0]);
+        results.model.len = raw.model.len * 2;
+        for (raw.model) |*i| {
+            i.* = @byteSwap(u16, i.*);
+        }
+        results.model.len = kutil.stripped_string_size(results.model);
+        // TODO: Other Strings
+
+        if (raw.lba) {
+            if (raw.lba48) {
+                results.address_type = .Lba48;
+                results.sector_count = raw.lba48_sector_count;
+            } else {
+                results.address_type = .Lba28;
+                results.sector_count = raw.lba28_sector_count;
+            }
+        } else {
+            print.string("Error: Drive does not support LBA\n");
+            return Error.UnexpectedValues;
+        }
+
+        return results;
+    }
 };
 
 const Controller = struct {
@@ -220,22 +319,32 @@ const Controller = struct {
             try self.wait_for_data();
             var sector: Sector = undefined;
             channel.read_sector(&sector);
-            print.data(@ptrToInt(&sector.data[0]), sector.data.len);
+            const identity = try IndentifyResults.from_sector(&sector);
+            print.format(
+                log_indent ++ "    - Drive Model: \"{}\"\n", identity.model);
+            print.format(
+                log_indent ++ "    - Address Type: {}\n",
+                identity.address_type.to_string());
+            print.format(
+                log_indent ++ "    - Sector Count: {}\n",
+                @intCast(usize, identity.sector_count));
         }
 
         pub fn read(self: *Device, sector: *Sector) Error!void {
             const channel = self.get_channel();
+            try self.wait_for_drive();
             channel.write_sector_count(1);
-            channel.write_lba(sector.address);
-            channel.read_sectors_command();
+            channel.write_lba(self.id, sector.address);
             putil.wait_microseconds(5);
-            try self.wait_while_busy();
+            channel.read_sectors_command();
+            _ = channel.read_command_status();
             const error_reg = channel.read_error();
             const status_reg = channel.read_command_status();
-            if (((error_reg & 0x80) != 0) || status.in_error || status.fault) {
+            if (((error_reg & 0x80) != 0) or status_reg.in_error or status_reg.fault) {
                 print.format("ATA Read Error\n");
                 return Error.OperationError;
             }
+            try self.wait_for_data();
             channel.read_sector(sector);
         }
     };
@@ -280,8 +389,8 @@ const Controller = struct {
             return putil.in8(self.io_base_port + 2);
         }
 
-        pub fn write_sector_count(self: *Channel, value: u8) u8 {
-            return putil.out8(self.io_base_port + 2, value);
+        pub fn write_sector_count(self: *Channel, value: u8) void {
+            putil.out8(self.io_base_port + 2, value);
         }
 
         pub fn read_sector_number(self: *Channel) u8 {
@@ -308,7 +417,7 @@ const Controller = struct {
             putil.out8(self.io_base_port + 5, @truncate(u8, lba >> 16));
             self.write_drive_head_select(DriveHeadSelect{
                 .lba = true,
-                .master = value == Device.Id.Master,
+                .select_slave = device == Device.Id.Slave,
                 .lba28_bits_24_27 = @truncate(u4, lba >> 24),
             });
         }
@@ -368,8 +477,16 @@ const Controller = struct {
         // const normal_header = pci.NormalHeader.get(location);
         // _ = normal_header.print(print.get_console_file().?) catch {};
 
-        self.primary.initialize();
-        self.secondary.initialize();
+        // self.primary.initialize();
+        // self.secondary.initialize();
+
+        self.primary.master.initialize() catch |e| {
+            print.string("Drive Initialize Failed\n");
+        };
+        // var sector = Sector{.address = 0};
+        // self.primary.master.read(&sector) catch |e| {
+        //     print.string("Read Failed\n");
+        // };
     }
 };
 

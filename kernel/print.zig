@@ -45,7 +45,7 @@ pub fn cstring(str: [*]const u8) void {
 
 pub fn stripped_string(str: [*]const u8, size: usize) void {
     if (console_file) |o| {
-        fprint.stripped_string(o, str) catch unreachable;
+        fprint.stripped_string(o, str, size) catch unreachable;
     }
 }
 
