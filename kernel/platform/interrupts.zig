@@ -210,12 +210,16 @@ pub fn initialize() void {
 
     print.debug_string(" - Filling the Interrupt Descriptor Table (IDT)\n");
 
+    const debug_print_value = print.debug_print;
+    print.debug_print = false; // Too many lines
     comptime var index = 0;
     inline while (index < 256) {
         InterruptHandler(index, false).set(
             "Unknown Interrupt", kernel_code_selector, kernel_flags);
         index += 1;
     }
+    print.debug_print = debug_print_value;
+
     inline for (exceptions) |ex| {
         InterruptHandler(ex.index, !ex.error_code).set(
             ex.name, kernel_code_selector, kernel_flags);
