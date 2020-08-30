@@ -85,21 +85,26 @@ fn BaseInterruptHandler(
                 }
             }
             asm volatile (
-                \\pushl %[interrupt_number]
-                \\
                 \\// Push General Registers
                 \\pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
+            );
+            // TODO: Bug? This has to be a var in the function, it can't be a
+            // const, i, or index.
+            var in = @intCast(u32, index);
+            asm volatile (
+                \\pushl %[interrupt_number]
                 \\
                 \\// The stack should now be equivalent to PanicStack
                 \\mov %%esp, panic_stack
                 \\
                 \\call show_panic_message
                 \\
+                \\addl $4, %%esp // Pop Interrupt Code
                 \\popal // Restore Registers
-                \\addl $8, %%esp // Pop Error Code
+                \\addl $4, %%esp // Pop Error Code
                 \\iret
             ::
-                [interrupt_number] "{eax}" (i));
+                [interrupt_number] "{eax}" (in));
             unreachable;
         }
 

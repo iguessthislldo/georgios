@@ -18,6 +18,8 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
 }
 
 const PanicStack = packed struct {
+    // Pushed by us
+    idt_index: u32,
     // Pushed by us using pusha
     edi: u32,
     esi: u32,
@@ -27,8 +29,6 @@ const PanicStack = packed struct {
     edx: u32,
     ecx: u32,
     eax: u32,
-    // Pushed by us
-    idt_index: u32,
     // Pushed by us if the CPU didn't push one
     error_code: u32,
     // Pushed by CPU
