@@ -11,6 +11,7 @@ pub const multiboot = @import("multiboot.zig");
 pub const pmemory = @import("memory.zig");
 pub const util = @import("util.zig");
 pub const pci = @import("pci.zig");
+pub const ata = @import("ata.zig");
 
 pub const panic = @import("panic.zig").panic;
 pub const frame_size = pmemory.frame_size;

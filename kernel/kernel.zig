@@ -46,6 +46,7 @@ pub export fn kernel_main() void {
     if (kernel.initialize()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
+    platform.impl.ata.do_read();
     print.string("Done\n");
     platform.done();
 }

@@ -16,7 +16,7 @@ const log_indent = "     ";
 const Sector = struct {
     pub const size = 512;
 
-    address: u32,
+    address: u64,
     data: [size]u8 = undefined,
 
     pub fn dump(self: *const Sector) void {
@@ -333,8 +333,7 @@ const Controller = struct {
         pub fn read(self: *Device, sector: *Sector) Error!void {
             const channel = self.get_channel();
             try self.wait_for_drive();
-            channel.write_sector_count(1);
-            channel.write_lba(self.id, sector.address);
+            channel.write_lba48(self.id, sector.address, 1);
             putil.wait_microseconds(5);
             channel.read_sectors_command();
             _ = channel.read_command_status();
@@ -389,10 +388,6 @@ const Controller = struct {
             return putil.in8(self.io_base_port + 2);
         }
 
-        pub fn write_sector_count(self: *Channel, value: u8) void {
-            putil.out8(self.io_base_port + 2, value);
-        }
-
         pub fn read_sector_number(self: *Channel) u8 {
             return putil.in8(self.io_base_port + 3);
         }
@@ -411,14 +406,32 @@ const Controller = struct {
             self.write_drive_head_select(DriveHeadSelect{.select_slave = value == Device.Id.Slave});
         }
 
-        pub fn write_lba(self: *Channel, device: Device.Id, lba: u32) void {
-            putil.out8(self.io_base_port + 3, @truncate(u8, lba));
-            putil.out8(self.io_base_port + 4, @truncate(u8, lba >> 8));
-            putil.out8(self.io_base_port + 5, @truncate(u8, lba >> 16));
+        const sector_count_register = 2;
+        const lba_low_register = 3;
+        const lba_mid_register = 4;
+        const lba_high_register = 5;
+        const drive_head_register = 6;
+
+        pub fn write_lba48(self: *Channel, device: Device.Id, lba: u64, sector_count: u16) void {
+            putil.out8(self.io_base_port + sector_count_register,
+                @truncate(u8, sector_count >> 8));
+            putil.out8(self.io_base_port + lba_low_register,
+                @truncate(u8, lba >> 24));
+            putil.out8(self.io_base_port + lba_mid_register,
+                @truncate(u8, lba >> 32));
+            putil.out8(self.io_base_port + lba_high_register,
+                @truncate(u8, lba >> 40));
+            putil.out8(self.io_base_port + sector_count_register,
+                @truncate(u8, sector_count));
+            putil.out8(self.io_base_port + lba_low_register,
+                @truncate(u8, lba));
+            putil.out8(self.io_base_port + lba_mid_register,
+                @truncate(u8, lba >> 8));
+            putil.out8(self.io_base_port + lba_high_register,
+                @truncate(u8, lba >> 16));
             self.write_drive_head_select(DriveHeadSelect{
                 .lba = true,
                 .select_slave = device == Device.Id.Slave,
-                .lba28_bits_24_27 = @truncate(u4, lba >> 24),
             });
         }
 
@@ -483,12 +496,20 @@ const Controller = struct {
         self.primary.master.initialize() catch |e| {
             print.string("Drive Initialize Failed\n");
         };
-        // var sector = Sector{.address = 0};
-        // self.primary.master.read(&sector) catch |e| {
-        //     print.string("Read Failed\n");
-        // };
     }
 };
+
+pub fn do_read() void {
+    var sector = Sector{.address = 0};
+    const count = 3;
+    while (sector.address < count) {
+        controller.primary.master.read(&sector) catch |e| {
+            print.string("Read Failed\n");
+        };
+        sector.dump();
+        sector.address += 1;
+    }
+}
 
 // TODO: Make dynamic
 var controller = Controller{};
