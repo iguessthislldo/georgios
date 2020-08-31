@@ -19,9 +19,9 @@ pub const Error = error {
 };
 
 // TODO: Create Seperate 32 and 64 bit Versions ([ui]size -> [ui]32, [ui]64)
-const Section = packed struct {
+const SectionHeader = packed struct {
     name_index: u32, // sh_name
-    section_type: u32, // sh_type
+    kind: u32, // sh_type
     flags: u32, // sh_flags
     address: usize, // sh_addr
     offset: isize,  // sh_offset
@@ -30,6 +30,18 @@ const Section = packed struct {
     info: u32, // sh_info
     addralign: u32, // sh_addralign
     entsize: u32, // sh_entsize
+};
+
+// TODO: Create Seperate 32 and 64 bit Versions ([ui]size -> [ui]32, [ui]64)
+const ProgramHeader = packed struct {
+    kind: u32, // p_type
+    offset: isize,  // p_offset
+    virtual_address: usize, // p_vaddr
+    physical_address: usize, // p_paddr
+    size_in_file: u32, // p_filesz
+    size_in_memory: u32, // p_memsz
+    flags: u32, // p_flags
+    address_align: u32, // p_align
 };
 
 // TODO: Create Seperate 32 and 64 bit Versions ([ui]size -> [ui]32, [ui]64)
@@ -142,7 +154,8 @@ const Header = packed struct {
 
 pub const Object = struct {
     header: Header,
-    sections: [16]Section, // TODO: Alloc Them Instead
+    section_headers: [16]SectionHeader, // TODO: Alloc Them Instead
+    program_headers: [16]ProgramHeader, // TODO: Alloc Them Instead
 
     pub fn from_file(file: *io.File) !Object {
         var object: Object = undefined;
@@ -152,17 +165,51 @@ pub const Object = struct {
         print.format("Header Size: {}\n", usize(@sizeOf(Header)));
         try object.header.verify_executable();
 
-        // Read Sections
-        print.format("Section Count: {}\n", object.header.section_header_entry_count);
+        // Read Section Headers
+        print.format("Section Header Count: {}\n", object.header.section_header_entry_count);
         _ = try file.seek(@intCast(isize, object.header.section_header_offset), .FromStart);
-        const section_table_size =
+        const section_headers_size =
             @intCast(usize, object.header.section_header_entry_count) *
             @intCast(usize, object.header.section_header_entry_size);
-        const valid_sections = util.to_bytes(&object.sections)[0..section_table_size];
-        _ = try file.read(valid_sections);
-        for (object.sections[0..object.header.section_header_entry_count]) |*section| {
-            print.format("section: type: {} offset: {:x} size: {:x}\n",
-                section.section_type, @bitCast(usize, section.offset), section.size);
+        const valid_section_headers_bytes =
+            util.to_bytes(&object.section_headers)[0..section_headers_size];
+        _ = try file.read(valid_section_headers_bytes);
+        const valid_section_headers =
+            object.section_headers[0..object.header.section_header_entry_count];
+        for (valid_section_headers) |*section_header| {
+            print.format("section: kind: {} offset: {:x} size: {:x}\n",
+                section_header.kind,
+                @bitCast(usize, section_header.offset),
+                section_header.size);
+        }
+
+        // Read Program Headers
+        print.format("Program Header Count: {}\n", object.header.program_header_entry_count);
+        _ = try file.seek(@intCast(isize, object.header.program_header_offset), .FromStart);
+        const program_headers_size =
+            @intCast(usize, object.header.program_header_entry_count) *
+            @intCast(usize, object.header.program_header_entry_size);
+        const valid_program_headers_bytes =
+            util.to_bytes(&object.program_headers)[0..program_headers_size];
+        _ = try file.read(valid_program_headers_bytes);
+        const valid_program_headers =
+            object.program_headers[0..object.header.program_header_entry_count];
+        for (valid_program_headers) |*program_header| {
+            print.format("program: kind: {} offset: {:x} " ++
+                "size in file: {:x} size in memory: {:x}\n",
+                program_header.kind,
+                @bitCast(usize, program_header.offset),
+                program_header.size_in_file,
+                program_header.size_in_memory);
+            // TODO: Remove/Make Proper
+            if (program_header.kind == 0x1) {
+                _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
+                var buffer: [256]u8 = undefined;
+                const valid_bytes =
+                    util.to_bytes(&buffer)[0..program_header.size_in_file];
+                _ = try file.read(valid_bytes);
+                print.data_bytes(valid_bytes);
+            }
         }
 
         return object;
