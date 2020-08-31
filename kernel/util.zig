@@ -34,6 +34,19 @@ pub inline fn padding(value: usize, align_by: usize) usize {
     return -%value & (align_by - 1);
 }
 
+pub inline fn div_round_up(comptime Type: type, n: Type, d: Type) Type {
+    return n / d + (if (n % d != 0) Type(1) else Type(0));
+}
+
+test "div_round_up" {
+    const std = @import("std");
+    std.testing.expectEqual(u8(0), div_round_up(u8, 0, 2));
+    std.testing.expectEqual(u8(1), div_round_up(u8, 1, 2));
+    std.testing.expectEqual(u8(1), div_round_up(u8, 2, 2));
+    std.testing.expectEqual(u8(2), div_round_up(u8, 3, 2));
+    std.testing.expectEqual(u8(2), div_round_up(u8, 4, 2));
+}
+
 pub fn isspace(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\t' or c == '\r';
 }
@@ -112,6 +125,10 @@ pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType
     return null;
 }
 
+pub fn valid_enum(comptime EnumType: type, value: EnumType) bool {
+    return int_to_enum(EnumType, @bitCast(@TagType(EnumType), value)) != null;
+}
+
 test "int_to_enum" {
     const std = @import("std");
     const assert = std.debug.assert;
@@ -136,6 +153,10 @@ test "int_to_enum" {
     assert(int_to_enum(Abc, x).? == Abc.A);
     x = 0xFF;
     assert(int_to_enum(Abc, x) == null);
+
+    // valid_enum
+    assert(valid_enum(@bitCast(Abc, u8(0))));
+    assert(!valid_enum(@bitCast(Abc, u8(4))));
 }
 
 pub fn max(comptime T: type, a: T, b: T) T {
@@ -451,4 +472,21 @@ test "pow2_round_up" {
     std.testing.expectEqual(u8(16), pow2_round_up(u8, 9));
     std.testing.expectEqual(u8(16), pow2_round_up(u8, 16));
     std.testing.expectEqual(u8(32), pow2_round_up(u8, 17));
+}
+
+pub inline fn to_bytes(value: var) []u8 {
+    comptime const Type = @typeOf(value);
+    comptime const Traits = @typeInfo(Type);
+    var bytes: []u8 = undefined;
+    switch (Traits) {
+        builtin.TypeId.Pointer => |pointer_type| {
+            bytes.ptr = @ptrCast([*]u8, value);
+            bytes.len = @sizeOf(pointer_type.child);
+            return bytes;
+        },
+        else => {
+            @compileLog("Unsupported Type is ", @typeName(Type));
+            @compileError("Unsupported Type");
+        }
+    }
 }

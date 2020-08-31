@@ -1,5 +1,6 @@
 const print = @import("../print.zig");
 const kutil = @import("../util.zig");
+const io = @import("../io.zig"); // Temp, see TODO for read_from_drive
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
@@ -14,10 +15,10 @@ pub const Error = error {
 const log_indent = "     ";
 
 const Sector = struct {
-    pub const size = 512;
+    pub const size: u64 = 512;
 
     address: u64,
-    data: [size]u8 = undefined,
+    data: [size]u8 align(8) = undefined,
 
     pub fn dump(self: *const Sector) void {
         print.data(@ptrToInt(&self.data[0]), self.data.len);
@@ -499,17 +500,86 @@ const Controller = struct {
     }
 };
 
-pub fn do_read() void {
-    var sector = Sector{.address = 0};
-    const count = 3;
-    while (sector.address < count) {
+// TODO: Do this smarter:
+//  - Move this to an abstract layer.
+//  - Cache the sectors and  only do an actual read when we don't have that
+//    sector in the cache.
+//  - Eventually do DMA.
+pub fn read_from_drive(address: u64, destination: []u8) void {
+    // print.format("read_from_drive: address: {}\n", address);
+
+    const start_sector = address / Sector.size;
+    // print.format("  start_sector: {}\n", start_sector);
+    const sector_count = kutil.div_round_up(u64,
+        @intCast(u64, destination.len), Sector.size);
+    // print.format("  sector_count: {}\n", sector_count);
+    const end_sector = start_sector + sector_count;
+    // print.format("  end_sector: {}\n", end_sector);
+
+    var sector = Sector{.address = start_sector};
+    var dest_offset: usize = 0;
+    var drive_offset = @intCast(usize, address % Sector.size);
+
+    while (sector.address < end_sector) {
+        // print.format("  read sector: {}\n", sector.address);
         controller.primary.master.read(&sector) catch |e| {
             print.string("Read Failed\n");
         };
-        sector.dump();
+        // sector.dump();
+
+        const read_size = kutil.min(usize, @intCast(usize, Sector.size), destination.len - dest_offset);
+        // print.format("  read: {}\n", read_size);
+        const new_dest_offset = dest_offset + read_size;
+
+        const dest = destination[dest_offset..new_dest_offset];
+        kutil.memory_copy_truncate(dest, sector.data[drive_offset..]);
+        drive_offset = 0;
+        // print.data_bytes(dest);
+
+        dest_offset = new_dest_offset;
         sector.address += 1;
     }
 }
+
+// The Temporary Single-File "File System"
+pub const TheFile = struct {
+    const Self = @This();
+
+    file: *io.File = undefined,
+    position: usize = 0,
+    size: usize = 0,
+
+    pub fn initialize(self: *Self, file: *io.File) void {
+        file.impl_data = @ptrToInt(self);
+        file.read_impl = Self.read;
+        file.write_impl = io.File.unsupported.write_impl;
+        file.seek_impl = Self.seek;
+        file.close_impl = io.File.nop.close_impl;
+        self.file = file;
+        self.position = 0;
+
+        read_from_drive(0, kutil.to_bytes(&self.size));
+    }
+
+    pub fn read(file: *io.File, to: []u8) io.FileError!usize {
+        const self = @intToPtr(*Self, file.impl_data.?);
+        const read_size = kutil.min(usize, to.len,
+            self.size - self.position);
+        if (read_size > 0) {
+            read_from_drive(@intCast(u64, @sizeOf(u32) + self.position), to);
+        }
+        return read_size;
+    }
+
+    pub fn seek(file: *io.File,
+            offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
+        const self = @intToPtr(*Self, file.impl_data.?);
+        const new_postion = try io.File.generic_seek(
+            self.position, self.size, false, offset, seek_type);
+        self.position = new_postion;
+        return new_postion;
+    }
+};
 
 // TODO: Make dynamic
 var controller = Controller{};

@@ -28,38 +28,38 @@ pub const File = struct {
     };
 
     pub const nop = struct {
-        fn read_impl(file: *File, to: []u8) FileError!usize {
+        pub fn read_impl(file: *File, to: []u8) FileError!usize {
             return 0;
         }
 
-        fn write_impl(file: *File, from: []const u8) FileError!usize {
+        pub fn write_impl(file: *File, from: []const u8) FileError!usize {
             return from.len;
         }
 
-        fn seek_impl(file: *File,
+        pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
             return 0;
         }
 
-        fn close_impl(file: *File) FileError!void {
+        pub fn close_impl(file: *File) FileError!void {
         }
     };
 
     pub const unsupported = struct {
-        fn read_impl(file: *File, to: []u8) FileError!usize {
+        pub fn read_impl(file: *File, to: []u8) FileError!usize {
             return FileError.Unsupported;
         }
 
-        fn write_impl(file: *File, from: []const u8) FileError!usize {
+        pub fn write_impl(file: *File, from: []const u8) FileError!usize {
             return FileError.Unsupported;
         }
 
-        fn seek_impl(file: *File,
+        pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
             return FileError.Unsupported;
         }
 
-        fn close_impl(file: *File) FileError!void {
+        pub fn close_impl(file: *File) FileError!void {
             return FileError.Unsupported;
         }
     };

@@ -5,6 +5,7 @@ pub const platform = @import("platform.zig");
 pub const print = @import("print.zig");
 pub const Memory = @import("memory.zig").Memory;
 pub const io = @import("io.zig");
+pub const elf = @import("elf.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -38,15 +39,24 @@ pub const Kernel = struct {
         // Do a Whole Bunch of Stuff
         try platform.initialize(self);
     }
+
+    pub fn run(self: *Kernel) !void {
+        try self.initialize();
+
+        var file = io.File{};
+        var the_file = platform.impl.ata.TheFile{};
+        the_file.initialize(&file);
+        print.format("size: {}\n", the_file.size);
+        var elf_object = try elf.Object.from_file(&file);
+    }
 };
 
 pub export fn kernel_main() void {
     panic_message = ""; // TODO: This is garbage when a panic happens
     var kernel = Kernel{};
-    if (kernel.initialize()) |_| {} else |e| {
+    if (kernel.run()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
-    platform.impl.ata.do_read();
     print.string("Done\n");
     platform.done();
 }

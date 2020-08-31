@@ -172,7 +172,11 @@ pub fn any(file: *File, value: var) FileError!void {
             if (int_type.is_signed) {
                 try int(file, value);
             } else {
-                try uint(file, value);
+                if (int_type.bits * 8 > @sizeOf(usize)) {
+                    try uint64(file, value);
+                } else {
+                    try uint(file, value);
+                }
             }
         },
         builtin.TypeId.Bool => try boolean(file, value),
@@ -313,6 +317,8 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!voi
     }
 }
 
+// TODO: Better name these binary printing functions
+
 pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
     // Print hex data like this:
     //                        VV group_sep
@@ -377,9 +383,13 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
     }
 }
 
+pub fn data_bytes(file: *File, byteslice: []u8) FileError!void {
+    try data(file, @ptrToInt(byteslice.ptr), byteslice.len);
+}
+
 pub fn bytes(file: *File, comptime Type: type, value: *Type) FileError!void {
     const size: usize = @sizeOf(Type);
     const ptr: usize = @ptrToInt(value);
-    try format(file, "type: {} at {:a} size: {} data: ", @typeName(Type), ptr, size);
+    try format(file, "type: {} at {:a} size: {} data:\n", @typeName(Type), ptr, size);
     try data(file, ptr, size);
 }
