@@ -47,8 +47,7 @@ pub fn build(b: *std.build.Builder) void {
     kernel.install();
 
     // programs/test_prog
-    const test_prog = b.addExecutable("test_prog.elf", null);
-    test_prog.addAssemblyFile("programs/test_prog/test_prog.s");
+    const test_prog = b.addExecutable("test_prog.elf", "programs/test_prog/test_prog.zig");
     test_prog.setLinkerScriptPath("programs/test_prog/test_prog.ld");
     test_prog.setTheTarget(target);
     test_prog.install();

@@ -1,4 +1,4 @@
-ENTRY(test_prog_start)
+ENTRY(main)
 
 SECTIONS {
 	.text : ALIGN(4K)
