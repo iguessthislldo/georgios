@@ -155,8 +155,12 @@ test "int_to_enum" {
     assert(int_to_enum(Abc, x) == null);
 
     // valid_enum
-    assert(valid_enum(@bitCast(Abc, u8(0))));
-    assert(!valid_enum(@bitCast(Abc, u8(4))));
+    assert(valid_enum(Abc, @intToEnum(Abc, u8(0))));
+    // TODO: This is a workaround bitcast of a const Enum causing a compiler assert
+    // Looks like it's related to https://github.com/ziglang/zig/issues/1036
+    var invalid_enum_value: u8 = 4;
+    assert(!valid_enum(Abc, @ptrCast(*const Abc, &invalid_enum_value).*));
+    // assert(valid_enum(Abc, @bitCast(Abc, u8(4))));
 }
 
 pub fn max(comptime T: type, a: T, b: T) T {
