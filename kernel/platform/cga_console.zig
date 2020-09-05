@@ -6,6 +6,7 @@ const util = @import("util.zig");
 const out8 = util.out8;
 const in8 = util.in8;
 const platform = @import("platform.zig");
+const code_point_437 = @import("code_point_437.zig");
 
 pub const Color = enum {
     Black = 0,
@@ -47,19 +48,20 @@ var default_colors: u8 = combine_colors(Color.LightGrey, Color.Black);
 
 var buffer: [*]u16 = undefined;
 
-pub fn initialize() void {
-    buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
+pub fn new_page() void {
+    row = 0;
+    column = 0;
     fill_screen(' ');
     cursor(0, 0);
 }
 
-pub fn set_colors(fg: Color, bg: Color) void {
-    default_colors = combine_colors(fg, bg);
+pub fn initialize() void {
+    buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
+    new_page();
 }
 
-pub fn new_page() void {
-    row = 0;
-    column = 0;
+pub fn set_colors(fg: Color, bg: Color) void {
+    default_colors = combine_colors(fg, bg);
 }
 
 pub fn place_char(c: u8, x: u32, y: u32) void {
@@ -101,26 +103,65 @@ pub fn scroll() void {
     }
 }
 
+pub fn new_line() void {
+    if (row == (height - 1)) {
+        scroll();
+    } else {
+        row += 1;
+    }
+    column = 0;
+    cursor(1, row);
+}
+
+pub fn direct_print_char(c: u8) void {
+    column += 1;
+    if (column == width) {
+        new_line();
+    }
+    place_char(c, column, row);
+    cursor(column + 1, row);
+}
+
 pub fn print_char(c: u8) void {
     if (c == '\n') {
-        column = 0;
-        if (row == (height-1)) {
-            scroll();
-        } else {
-            row += 1;
-        }
-        cursor(column + 1, row);
+        new_line();
     } else {
-        column += 1;
-        if (column == width) {
-            if (row == (height-1)) {
-                scroll();
-            } else {
-                row += 1;
-            }
-            column = 0;
-        }
-        place_char(c, column, row);
-        cursor(column + 1, row);
+        direct_print_char(c);
     }
+}
+
+pub fn print_all_characters() void {
+    new_page();
+    var i: u16 = 0;
+    while (i < 256) {
+        direct_print_char(@truncate(u8, i));
+        if (i % 32 == 31) {
+            new_line();
+        }
+        i += 1;
+    }
+}
+
+pub fn from_unicode(c: u32) ?u8 {
+    // Code Page 437 Doesn't Have Any Points Past 2^16
+    if (c > 0xFFFF) return null;
+    const c16 = @intCast(u16, c);
+
+    // Check a few contiguous ranges. The main one is Printable ASCII.
+    if (code_point_437.contiguous_ranges(c16)) |c8| return c8;
+
+    // Else check the hash table
+    const hash = c16 % code_point_437.bucket_count;
+    if (hash > code_point_437.max_hash_used) return null;
+    const offset = hash * code_point_437.max_bucket_length;
+    const bucket = code_point_437.hash_table[offset..offset + code_point_437.max_bucket_length];
+    for (bucket[0..]) |entry| {
+        const valid = @intCast(u8, entry >> 24);
+        if (valid == 0) return null;
+        const key = @truncate(u16, entry);
+        const value = @truncate(u8, entry >> 16);
+        if (key == c16) return value;
+    }
+
+    return null;
 }
