@@ -1,0 +1,26 @@
+name: normal
+
+on:
+    push:
+        branches: [ master ]
+    pull_request:
+        branches: [ master ]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v2
+            - uses: goto-bus-stop/setup-zig@v1
+                with:
+                    version: 0.5.0
+
+            - name: Install Packages
+                run: sudo apt-get install grub-pc-bin
+
+            - name: Build ISO Image
+                run: make
+
+            - name: Run Unit Tests
+                run: make test
