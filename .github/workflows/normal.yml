@@ -12,6 +12,9 @@ jobs:
 
         steps:
             - uses: actions/checkout@v2
+              with:
+                  submodules: true
+
             - uses: goto-bus-stop/setup-zig@v1
               with:
                 version: 0.5.0
