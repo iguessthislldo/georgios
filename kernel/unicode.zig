@@ -52,13 +52,21 @@ const Utf8Iterator = struct {
     }
 };
 
-pub fn utf8_to_utf32(input: []const u8, output: []u32) Error![]u32 {
+pub const Utf8ToUtf32Result = struct {
+    fit_in_output: []u32 = undefined,
+    leftovers: []const u8,
+};
+
+pub fn utf8_to_utf32(input: []const u8, output: []u32) Error!Utf8ToUtf32Result {
     var it = Utf8Iterator{.input = input};
     var i: usize = 0;
     var loop = true;
+    var leftovers: ?usize = null;
     while (loop) {
+        const last_pos = it.pos;
         if (it.next()) |c| {
             if (i >= output.len) {
+                leftovers = last_pos;
                 break;
             }
             output[i] = c;
@@ -72,7 +80,9 @@ pub fn utf8_to_utf32(input: []const u8, output: []u32) Error![]u32 {
             },
         }
     }
-    return output[0..i];
+    return Utf8ToUtf32Result{
+        .fit_in_output=output[0..i],
+        .leftovers=input[(if (leftovers == null) it.pos else leftovers.?)..]};
 }
 
 test "utf8_to_utf32" {
@@ -93,8 +103,10 @@ test "utf8_to_utf32" {
             0x00000048, 0x00000065, 0x0000006c, 0x0000006c,
             0x0000006f,
         };
-        std.testing.expectEqualSlices(u32, expected[0..],
-            try utf8_to_utf32(input, buffer[0..]));
+
+        const result = try utf8_to_utf32(input, buffer[0..]);
+        std.testing.expectEqualSlices(u32, expected[0..], result.fit_in_output);
+        std.testing.expectEqualSlices(u8, "", result.leftovers);
     }
 
     // One-Two Byte UTF-8 Code Units
@@ -104,8 +116,10 @@ test "utf8_to_utf32" {
             0x000000c6, 0x000000f0, 0x00000065, 0x0000006c,
             0x00000073, 0x00000074, 0x00000061, 0x0000006e,
         };
-        std.testing.expectEqualSlices(u32, expected[0..],
-            try utf8_to_utf32(input, buffer[0..]));
+
+        const result = try utf8_to_utf32(input, buffer[0..]);
+        std.testing.expectEqualSlices(u32, expected[0..], result.fit_in_output);
+        std.testing.expectEqualSlices(u8, "", result.leftovers);
     }
 
     // One-Four Byte UTF-8 Code Units
@@ -115,7 +129,25 @@ test "utf8_to_utf32" {
             0x0001f371, 0x00000020, 0x00009802, 0x0000304d,
             0x0000307e, 0x00003059,
         };
-        std.testing.expectEqualSlices(u32, expected[0..],
-            try utf8_to_utf32(input, buffer[0..]));
+
+        const result = try utf8_to_utf32(input, buffer[0..]);
+        std.testing.expectEqualSlices(u32, expected[0..], result.fit_in_output);
+        std.testing.expectEqualSlices(u8, "", result.leftovers);
+    }
+
+    // Output is Too Small, so There Are Leftovers
+    {
+        var too_small_buffer: [3]u32 = undefined;
+        const input: []const u8 = "Hello";
+
+        const expected_output1 = [_]u32 {0x00000048, 0x00000065, 0x0000006c};
+        const result1 = try utf8_to_utf32(input, too_small_buffer[0..]);
+        std.testing.expectEqualSlices(u32, expected_output1[0..], result1.fit_in_output);
+        std.testing.expectEqualSlices(u8, input[too_small_buffer.len..], result1.leftovers);
+
+        const expected_output2 = [_]u32 {0x0000006c, 0x0000006f};
+        const result2 = try utf8_to_utf32(result1.leftovers, too_small_buffer[0..]);
+        std.testing.expectEqualSlices(u32, expected_output2[0..], result2.fit_in_output);
+        std.testing.expectEqualSlices(u8, "", result2.leftovers);
     }
 }

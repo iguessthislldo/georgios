@@ -48,6 +48,28 @@ pub const Kernel = struct {
         the_file.initialize(&file);
         print.format("size: {}\n", the_file.size);
         var elf_object = try elf.Object.from_file(&file);
+
+        platform.impl.cga_console.print_all_characters();
+        const screen_print = platform.impl.cga_console.print_utf8_string;
+        screen_print("\n");
+        screen_print(" ☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼\n");
+        screen_print(" !\"#$%&'()*+,-./0123456789:;<=>?\n");
+        screen_print("@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\n");
+        screen_print("`abcdefghijklmnopqrstuvwxyz{|}~⌂\n");
+        screen_print("ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ\n");
+        screen_print("áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐\n");
+        screen_print("└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀\n");
+        screen_print("αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■ \n");
+        screen_print("\n");
+        screen_print("🚀\n");
+        screen_print("\n");
+        screen_print("abcdefghijklmnopqrstuvwxyz"
+            ++ " abcdefghijklmnopqrstuvwxyz"
+            ++ " abcdefghijklmnopqrstuvwxyz"
+            ++ " abcdefghijklmnopqrstuvwxyz"
+            ++ " abcdefghijklmnopqrstuvwxyz"
+            ++ " abcdefghijklmnopqrstuvwxyz"
+            ++ "\n");
     }
 };
 

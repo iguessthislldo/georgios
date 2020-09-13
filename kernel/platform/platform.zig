@@ -72,8 +72,8 @@ pub fn kernel_range_virtual_start_available() usize {
 fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     for (from) |value| {
         serial_log.print_char(value);
-        cga_console.print_char(value);
     }
+    cga_console.print_utf8_string(from);
     return from.len;
 }
 
