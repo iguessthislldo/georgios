@@ -13,6 +13,9 @@ const s_sources = [_][]const u8 {
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
+    var arena_alloc = std.heap.ArenaAllocator.init(std.heap.direct_allocator);
+    const alloc = &arena_alloc.allocator;
+
     const build_mode = b.standardReleaseOptions();
     const multiboot_vga_request = b.option(bool, "multiboot_vga_request",
         \\Ask the bootloader to switch to a graphics mode for us.
@@ -43,6 +46,49 @@ pub fn build(b: *std.build.Builder) void {
     kernel.addBuildOption(bool, "debug_log", debug_log);
     for (s_sources) |s_source| {
         kernel.addAssemblyFile(s_source);
+    }
+    // ACPICA
+    {
+        const components = [_][]const u8 {
+            "dispatcher",
+            "events",
+            "executer",
+            "hardware",
+            "namespace",
+            "parser",
+            "resources",
+            "tables",
+            "utilities",
+        };
+        const acpica_path = p_path ++ "acpica/";
+        const source_path = acpica_path ++ "acpica/source/";
+
+        // Configure Source
+        var configure_step = b.addSystemCommand([_][]const u8{
+            acpica_path ++ "prepare_source.py", acpica_path});
+        kernel.step.dependOn(&configure_step.step);
+
+        // Include
+        kernel.addIncludeDir(acpica_path ++ "include");
+        kernel.addIncludeDir(source_path ++ "include");
+        kernel.addIncludeDir(source_path ++ "include/platform");
+
+        // Add Sources
+        for (components) |component| {
+            const component_path = std.fs.path.join(alloc,
+                [_][]const u8{source_path, "components", component}) catch unreachable;
+            var walker = std.fs.walkPath(alloc, component_path) catch unreachable;
+            var i = walker.next() catch unreachable;
+            while (i != null) {
+                const path = i.?.path;
+                if (std.mem.endsWith(u8, path, ".c") and
+                        !std.mem.endsWith(u8, path, "dump.c")) {
+                    // std.debug.warn("{}\n", path);
+                    kernel.addCSourceFile(path, [_][]const u8{});
+                }
+                i = walker.next() catch unreachable;
+            }
+        }
     }
     kernel.install();
 

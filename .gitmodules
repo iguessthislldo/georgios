@@ -1,0 +1,3 @@
+[submodule "kernel/platform/acpica"]
+	path = kernel/platform/acpica/acpica
+	url = git@github.com:acpica/acpica.git

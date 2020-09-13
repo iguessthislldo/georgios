@@ -110,4 +110,6 @@ pub fn initialize(kernel: *Kernel) !void {
 
     // Setup Devices
     pci.find_pci_devices();
+
+    acpi.initialize();
 }
