@@ -49,6 +49,8 @@ pub fn build(b: *std.build.Builder) void {
     }
     // ACPICA
     {
+        var acpica = b.addObject("acpica", null);
+        acpica.setTheTarget(target);
         const components = [_][]const u8 {
             "dispatcher",
             "events",
@@ -66,12 +68,14 @@ pub fn build(b: *std.build.Builder) void {
         // Configure Source
         var configure_step = b.addSystemCommand([_][]const u8{
             acpica_path ++ "prepare_source.py", acpica_path});
-        kernel.step.dependOn(&configure_step.step);
+        acpica.step.dependOn(&configure_step.step);
 
-        // Include
-        kernel.addIncludeDir(acpica_path ++ "include");
-        kernel.addIncludeDir(source_path ++ "include");
-        kernel.addIncludeDir(source_path ++ "include/platform");
+        // Includes
+        for ([_]*std.build.LibExeObjStep{kernel, acpica}) |obj| {
+            obj.addIncludeDir(acpica_path ++ "include");
+            obj.addIncludeDir(source_path ++ "include");
+            obj.addIncludeDir(source_path ++ "include/platform");
+        }
 
         // Add Sources
         for (components) |component| {
@@ -84,11 +88,12 @@ pub fn build(b: *std.build.Builder) void {
                 if (std.mem.endsWith(u8, path, ".c") and
                         !std.mem.endsWith(u8, path, "dump.c")) {
                     // std.debug.warn("{}\n", path);
-                    kernel.addCSourceFile(path, [_][]const u8{});
+                    acpica.addCSourceFile(path, [_][]const u8{});
                 }
                 i = walker.next() catch unreachable;
             }
         }
+        kernel.addObject(acpica);
     }
     kernel.install();
 

@@ -178,3 +178,7 @@ export fn AcpiOsCreateCache() acpica.Status {
 export fn AcpiOsDeleteCache() acpica.Status {
     @panic("AcpiOsDeleteCache called");
 }
+
+export fn AcpiOsEnterSleep() acpica.Status {
+    @panic("AcpiOsEnterSleep called");
+}
