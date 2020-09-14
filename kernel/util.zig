@@ -478,15 +478,19 @@ test "pow2_round_up" {
     std.testing.expectEqual(u8(32), pow2_round_up(u8, 17));
 }
 
+pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
+    var slice: []Type = undefined;
+    slice.ptr = ptr;
+    slice.len = len;
+    return slice;
+}
+
 pub inline fn to_bytes(value: var) []u8 {
     comptime const Type = @typeOf(value);
     comptime const Traits = @typeInfo(Type);
-    var bytes: []u8 = undefined;
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
-            bytes.ptr = @ptrCast([*]u8, value);
-            bytes.len = @sizeOf(pointer_type.child);
-            return bytes;
+            return make_slice(u8, @ptrCast([*]u8, value), @sizeOf(pointer_type.child));
         },
         else => {
             @compileLog("Unsupported Type is ", @typeName(Type));
