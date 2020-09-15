@@ -50,7 +50,14 @@ pub const Kernel = struct {
         print.format("size: {}\n", the_file.size);
         var elf_object = try elf.Object.from_file(self.memory.kalloc, &file);
 
-        asm volatile ("int $100" :: [print_char] "{eax}" (u32(99)), [char] "{ebx}" (u32('+')));
+        const range = @import("memory.zig").Range{.start=0, .size=elf_object.program.len};
+        try self.memory.platform_memory.mark_virtual_memory_present(range);
+        var i: usize = 0;
+        while (i < range.size) {
+            @intToPtr(*allowzero u32, range.start + i).* = elf_object.program[i];
+            i += 1;
+        }
+        asm volatile ("jmp *%[entry_point]" :: [entry_point] "{eax}" (elf_object.header.entry));
     }
 };
 

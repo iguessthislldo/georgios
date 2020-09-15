@@ -32,7 +32,11 @@ pub const InterruptStack = packed struct {
 
 const system_call_interrupt_number: u8 = 100;
 fn handle_system_call(interrupt_stack: *InterruptStack) void {
-    print.format("handle_system_call: {} {}\n", interrupt_stack.eax, interrupt_stack.ebx);
+    const call_number = interrupt_stack.eax;
+    const arg1 = interrupt_stack.ebx;
+    if (call_number == 99) {
+        print.char(@truncate(u8, arg1));
+    }
 }
 
 // Interrupt Descriptor Table ================================================

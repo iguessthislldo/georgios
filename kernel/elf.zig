@@ -168,6 +168,8 @@ pub const Object = struct {
         print.format("Header Size: {}\n", usize(@sizeOf(Header)));
         try object.header.verify_executable();
 
+        print.format("Entry: {:a}\n", usize(@sizeOf(Header)));
+
         // Read Section Headers
         print.format("Section Header Count: {}\n", object.header.section_header_entry_count);
         {
