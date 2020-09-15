@@ -23,11 +23,11 @@ pub inline fn Ti(x: usize) usize {
 }
 
 pub fn align_down(value: usize, align_by: usize) usize {
-    return value & (~align_by + 1);
+    return value & (~align_by +% 1);
 }
 
 pub fn align_up(value: usize, align_by: usize) usize {
-    return align_down(value + align_by - 1, align_by);
+    return align_down(value +% align_by -% 1, align_by);
 }
 
 pub inline fn padding(value: usize, align_by: usize) usize {

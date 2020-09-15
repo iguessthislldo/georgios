@@ -13,7 +13,7 @@ pub const Range = struct {
     start: usize = 0,
     size: usize = 0,
 
-    pub fn end(self: *Range) usize {
+    pub fn end(self: *const Range) usize {
         return self.start + self.size;
     }
 };

@@ -6,6 +6,7 @@ pub const print = @import("print.zig");
 pub const Memory = @import("memory.zig").Memory;
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
+pub const util = @import("util.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -48,6 +49,16 @@ pub const Kernel = struct {
         the_file.initialize(&file);
         print.format("size: {}\n", the_file.size);
         var elf_object = try elf.Object.from_file(&file);
+
+        {
+            const space = try self.memory.platform_memory.get_kernal_space(util.Ki(12));
+            print.format("{:a} {:a}\n", space.start, space.size);
+        }
+
+        {
+            const space = try self.memory.platform_memory.get_kernal_space(util.Ki(1));
+            print.format("{:a} {:a}\n", space.start, space.size);
+        }
     }
 };
 
