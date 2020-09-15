@@ -16,6 +16,11 @@ pub const Range = struct {
     pub fn end(self: *const Range) usize {
         return self.start + self.size;
     }
+
+    pub fn to_slice(self: *const Range, comptime Type: type) []Type {
+        return kutil.make_slice(Type,
+            @intToPtr([*]Type, self.start), self.size / @sizeOf(Type));
+    }
 };
 
 /// Used by the platform to provide what real memory can be used for the real

@@ -63,6 +63,10 @@ pub const Kernel = struct {
         {
             const space = try self.memory.platform_memory.get_kernal_space(util.Mi(16));
             print.format("{:a} {:a}\n", space.start, space.size);
+            for (space.to_slice(u8)) |*p| {
+                print.format("{:a}\n", @ptrToInt(p));
+                p.* = 0;
+            }
         }
     }
 };
