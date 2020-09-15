@@ -505,7 +505,7 @@ const Controller = struct {
 //  - Cache the sectors and  only do an actual read when we don't have that
 //    sector in the cache.
 //  - Eventually do DMA.
-pub fn read_from_drive(address: u64, destination: []u8) void {
+pub fn read_from_drive(address: u64, destination: []u8) usize {
     // print.format("read_from_drive: address: {}\n", address);
 
     const start_sector = address / Sector.size;
@@ -519,6 +519,7 @@ pub fn read_from_drive(address: u64, destination: []u8) void {
     var sector = Sector{.address = start_sector};
     var dest_offset: usize = 0;
     var drive_offset = @intCast(usize, address % Sector.size);
+    var total_read_size: usize = 0;
 
     while (sector.address < end_sector) {
         // print.format("  read sector: {}\n", sector.address);
@@ -527,9 +528,11 @@ pub fn read_from_drive(address: u64, destination: []u8) void {
         };
         // sector.dump();
 
-        const read_size = kutil.min(usize, @intCast(usize, Sector.size), destination.len - dest_offset);
-        // print.format("  read: {}\n", read_size);
-        const new_dest_offset = dest_offset + read_size;
+        const this_read_size = kutil.min(usize,
+            @intCast(usize, Sector.size), destination.len - dest_offset);
+        // print.format("  read: {}\n", this_read_size);
+        const new_dest_offset = dest_offset + this_read_size;
+        total_read_size += this_read_size;
 
         const dest = destination[dest_offset..new_dest_offset];
         kutil.memory_copy_truncate(dest, sector.data[drive_offset..]);
@@ -539,6 +542,8 @@ pub fn read_from_drive(address: u64, destination: []u8) void {
         dest_offset = new_dest_offset;
         sector.address += 1;
     }
+
+    return total_read_size;
 }
 
 // The Temporary Single-File "File System"
@@ -558,16 +563,15 @@ pub const TheFile = struct {
         self.file = file;
         self.position = 0;
 
-        read_from_drive(0, kutil.to_bytes(&self.size));
+        if (read_from_drive(0, kutil.to_bytes(&self.size)) != @sizeOf(@typeOf(self.size))) {
+            @panic("TheFile: Read Size from Size Check is Wrong!");
+        }
     }
 
     pub fn read(file: *io.File, to: []u8) io.FileError!usize {
         const self = @intToPtr(*Self, file.impl_data.?);
-        const read_size = kutil.min(usize, to.len,
-            self.size - self.position);
-        if (read_size > 0) {
-            read_from_drive(@intCast(u64, @sizeOf(u32) + self.position), to);
-        }
+        const read_size = read_from_drive(@intCast(u64, @sizeOf(u32) + self.position), to);
+        self.position += read_size;
         return read_size;
     }
 

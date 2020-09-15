@@ -103,7 +103,7 @@ pub const File = struct {
         if (to.len == 0) {
             return FileError.EmptyBuffer;
         }
-        const result = file.read_impl(file, to);
+        const result = try file.read_impl(file, to);
         if (result == 0) {
             return FileError.OutOfBounds;
         }
@@ -162,7 +162,7 @@ pub const File = struct {
             .FromEnd => end,
         };
         if (util.add_isize_to_usize(from, offset)) |result| {
-            if (!past_end and result >= end) {
+            if (result != position and !past_end and result >= end) {
                 return FileError.OutOfBounds;
             }
             return result;
