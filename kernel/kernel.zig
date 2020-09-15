@@ -49,6 +49,8 @@ pub const Kernel = struct {
         the_file.initialize(&file);
         print.format("size: {}\n", the_file.size);
         var elf_object = try elf.Object.from_file(self.memory.kalloc, &file);
+
+        asm volatile ("int $100" :: [print_char] "{eax}" (u32(99)), [char] "{ebx}" (u32('+')));
     }
 };
 

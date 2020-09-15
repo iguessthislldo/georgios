@@ -17,35 +17,13 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     unreachable;
 }
 
-const PanicStack = packed struct {
-    // Pushed by us
-    idt_index: u32,
-    // Pushed by us using pusha
-    edi: u32,
-    esi: u32,
-    ebp: u32,
-    esp: u32,
-    ebx: u32,
-    edx: u32,
-    ecx: u32,
-    eax: u32,
-    // Pushed by us if the CPU didn't push one
-    error_code: u32,
-    // Pushed by CPU
-    eip: u32,
-    cs: u32,
-    eflags: u32,
-};
-
-pub export var panic_stack: *PanicStack = undefined;
-
-pub export fn show_panic_message() void {
+pub fn show_panic_message(interrupt_stack: *const interrupts.InterruptStack) void {
     const Color = cga_console.Color;
     cga_console.new_page();
     cga_console.set_colors(Color.Black, Color.Red);
     cga_console.fill_screen(' ');
-    const ec = panic_stack.error_code;
-    const index = panic_stack.idt_index;
+    const ec = interrupt_stack.error_code;
+    const index = interrupt_stack.idt_index;
     print.format(
         \\==============================<!>Kernel Panic<!>==============================
         \\The system has encountered an unrecoverable error:
@@ -109,18 +87,18 @@ pub export fn show_panic_message() void {
         \\    EDI: {:x}
         \\    CS: {:x} ({})
         ,
-        panic_stack.eip,
-        panic_stack.eflags,
-        panic_stack.eax,
-        panic_stack.ecx,
-        panic_stack.edx,
-        panic_stack.ebx,
-        panic_stack.esp,
-        panic_stack.ebp,
-        panic_stack.esi,
-        panic_stack.edi,
-        panic_stack.cs,
-        segments.get_name(panic_stack.cs / 8),
+        interrupt_stack.eip,
+        interrupt_stack.eflags,
+        interrupt_stack.eax,
+        interrupt_stack.ecx,
+        interrupt_stack.edx,
+        interrupt_stack.ebx,
+        interrupt_stack.esp,
+        interrupt_stack.ebp,
+        interrupt_stack.esi,
+        interrupt_stack.edi,
+        interrupt_stack.cs,
+        segments.get_name(interrupt_stack.cs / 8),
     );
 
     util.halt();

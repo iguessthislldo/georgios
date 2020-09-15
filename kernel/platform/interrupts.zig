@@ -6,6 +6,34 @@ const putil = @import("util.zig");
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
+const panic = @import("panic.zig");
+
+pub const InterruptStack = packed struct {
+    // Pushed by us
+    idt_index: u32,
+    // Pushed by us using pusha
+    edi: u32,
+    esi: u32,
+    ebp: u32,
+    esp: u32,
+    ebx: u32,
+    edx: u32,
+    ecx: u32,
+    eax: u32,
+    // Pushed by us if the CPU didn't push one
+    error_code: u32,
+    // Pushed by CPU
+    eip: u32,
+    cs: u32,
+    eflags: u32,
+};
+
+// System Calls ==============================================================
+
+const system_call_interrupt_number: u8 = 100;
+fn handle_system_call(interrupt_stack: *InterruptStack) void {
+    print.format("handle_system_call: {} {}\n", interrupt_stack.eax, interrupt_stack.ebx);
+}
 
 // Interrupt Descriptor Table ================================================
 
@@ -65,15 +93,19 @@ const user_flags: u8 = kernel_flags | (3 << 5);
 
 // Interrupt Handler Generation ==============================================
 
+// TODO : Rethink this approach. It's causing weird results on the other side,
+// probably because of stack corruption. See panic_message note in kernel run
+// and register contents when using a Zig panic.
 fn BaseInterruptHandler(
-        comptime i: u32, comptime dummy_error_code: bool, comptime software: bool) type {
+        comptime i: u32, comptime dummy_error_code: bool, comptime software_panic: bool,
+        impl: fn(*InterruptStack) void) type {
     return struct {
         const index: u8 = i;
 
         pub nakedcc fn handler() noreturn {
             asm volatile ("cli");
             if (dummy_error_code) {
-                if (software) {
+                if (software_panic) {
                     // This is a left over from being able to set the error
                     // code for the C panic.
                     // Also see panic function that puts this value in the
@@ -84,27 +116,22 @@ fn BaseInterruptHandler(
                     asm volatile ("pushl $0");
                 }
             }
-            asm volatile (
-                \\// Push General Registers
-                \\pushal // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
-            );
+            asm volatile ("pushal"); // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
             // TODO: Bug? This has to be a var in the function, it can't be a
             // const, i, or index.
             var in = @intCast(u32, index);
+            asm volatile ("pushl %[interrupt_number]" :: [interrupt_number] "{eax}" (in));
+            const interrupt_stack = @intToPtr(*InterruptStack,
+                asm volatile ("mov %%esp, %[interrupt_stack]" : [interrupt_stack] "={eax}" (-> u32)));
+
+            impl(interrupt_stack);
+
             asm volatile (
-                \\pushl %[interrupt_number]
-                \\
-                \\// The stack should now be equivalent to PanicStack
-                \\mov %%esp, panic_stack
-                \\
-                \\call show_panic_message
-                \\
                 \\addl $4, %%esp // Pop Interrupt Code
                 \\popal // Restore Registers
                 \\addl $4, %%esp // Pop Error Code
                 \\iret
-            ::
-                [interrupt_number] "{eax}" (in));
+                );
             unreachable;
         }
 
@@ -118,9 +145,9 @@ fn BaseInterruptHandler(
     };
 }
 
-fn InterruptHandler(
+fn HardwareErrorInterruptHandler(
         comptime i: u32, comptime dummy_error_code: bool) type {
-    return BaseInterruptHandler(i, dummy_error_code, false);
+    return BaseInterruptHandler(i, dummy_error_code, false, panic.show_panic_message);
 }
 
 // CPU Exception Interrupts ==================================================
@@ -219,19 +246,22 @@ pub fn initialize() void {
     print.debug_print = false; // Too many lines
     comptime var index = 0;
     inline while (index < 256) {
-        InterruptHandler(index, false).set(
+        HardwareErrorInterruptHandler(index, false).set(
             "Unknown Interrupt", kernel_code_selector, kernel_flags);
         index += 1;
     }
     print.debug_print = debug_print_value;
 
     inline for (exceptions) |ex| {
-        InterruptHandler(ex.index, !ex.error_code).set(
+        HardwareErrorInterruptHandler(ex.index, !ex.error_code).set(
             ex.name, kernel_code_selector, kernel_flags);
     }
 
-    BaseInterruptHandler(50, true, true).set(
+    BaseInterruptHandler(50, true, true, panic.show_panic_message).set(
         "Software Panic", kernel_code_selector, kernel_flags);
+
+    BaseInterruptHandler(system_call_interrupt_number, true, false, handle_system_call).set(
+        "System Call", kernel_code_selector, kernel_flags);
 
     load();
 
