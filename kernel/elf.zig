@@ -11,6 +11,7 @@
 const io = @import("io.zig");
 const util = @import("util.zig");
 const print = @import("print.zig");
+const Allocator = @import("memory.zig").Allocator;
 
 pub const Error = error {
     InvalidElfFile,
@@ -153,12 +154,14 @@ const Header = packed struct {
 };
 
 pub const Object = struct {
-    header: Header,
-    section_headers: [16]SectionHeader, // TODO: Alloc Them Instead
-    program_headers: [16]ProgramHeader, // TODO: Alloc Them Instead
+    alloc: *Allocator,
+    header: Header = undefined,
+    section_headers: []SectionHeader = undefined,
+    program_headers: []ProgramHeader = undefined,
+    program: []u8 = undefined,
 
-    pub fn from_file(file: *io.File) !Object {
-        var object: Object = undefined;
+    pub fn from_file(alloc: *Allocator, file: *io.File) !Object {
+        var object = Object{.alloc = alloc};
 
         // Read Header
         _ = try file.read(util.to_bytes(&object.header));
@@ -167,16 +170,19 @@ pub const Object = struct {
 
         // Read Section Headers
         print.format("Section Header Count: {}\n", object.header.section_header_entry_count);
-        _ = try file.seek(@intCast(isize, object.header.section_header_offset), .FromStart);
-        const section_headers_size =
-            @intCast(usize, object.header.section_header_entry_count) *
-            @intCast(usize, object.header.section_header_entry_size);
-        const valid_section_headers_bytes =
-            util.to_bytes(&object.section_headers)[0..section_headers_size];
-        _ = try file.read(valid_section_headers_bytes);
-        const valid_section_headers =
-            object.section_headers[0..object.header.section_header_entry_count];
-        for (valid_section_headers) |*section_header| {
+        {
+            _ = try file.seek(
+                @intCast(isize, object.header.section_header_offset), .FromStart);
+            const count = @intCast(usize, object.header.section_header_entry_count);
+            const size = @intCast(usize, object.header.section_header_entry_size);
+            const skip = @intCast(isize, size - @sizeOf(SectionHeader));
+            object.section_headers = try alloc.alloc_array(SectionHeader, count);
+            for (object.section_headers) |*section_header, i| {
+                _ = try file.read(util.to_bytes(section_header));
+                _ = try file.seek(skip, .FromHere);
+            }
+        }
+        for (object.section_headers) |*section_header| {
             print.format("section: kind: {} offset: {:x} size: {:x}\n",
                 section_header.kind,
                 @bitCast(usize, section_header.offset),
@@ -185,32 +191,38 @@ pub const Object = struct {
 
         // Read Program Headers
         print.format("Program Header Count: {}\n", object.header.program_header_entry_count);
-        _ = try file.seek(@intCast(isize, object.header.program_header_offset), .FromStart);
-        const program_headers_size =
-            @intCast(usize, object.header.program_header_entry_count) *
-            @intCast(usize, object.header.program_header_entry_size);
-        const valid_program_headers_bytes =
-            util.to_bytes(&object.program_headers)[0..program_headers_size];
-        _ = try file.read(valid_program_headers_bytes);
-        const valid_program_headers =
-            object.program_headers[0..object.header.program_header_entry_count];
-        for (valid_program_headers) |*program_header| {
+        {
+            _ = try file.seek(@
+                intCast(isize, object.header.program_header_offset), .FromStart);
+            const count = @intCast(usize, object.header.program_header_entry_count);
+            const size = @intCast(usize, object.header.program_header_entry_size);
+            const skip = @intCast(isize, size - @sizeOf(ProgramHeader));
+            object.program_headers = try alloc.alloc_array(ProgramHeader, count);
+            for (object.program_headers) |*program_header, i| {
+                _ = try file.read(util.to_bytes(program_header));
+                _ = try file.seek(skip, .FromHere);
+            }
+        }
+        var got_load = false;
+        for (object.program_headers) |*program_header| {
             print.format("program: kind: {} offset: {:x} " ++
                 "size in file: {:x} size in memory: {:x}\n",
                 program_header.kind,
                 @bitCast(usize, program_header.offset),
                 program_header.size_in_file,
                 program_header.size_in_memory);
-            // TODO: Remove/Make Proper
+            // Read the Program
+            // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {
+                if (got_load) @panic("Multiple LOADs in ELF!");
+                got_load = true;
                 _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
-                var buffer: [256]u8 = undefined;
-                const valid_bytes =
-                    util.to_bytes(&buffer)[0..program_header.size_in_file];
-                _ = try file.read(valid_bytes);
-                print.data_bytes(valid_bytes);
+                object.program = try alloc.alloc_array(u8, program_header.size_in_file);
+                _ = try file.read_or_error(object.program);
+                print.data_bytes(object.program);
             }
         }
+        if (!got_load) @panic("No LOADs in ELF!");
 
         return object;
     }

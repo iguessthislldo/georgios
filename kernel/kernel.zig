@@ -48,26 +48,7 @@ pub const Kernel = struct {
         var the_file = platform.impl.ata.TheFile{};
         the_file.initialize(&file);
         print.format("size: {}\n", the_file.size);
-        var elf_object = try elf.Object.from_file(&file);
-
-        {
-            const space = try self.memory.platform_memory.get_kernal_space(util.Ki(12));
-            print.format("{:a} {:a}\n", space.start, space.size);
-        }
-
-        {
-            const space = try self.memory.platform_memory.get_kernal_space(util.Ki(1));
-            print.format("{:a} {:a}\n", space.start, space.size);
-        }
-
-        {
-            const space = try self.memory.platform_memory.get_kernal_space(util.Mi(16));
-            print.format("{:a} {:a}\n", space.start, space.size);
-            for (space.to_slice(u8)) |*p| {
-                print.format("{:a}\n", @ptrToInt(p));
-                p.* = 0;
-            }
-        }
+        var elf_object = try elf.Object.from_file(self.memory.kalloc, &file);
     }
 };
 
