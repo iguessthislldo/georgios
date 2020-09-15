@@ -7,7 +7,7 @@ set logging overwrite on
 set logging on
 
 break panic
-/* break platform.interrupts.BaseInterruptHandler(14,false,false).handler */
+# break platform.interrupts.BaseInterruptHandler(14,false,false).handler
 
 target remote | qemu-system-i386 \
     -S -gdb stdio \
