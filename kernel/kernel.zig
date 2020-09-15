@@ -59,6 +59,11 @@ pub const Kernel = struct {
             const space = try self.memory.platform_memory.get_kernal_space(util.Ki(1));
             print.format("{:a} {:a}\n", space.start, space.size);
         }
+
+        {
+            const space = try self.memory.platform_memory.get_kernal_space(util.Mi(16));
+            print.format("{:a} {:a}\n", space.start, space.size);
+        }
     }
 };
 

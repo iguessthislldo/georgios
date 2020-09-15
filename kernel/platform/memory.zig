@@ -150,12 +150,13 @@ pub const Memory = struct {
         // }
         // print.format("total_count: {}, counted: {}\n", total_count, counted);
 
-        self.start_of_virtual_space =
-            @ptrToInt(kernel_page_tables.ptr) + kernel_page_tables.len * table_size;
+        self.start_of_virtual_space = kutil.align_up(
+            @ptrToInt(kernel_page_tables.ptr) + kernel_page_tables.len * table_size,
+            table_pages_size);
     }
 
     fn map_virtual_page(self: *Memory, address: usize) void {
-        print.format("map_virtual_page: {:a}\n", address);
+        // print.format("map_virtual_page: {:a}\n", address);
         if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
             set_entry(&kernel_page_tables[self.virtual_page_index], address);
             invalidate_page(self.virtual_page_address);
@@ -188,16 +189,15 @@ pub const Memory = struct {
     }
 
     fn get_unused_kernal_space(self: *Memory, requested_size: usize) MemoryError!Range {
-        print.format("get_unused_kernal_space {:x}\n", requested_size);
+        // print.format("get_unused_kernal_space {:x}\n", requested_size);
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
         const table_index_start = get_table_index(start);
-        print.format("table_index_start{:x}\n", table_index_start);
         var rv = Range{.size = kutil.align_up(requested_size, page_size)};
         var range = Range{};
         var dir_index: usize = dir_index_start;
         while (dir_index < tables_per_directory) {
-            print.format(" - Table {:x}\n", dir_index);
+            // print.format(" - Table {:x}\n", dir_index);
             const dir_offset = dir_index * table_pages_size;
             const dir_entry = page_directory[dir_index];
             if (!table_is_present(dir_entry)) {
@@ -217,7 +217,7 @@ pub const Memory = struct {
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (table_index < pages_per_table) {
-                print.format(" - Page {:x}\n", table_index);
+                // print.format(" - Page {:x}\n", table_index);
                 if (page_is_present(table[table_index])) {
                     if (range.size > 0) {
                         range.size = 0;
@@ -241,7 +241,7 @@ pub const Memory = struct {
     }
 
     pub fn new_page_table(self: *Memory, dir_index: usize) MemoryError!void {
-        print.string("new_page_table\n");
+        // print.format("new_page_table {:x}\n", dir_index);
         // TODO: Go through memory.Memory
         const table_address = try self.pop_frame();
         set_entry(&page_directory[dir_index], table_address);
@@ -255,24 +255,24 @@ pub const Memory = struct {
     }
 
     fn mark_virtual_memory_present(self: *Memory, range: Range) MemoryError!void {
-        print.string("mark_virtual_memory_present\n");
+        // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
         var dir_index: usize = dir_index_start;
         var marked: usize = 0;
         while (dir_index < tables_per_directory) {
-            print.format(" - Table {:x}\n", dir_index);
+            // print.format(" - Table {:x}\n", dir_index);
             const dir_offset = dir_index * table_pages_size;
             if (!table_is_present(page_directory[dir_index])) {
                 try self.new_page_table(dir_index);
             }
             self.map_virtual_page(get_table_address(page_directory[dir_index]));
             const table = @intToPtr([*]u32, self.virtual_page_address);
-            // print.format("{:a}\n", @ptrToInt(&table[0]));
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (table_index < pages_per_table) {
-                print.format(" - Page {:x} {:x} {:x}\n", dir_index, table_index, table[table_index]);
+                // print.format(" - Page {:x} {:x} {:x}\n",
+                //     dir_index, table_index, table[table_index]);
                 if (page_is_present(table[table_index])) {
                     @panic("mark_virtual_memory_present: Page already present!");
                 }
