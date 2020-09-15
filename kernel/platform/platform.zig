@@ -107,7 +107,7 @@ pub fn initialize(kernel: *Kernel) !void {
     var real_memory_map = kmemory.RealMemoryMap{};
     const mmap_tag = try multiboot.find_tag(.Mmap);
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
-    kernel.memory.initialize(&real_memory_map);
+    try kernel.memory.initialize(&real_memory_map);
 
     // Setup Devices
     pci.find_pci_devices();

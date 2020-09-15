@@ -1,5 +1,6 @@
-const kutil = @import("util.zig");
+const util = @import("util.zig");
 const print = @import("print.zig");
+const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
 const PlatformMemory = platform.Memory;
@@ -17,9 +18,12 @@ pub const Range = struct {
         return self.start + self.size;
     }
 
+    pub fn to_ptr(self: *const Range, comptime PtrType: type) PtrType {
+        return @intToPtr(PtrType, self.start);
+    }
+
     pub fn to_slice(self: *const Range, comptime Type: type) []Type {
-        return kutil.make_slice(Type,
-            @intToPtr([*]Type, self.start), self.size / @sizeOf(Type));
+        return util.make_slice(Type, self.to_ptr([*]Type), self.size / @sizeOf(Type));
     }
 };
 
@@ -57,8 +61,8 @@ pub const RealMemoryMap = struct {
     /// Given a memory range, add a frame group if there are frames that can
     /// fit in it.
     fn add_frame_group(self: *RealMemoryMap, start: usize, end: usize) void {
-        const aligned_start = kutil.align_up(start, platform.frame_size);
-        const aligned_end = kutil.align_down(end, platform.frame_size);
+        const aligned_start = util.align_up(start, platform.frame_size);
+        const aligned_end = util.align_down(end, platform.frame_size);
         if (aligned_start < aligned_end) {
             self.add_frame_group_impl(aligned_start,
                 (aligned_end - aligned_start) / platform.frame_size);
@@ -66,13 +70,43 @@ pub const RealMemoryMap = struct {
     }
 };
 
+pub const Allocator = struct {
+    alloc_impl: fn(self: *Allocator, size: usize) MemoryError!usize,
+    free_impl: fn(self: *Allocator, address: usize) MemoryError!void,
+
+    pub fn alloc(self: *Allocator, comptime Type: type) MemoryError!*Type {
+        return @intToPtr(*Type, try self.alloc_impl(self, @sizeOf(Type)));
+    }
+
+    pub fn free(self: *Allocator, comptime Type: type, address: *Type) MemoryError!void {
+        return self.free_impl(self, @ptrToInt(address));
+    }
+
+    pub fn alloc_array(
+            self: *Allocator, comptime Type: type, count: usize) MemoryError![]Type {
+        return @intToPtr([*]Type, try self.alloc_impl(self, @sizeOf(Type) * count))[0..count];
+    }
+
+    pub fn free_array(
+            self: *Allocator, comptime Type: type, value: []Type) MemoryError!void {
+        return self.free_impl(self, @ptrToInt(value.ptr));
+    }
+};
+
 /// Used by the kernel to manage system memory
 pub const Memory = struct {
+    const kalloc_size = util.Mi(1);
+    const KallocImplType = BuddyAllocator(kalloc_size);
+
     platform_memory: PlatformMemory = PlatformMemory{},
     free_frame_count: usize = 0,
+    kalloc_range: Range = undefined,
+    kalloc_impl_range: Range = undefined,
+    kalloc_impl: *KallocImplType = undefined,
+    kalloc: *Allocator = undefined,
 
     /// To be called by the platform after it can give "map".
-    pub fn initialize(self: *Memory, map: *RealMemoryMap) void {
+    pub fn initialize(self: *Memory, map: *RealMemoryMap) !void {
         print.debug_format(
             \\ - Initializing Memory System
             \\   - Start of kernel:
@@ -117,6 +151,14 @@ pub const Memory = struct {
             total_memory >> 10,
             total_memory >> 20,
             total_memory >> 30);
+
+        // TODO: Tidy Up How This is Done
+        self.kalloc_impl_range = try self.platform_memory.get_kernal_space(
+            @sizeOf(KallocImplType));
+        self.kalloc_impl = self.kalloc_impl_range.to_ptr(*KallocImplType);
+        self.kalloc_range = try self.platform_memory.get_kernal_space(kalloc_size);
+        self.kalloc_impl.initialize(self.kalloc_range.start);
+        self.kalloc = &self.kalloc_impl.allocator;
     }
 
     pub fn free_pmem(self: *Memory, frame: usize) void {
@@ -136,17 +178,4 @@ pub const Memory = struct {
 
     // pub fn free_vmem(self: *Memory, what: Range) MemoryError!void {
     // }
-};
-
-pub const Allocator = struct {
-    alloc_impl: fn(self: *Allocator, size: usize) MemoryError!usize,
-    free_impl: fn(self: *Allocator, address: usize) MemoryError!void,
-
-    pub fn alloc(self: *Allocator, comptime Type: type) MemoryError!*Type {
-        return @intToPtr(*Type, try self.alloc_impl(self, @sizeOf(Type)));
-    }
-
-    pub fn free(self: *Allocator, comptime Type: type, address: *Type) MemoryError!void {
-        return self.free_impl(self, @ptrToInt(address));
-    }
 };

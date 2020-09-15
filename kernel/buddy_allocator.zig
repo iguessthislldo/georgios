@@ -1,6 +1,8 @@
 // Based on http://bitsquid.blogspot.com/2015/08/allocation-adventures-3-buddy-allocator.html
 //
 // Also see prototype at scripts/prototypes/buddy.py
+//
+// TODO: Make Resizable
 
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
