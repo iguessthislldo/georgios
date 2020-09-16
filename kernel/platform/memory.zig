@@ -188,8 +188,8 @@ pub const Memory = struct {
         return MemoryError.OutOfMemory;
     }
 
-    fn get_unused_kernal_space(self: *Memory, requested_size: usize) MemoryError!Range {
-        // print.format("get_unused_kernal_space {:x}\n", requested_size);
+    fn get_unused_kernel_space(self: *Memory, requested_size: usize) MemoryError!Range {
+        // print.format("get_unused_kernel_space {:x}\n", requested_size);
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
         const table_index_start = get_table_index(start);
@@ -274,6 +274,7 @@ pub const Memory = struct {
                 // print.format(" - Page {:x} {:x} {:x}\n",
                 //     dir_index, table_index, table[table_index]);
                 if (page_is_present(table[table_index])) {
+                    print.format("{:x}\n", get_address(dir_index, table_index));
                     @panic("mark_virtual_memory_present: Page already present!");
                 }
                 // TODO: Go through memory.Memory for pop_frame
@@ -292,8 +293,8 @@ pub const Memory = struct {
     // fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
     // }
 
-    fn get_kernal_space(self: *Memory, requested_size: usize) MemoryError!Range {
-        const range = try self.get_unused_kernal_space(requested_size);
+    fn get_kernel_space(self: *Memory, requested_size: usize) MemoryError!Range {
+        const range = try self.get_unused_kernel_space(requested_size);
         try self.mark_virtual_memory_present(range);
         return range;
     }

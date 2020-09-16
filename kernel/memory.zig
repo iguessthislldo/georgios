@@ -153,10 +153,10 @@ pub const Memory = struct {
             total_memory >> 30);
 
         // TODO: Tidy Up How This is Done
-        self.kalloc_impl_range = try self.platform_memory.get_kernal_space(
+        self.kalloc_impl_range = try self.platform_memory.get_kernel_space(
             @sizeOf(KallocImplType));
         self.kalloc_impl = self.kalloc_impl_range.to_ptr(*KallocImplType);
-        self.kalloc_range = try self.platform_memory.get_kernal_space(kalloc_size);
+        self.kalloc_range = try self.platform_memory.get_kernel_space(kalloc_size);
         self.kalloc_impl.initialize(self.kalloc_range.start);
         self.kalloc = &self.kalloc_impl.allocator;
     }
