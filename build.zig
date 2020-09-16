@@ -6,7 +6,7 @@ const k_path = "kernel/";
 const p_path = k_path ++ "platform/";
 
 const s_sources = [_][]const u8 {
-    // p_path ++ "threading.s",
+    p_path ++ "threading.s",
     // p_path ++ "irq_handlers.s",
 };
 

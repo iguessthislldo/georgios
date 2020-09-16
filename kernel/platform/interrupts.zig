@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const print = @import("../print.zig");
 
 const putil = @import("util.zig");
+// TODO: Zig Bug? unable to evaluate constant expression
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
@@ -242,6 +243,7 @@ const pic = struct {
 pub fn initialize() void {
     table_pointer.limit = @sizeOf(Entry) * table.len;
     table_pointer.base = @ptrToInt(&table);
+    // TODO: See top of file
     const kernel_code_selector = @import("segments.zig").kernel_code_selector;
 
     print.debug_string(" - Filling the Interrupt Descriptor Table (IDT)\n");
@@ -265,7 +267,7 @@ pub fn initialize() void {
         "Software Panic", kernel_code_selector, kernel_flags);
 
     BaseInterruptHandler(system_call_interrupt_number, true, false, handle_system_call).set(
-        "System Call", kernel_code_selector, kernel_flags);
+        "System Call", kernel_code_selector, user_flags);
 
     load();
 

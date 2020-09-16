@@ -24,6 +24,8 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     platform.panic(msg, trace);
 }
 
+extern fn usermode(ip: u32, sp: u32) noreturn;
+
 pub const Kernel = struct {
     const Files = io.Files(32);
 
@@ -50,14 +52,22 @@ pub const Kernel = struct {
         print.format("size: {}\n", the_file.size);
         var elf_object = try elf.Object.from_file(self.memory.kalloc, &file);
 
-        const range = @import("memory.zig").Range{.start=0, .size=elf_object.program.len};
-        try self.memory.platform_memory.mark_virtual_memory_present(range);
+        const Range = @import("memory.zig").Range;
+        const range = Range{.start=0, .size=elf_object.program.len};
+        try self.memory.platform_memory.mark_virtual_memory_present(range, true);
         var i: usize = 0;
         while (i < range.size) {
             @intToPtr(*allowzero u32, range.start + i).* = elf_object.program[i];
             i += 1;
         }
-        asm volatile ("jmp *%[entry_point]" :: [entry_point] "{eax}" (elf_object.header.entry));
+        // asm volatile ("jmp *%[entry_point]" :: [entry_point] "{eax}" (elf_object.header.entry));
+        const usermode_stack = Range{
+            .start = platform.impl.kernel_to_virtual(0) - platform.frame_size,
+            .size = platform.frame_size};
+        try self.memory.platform_memory.mark_virtual_memory_present(usermode_stack, true);
+        const kernelmode_stack = try self.memory.platform_memory.get_kernel_space(util.Ki(4));
+        platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
+        usermode(elf_object.header.entry, usermode_stack.end());
     }
 };
 

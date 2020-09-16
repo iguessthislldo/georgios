@@ -70,8 +70,8 @@ pub inline fn present_entry(address: u32) u32 {
     return (address & 0xfffff000) | 1;
 }
 
-pub inline fn set_entry(entry: *allowzero u32, address: usize) void {
-    entry.* = present_entry(address);
+pub inline fn set_entry(entry: *allowzero u32, address: usize, user: bool) void {
+    entry.* = present_entry(address) | ((if (user) u32(1) else u32(0)) << 2);
 }
 // (End of Page Table Operations)
 
@@ -158,7 +158,7 @@ pub const Memory = struct {
     fn map_virtual_page(self: *Memory, address: usize) void {
         // print.format("map_virtual_page: {:a}\n", address);
         if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
-            set_entry(&kernel_page_tables[self.virtual_page_index], address);
+            set_entry(&kernel_page_tables[self.virtual_page_index], address, false);
             invalidate_page(self.virtual_page_address);
         }
     }
@@ -244,7 +244,8 @@ pub const Memory = struct {
         // print.format("new_page_table {:x}\n", dir_index);
         // TODO: Go through memory.Memory
         const table_address = try self.pop_frame();
-        set_entry(&page_directory[dir_index], table_address);
+        // TODO set_entry for page_directory
+        set_entry(&page_directory[dir_index], table_address, false);
         self.map_virtual_page(table_address);
         const table = @intToPtr([*]u32, self.virtual_page_address);
         var i: usize = 0;
@@ -254,7 +255,9 @@ pub const Memory = struct {
         }
     }
 
-    fn mark_virtual_memory_present(self: *Memory, range: Range) MemoryError!void {
+    // TODO: Read/Write and Any Other Options
+    fn mark_virtual_memory_present(
+            self: *Memory, range: Range, user: bool) MemoryError!void {
         // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
@@ -267,6 +270,9 @@ pub const Memory = struct {
                 try self.new_page_table(dir_index);
             }
             self.map_virtual_page(get_table_address(page_directory[dir_index]));
+            if (user) {
+                page_directory[dir_index] |= (1 << 2);
+            }
             const table = @intToPtr([*]u32, self.virtual_page_address);
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
@@ -280,7 +286,7 @@ pub const Memory = struct {
                 // TODO: Go through memory.Memory for pop_frame
                 const frame = try self.pop_frame();
                 self.map_virtual_page(get_table_address(page_directory[dir_index]));
-                set_entry(&table[table_index], frame);
+                set_entry(&table[table_index], frame, user);
                 invalidate_page(get_address(dir_index, table_index));
                 marked += page_size;
                 if (marked >= range.size) return;
@@ -295,7 +301,7 @@ pub const Memory = struct {
 
     fn get_kernel_space(self: *Memory, requested_size: usize) MemoryError!Range {
         const range = try self.get_unused_kernel_space(requested_size);
-        try self.mark_virtual_memory_present(range);
+        try self.mark_virtual_memory_present(range, false);
         return range;
     }
 };

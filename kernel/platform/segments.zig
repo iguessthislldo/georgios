@@ -1,6 +1,13 @@
-// Code for managing up the Global Descriptor Table (GDT). We must define the
-// segment selectors required 80286 memory protection scheme and also the Task
-// State Segment (TSS) required for context switching.
+// Code for managing up the Global Descriptor Table (GDT) and related data
+// structures.
+//
+// We must define the segment selectors required 80286 memory protection scheme
+// and also the Task State Segment (TSS) required for context switching.
+//
+// For Reference See:
+//   Intel® 64 and IA-32 Architectures Software Developer’s Manual
+//   https://wiki.osdev.org/Global_Descriptor_Table
+//   https://wiki.osdev.org/Segmentation
 
 const builtin = @import("builtin");
 
@@ -10,6 +17,54 @@ const zero_init = kutil.zero_init;
 
 const platform = @import("platform.zig");
 const kernel_to_virtual = platform.kernel_to_virtual;
+
+const TaskStateSegment = packed struct {
+    link: u16 = 0,
+    zero1: u16 = 0,
+    esp0: u32 = 0,
+    ss0: u16 = 0,
+    zero2: u16 = 0,
+    esp1: u32 = 0,
+    ss1: u16 = 0,
+    zero3: u16 = 0,
+    esp2: u32 = 0,
+    ss2: u16 = 0,
+    zero4: u16 = 0,
+    cr3: u32 = 0,
+    eip: u32 = 0,
+    eflags: u32 = 0,
+    eax: u32 = 0,
+    ecx: u32 = 0,
+    edx: u32 = 0,
+    ebx: u32 = 0,
+    esp: u32 = 0,
+    ebp: u32 = 0,
+    esi: u32 = 0,
+    edi: u32 = 0,
+    es: u16 = 0,
+    zero5: u16 = 0,
+    cs: u16 = 0,
+    zero6: u16 = 0,
+    ss: u16 = 0,
+    zero7: u16 = 0,
+    ds: u16 = 0,
+    zero8: u16 = 0,
+    fs: u16 = 0,
+    zero9: u16 = 0,
+    gs: u16 = 0,
+    zero10: u16 = 0,
+    ldt_selector: u16 = 0,
+    zero11: u16 = 0,
+    trap: bool = false,
+    zero12: u15 = 0,
+    io_map: u16 = 0,
+};
+var task_state_segment = TaskStateSegment{};
+
+pub fn set_usermode_interrupt_stack(esp: u32) void {
+    task_state_segment.esp0 = esp;
+    task_state_segment.ss0 = kernel_data_selector;
+}
 
 const Access = packed struct {
     accessed: bool = false,
@@ -130,10 +185,10 @@ comptime {
         \\     push $.gdt_complete_load
         \\     ljmp *(%esp)
         \\   .gdt_complete_load:
+        \\     movw (tss_selector), %ax
+        \\     ltr %ax
         \\     add $8, %esp
         \\     ret
-        // \\     movw (tss_selector), %ax
-        // \\     ltr %ax
     );
 }
 
@@ -155,7 +210,11 @@ pub fn initialize() void {
         Access{.ring_level = 3, .executable = true}, flags);
     user_data_selector = set("User Data", 4, 0, kernel_to_virtual(0) - 1,
         Access{.ring_level = 3}, flags);
-    set_null_entry(5);
+    tss_selector = set("Task State", 5, @ptrToInt(&task_state_segment),
+        @sizeOf(TaskStateSegment) - 1,
+        // TODO: Make This Explicit
+        @bitCast(Access, u8(0xe9)),
+        @bitCast(Flags, u4(0)));
 
     const pointer = Pointer {
         .limit = @intCast(u16, @sizeOf(@typeOf(table)) - 1),

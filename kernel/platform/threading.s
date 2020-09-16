@@ -37,7 +37,7 @@ setup_process:
     pushl $0 // esi
     pushl $0 // edi
     // for context_switch
-    pushl $irq0_return
+    /* pushl $irq0_return */
 
     // Restore Stack
     movl %esp, %eax // Return Context
@@ -70,14 +70,8 @@ usermode:
     movl 8(%esp), %ebx // sp, What the stack should be
 
     // Get the User Data and Code Selectors
-/*
-    movl (user_data_selector), %edi
-    movl (%edi), %edx
-    movl (user_code_selector), %edi
-    movl (%edi), %ecx
-*/
-    movl $0x23, %edx
-    movl $0x1b, %ecx
+    movw (user_data_selector), %dx
+    movw (user_code_selector), %cx
 
     // Load User Data Selector into Data Segment Registers
     movw %dx, %ds
