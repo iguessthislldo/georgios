@@ -23,7 +23,7 @@ pub export var kernel_range_start_available: u32 = undefined;
 export var kernel_page_table_count: u32 = 0;
 
 pub inline fn get_address(dir_index: usize, table_index: usize) usize {
-    return dir_index * table_size + table_index * page_size;
+    return dir_index * table_pages_size + table_index * page_size;
 }
 
 // Page Directory Operations
