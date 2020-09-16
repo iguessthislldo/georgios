@@ -97,9 +97,15 @@ pub fn build(b: *std.build.Builder) void {
     }
     kernel.install();
 
+    // libcommon
+    const libcommon = b.addStaticLibrary("common", "programs/common/common.zig");
+    libcommon.setTheTarget(target);
+
     // programs/test_prog
     const test_prog = b.addExecutable("test_prog.elf", "programs/test_prog/test_prog.zig");
-    test_prog.setLinkerScriptPath("programs/test_prog/test_prog.ld");
+    test_prog.setLinkerScriptPath("programs/common/linking.ld");
     test_prog.setTheTarget(target);
+    test_prog.linkLibraryOrObject(libcommon);
+    test_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
     test_prog.install();
 }

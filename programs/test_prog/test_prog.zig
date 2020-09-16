@@ -1,5 +1,8 @@
-export nakedcc fn main() void {
+const system_calls = @import("system_calls");
+
+export fn main() void {
     while (true) {
-        asm volatile ("int $100" :: [print_char] "{eax}" (u32(99)), [char] "{ebx}" (u32('+')));
+        system_calls.print_char('+');
+        system_calls.print_char('-');
     }
 }

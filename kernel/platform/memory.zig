@@ -71,7 +71,8 @@ pub inline fn present_entry(address: u32) u32 {
 }
 
 pub inline fn set_entry(entry: *allowzero u32, address: usize, user: bool) void {
-    entry.* = present_entry(address) | ((if (user) u32(1) else u32(0)) << 2);
+    // TODO: Seperate User and Write
+    entry.* = present_entry(address) | ((if (user) u32(0b11) else u32(0)) << 1);
 }
 // (End of Page Table Operations)
 
@@ -271,7 +272,8 @@ pub const Memory = struct {
             }
             self.map_virtual_page(get_table_address(page_directory[dir_index]));
             if (user) {
-                page_directory[dir_index] |= (1 << 2);
+                // TODO: Seperate User and Write
+                page_directory[dir_index] |= (0b11 << 1);
             }
             const table = @intToPtr([*]u32, self.virtual_page_address);
             var table_index: usize =
