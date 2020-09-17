@@ -185,7 +185,11 @@ pub fn any(file: *File, value: var) FileError!void {
             if (t == u8) {
                 try string(file, value);
             } else {
-                @compileError("Can't Print Array of " ++ @typeName(t));
+                comptime var i: usize = 0;
+                inline while (i < array_type.len) {
+                    try format(file, "[{}] = {},", i, value[i]);
+                    i += 1;
+                }
             }
         },
         builtin.TypeId.Pointer => |ptr_type| {
@@ -198,6 +202,14 @@ pub fn any(file: *File, value: var) FileError!void {
                 }
             } else {
                 @compileError("Can't Print Pointer to " ++ @typeName(t));
+            }
+        },
+        builtin.TypeId.Struct => |struct_type| {
+            inline for (struct_type.fields) |field| {
+                try string(file, field.name);
+                try string(file, ": ");
+                try any(file, @field(value, field.name));
+                try string(file, "\n");
             }
         },
         else => @compileError("Can't Print " ++ @typeName(Type)),

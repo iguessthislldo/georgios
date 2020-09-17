@@ -546,45 +546,6 @@ pub fn read_from_drive(address: u64, destination: []u8) usize {
     return total_read_size;
 }
 
-// The Temporary Single-File "File System"
-pub const TheFile = struct {
-    const Self = @This();
-
-    file: *io.File = undefined,
-    position: usize = 0,
-    size: usize = 0,
-
-    pub fn initialize(self: *Self, file: *io.File) void {
-        file.impl_data = @ptrToInt(self);
-        file.read_impl = Self.read;
-        file.write_impl = io.File.unsupported.write_impl;
-        file.seek_impl = Self.seek;
-        file.close_impl = io.File.nop.close_impl;
-        self.file = file;
-        self.position = 0;
-
-        if (read_from_drive(0, kutil.to_bytes(&self.size)) != @sizeOf(@typeOf(self.size))) {
-            @panic("TheFile: Read Size from Size Check is Wrong!");
-        }
-    }
-
-    pub fn read(file: *io.File, to: []u8) io.FileError!usize {
-        const self = @intToPtr(*Self, file.impl_data.?);
-        const read_size = read_from_drive(@intCast(u64, @sizeOf(u32) + self.position), to);
-        self.position += read_size;
-        return read_size;
-    }
-
-    pub fn seek(file: *io.File,
-            offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
-        const self = @intToPtr(*Self, file.impl_data.?);
-        const new_postion = try io.File.generic_seek(
-            self.position, self.size, false, offset, seek_type);
-        self.position = new_postion;
-        return new_postion;
-    }
-};
-
 // TODO: Make dynamic
 var controller = Controller{};
 

@@ -7,6 +7,7 @@ pub const Memory = @import("memory.zig").Memory;
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
 pub const util = @import("util.zig");
+pub const Ext2 = @import("ext2.zig").Ext2;
 
 pub var panic_message: []const u8 = "";
 
@@ -46,6 +47,11 @@ pub const Kernel = struct {
     pub fn run(self: *Kernel) !void {
         try self.initialize();
 
+        var ext2 = Ext2{};
+        ext2.initialize();
+    }
+
+    fn hidden() void {
         var file = io.File{};
         var the_file = platform.impl.ata.TheFile{};
         the_file.initialize(&file);

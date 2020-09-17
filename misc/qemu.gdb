@@ -19,7 +19,7 @@ target remote | qemu-system-i386 \
     -no-reboot \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \
-    hd.img
+    disk.img
 
 #    -trace 'ide_*' \
 #    -trace '*irq*' \

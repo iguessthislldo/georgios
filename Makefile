@@ -1,7 +1,9 @@
 ISO:=georgios.iso
+DISK:=disk.img
 
 ISO_DIR:=tmp/iso
 ISO_BOOT_DIR=$(ISO_DIR)/boot
+DISK_DIR:=tmp/disk
 KERNEL:=$(ISO_BOOT_DIR)/kernel.elf
 ZIG_OUTPUT:=tmp/zig-cache/bin
 GRUB_PREFIX:=/usr
@@ -13,7 +15,7 @@ DEBUGGER:=gdb
 multiboot_vga_request?=false
 debug_log?=true
 
-all: $(ISO) hd.img
+all: $(ISO) $(DISK)
 
 .PHONY: build_georgios
 build_georgios:
@@ -43,8 +45,10 @@ $(ISO): $(KERNEL) $(GRUB_CFG)
 
 $(ZIG_OUTPUT)/test_prog.elf: build_georgios
 
-hd.img: $(ZIG_OUTPUT)/test_prog.elf
-	python3 scripts/create_hd_img.py 512 $< $@
+$(DISK): $(ZIG_OUTPUT)/test_prog.elf
+	@mkdir -p $(DISK_DIR)
+	cp $^ $(DISK_DIR)
+	mke2fs -L '' -N 0 -O none -d $(DISK_DIR) -r 1 -t ext2 $(DISK) 1m
 
 .PHONY: bochs
 bochs:
@@ -56,4 +60,4 @@ qemu:
 
 .PHONY: clean
 clean:
-	rm -fr tmp $(ISO) hd.img zig-cache
+	rm -fr tmp $(ISO) $(DISK) zig-cache
