@@ -48,7 +48,7 @@ pub const Kernel = struct {
         try self.initialize();
 
         var ext2 = Ext2{};
-        ext2.initialize();
+        try ext2.initialize(self.memory.kalloc);
     }
 
     fn hidden() void {
