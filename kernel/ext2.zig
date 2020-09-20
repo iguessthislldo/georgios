@@ -122,7 +122,7 @@ pub const DataBlockIterator = struct {
         FillInZeros,
         EndOfFile,
     };
-    pub const DataBlockInfo = union(DataBlockInfoState) {
+    const DataBlockInfo = union(DataBlockInfoState) {
         Index: u32,
         FillInZeros: void,
         EndOfFile: void,
@@ -256,10 +256,10 @@ pub const DataBlockIterator = struct {
         return dest_use[0..got];
     }
 
-    pub fn done(self: *DataBlockIterator) void {
-        if (self.second_level) self.fs.alloc.free_array(u32, self.second_level);
-        if (self.third_level) self.fs.alloc.free_array(u32, self.third_level);
-        if (self.fourth_level) self.fs.alloc.free_array(u32, self.fourth_level);
+    pub fn done(self: *DataBlockIterator) Error!void {
+        if (self.second_level != null) try self.fs.alloc.free_array(u32, self.second_level.?);
+        if (self.third_level != null) try self.fs.alloc.free_array(u32, self.third_level.?);
+        if (self.fourth_level != null) try self.fs.alloc.free_array(u32, self.fourth_level.?);
     }
 };
 
@@ -268,6 +268,62 @@ const DirectoryEntry = packed struct {
     next_entry_offset: u16,
     name_size: u8,
     file_type: u8,
+};
+
+const DirectoryIterator = struct {
+    pub const Value = struct {
+        inode: u32,
+        name: []u8,
+    };
+
+    fs: *Ext2,
+    inode: *Inode,
+    data_block_iter: DataBlockIterator,
+    buffer: []u8,
+    block_count: usize,
+    buffer_pos: usize = 0,
+    initial: bool = true,
+
+    pub fn new(fs: *Ext2, inode: *Inode) Error!DirectoryIterator {
+        return DirectoryIterator{
+            .fs = fs,
+            .inode = inode,
+            .data_block_iter = DataBlockIterator{.fs = fs, .inode = inode},
+            .buffer = try fs.alloc.alloc_array(u8, fs.block_size),
+            .block_count = inode.size / fs.block_size,
+        };
+    }
+
+    pub fn next(self: *DirectoryIterator) Error!?Value {
+        const get_next_block = self.buffer_pos >= self.fs.block_size;
+        if (get_next_block) {
+            self.buffer_pos = 0;
+            self.block_count -= 1;
+            if (self.block_count == 0) {
+                return null;
+            }
+        }
+        if (get_next_block or self.initial) {
+            self.initial = false;
+            // Zig Bug? Should try have higher precedence in order of
+            // operations? (at least more than ==)
+            if ((try self.data_block_iter.next(self.buffer)) == null) {
+                return null;
+            }
+        }
+        const entry = @ptrCast(*DirectoryEntry, &self.buffer[self.buffer_pos]);
+        const name_pos = self.buffer_pos + @sizeOf(DirectoryEntry);
+        self.buffer_pos += entry.next_entry_offset;
+        return Value{
+            .inode = entry.inode,
+            .name = self.buffer[name_pos..name_pos + entry.name_size],
+        };
+    }
+
+    pub fn done(self: *DirectoryIterator) Error!void {
+        try self.data_block_iter.done();
+        try self.fs.alloc.free_array(u8, self.buffer);
+    }
 };
 
 pub const Ext2 = struct {
@@ -334,33 +390,21 @@ pub const Ext2 = struct {
         const buffer = try self.alloc.alloc_array(u8, self.block_size);
         var root_inode: Inode = undefined;
         self.get_inode(root_inode_number, &root_inode);
-        var block: [1024]u8 = undefined;
-        // TODO: Directory Entry Iterator
-        var block_array_index: usize = 0;
-        while (block_array_index < 12) {
-            const inode_number = root_inode.blocks[block_array_index];
-            if (inode_number == 0) break;
-            block_array_index  += 1;
-            _ = read_from_drive(inode_number * self.block_size, block[0..]);
-            var pos: usize = 0;
-            while (pos < 1024) {
-                const entry = @ptrCast(*DirectoryEntry, &block[pos]);
-                const name_pos = pos + @sizeOf(DirectoryEntry);
-                const name = block[name_pos..name_pos + entry.name_size];
-                print.format("{}\n{}\n", name, entry.*);
-                var entry_inode: Inode = undefined;
-                self.get_inode(entry.inode, &entry_inode);
-                print.format("{}\n", entry_inode);
+        var dir_iter = try DirectoryIterator.new(self, &root_inode);
+        while (try dir_iter.next()) |entry| {
+            print.format("{}\n", entry);
+            var entry_inode: Inode = undefined;
+            self.get_inode(entry.inode, &entry_inode);
+            print.format("{}\n", entry_inode);
 
-                if (entry_inode.is_file()) {
-                    var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
-                    while (try iter.next(buffer)) |data_block| {
-                        print.data_bytes(data_block);
-                    }
+            if (entry_inode.is_file()) {
+                var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
+                while (try iter.next(buffer)) |data_block| {
+                    print.data_bytes(data_block);
                 }
-
-                pos += entry.next_entry_offset;
+                try iter.done();
             }
         }
+        try dir_iter.done();
     }
 };
