@@ -10,6 +10,8 @@ const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
 
+const Error = MemoryError || util.Error;
+
 const read_from_drive = @import("platform.zig").impl.ata.read_from_drive;
 
 const Superblock = packed struct {
@@ -99,126 +101,162 @@ const Inode = packed struct {
     dir_acl: u32,
     fragment_address: u32,
     os_dependant_field_2: [12]u8,
+
+    pub fn is_file(self: *const Inode) bool {
+        return self.mode & 0x8000 > 0;
+    }
+
+    pub fn is_directory(self: *const Inode) bool {
+        return self.mode & 0x4000 > 0;
+    }
 };
 
 pub const DataBlockIterator = struct {
-    const max_first_level_index: u8 = 12;
+    const max_first_level_index: u8 = 11;
     const second_level_index = max_first_level_index + 1;
     const third_level_index = second_level_index + 1;
     const fourth_level_index = third_level_index + 1;
 
+    const DataBlockInfoState = enum {
+        Index,
+        FillInZeros,
+        EndOfFile,
+    };
+    pub const DataBlockInfo = union(DataBlockInfoState) {
+        Index: u32,
+        FillInZeros: void,
+        EndOfFile: void,
+    };
+
     fs: *Ext2,
     inode: *Inode,
-    // blocks_left: u8 = 0,
-    first_level_pos: u8 = 0,
+    got: usize = 0,
+    first_level_pos: usize = 0,
     second_level: ?[]u32 = null,
     second_level_pos: usize = 0,
     third_level: ?[]u32 = null,
     third_level_pos: usize = 0,
     fourth_level: ?[]u32 = null,
     fourth_level_pos: usize = 0,
-    data_block: ?[]u8 = null,
 
-    // pub fn initialize(self: *DataBlockIterator) void {
-    //     self.blocks_left = util.align_up(self.inode.size, self.fs.block_size)
-    //         / self.fs.block_size;
-    // }
-
-    fn get_next_block_index(self: *DataBlockIterator) MemoryError!u32 {
-        // First Level
-        if (self.first_level_pos <= max_first_level_index) {
-            const rv = self.inode.blocks[self.first_level_pos];
-            self.first_level_pos += 1;
-            return rv;
+    fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) MemoryError!void {
+        if (level.* == null) {
+            level.* = try self.fs.alloc.alloc_array(u32, self.fs.block_size / @sizeOf(u32));
         }
-
-        // Figure Out Our Position, Allocating Levels As Needed
-        var get_fourth_level = false;
-        if (self.first_level_pos >= fourth_level_index) {
-            if (self.fourth_level == null) {
-                self.fourth_level = try self.fs.alloc.alloc_array(u32,
-                    self.fs.block_size / @sizeOf(u32));
-                get_fourth_level = true;
-            }
-            if (self.fourth_level_pos >= self.fs.max_entries_per_block) {
-                self.third_level_pos += 1;
-                self.fourth_level_pos = 0;
-                get_fourth_level = true;
-            }
-        }
-        var get_third_level = false;
-        if (self.first_level_pos >= third_level_index) {
-            if (self.third_level == null) {
-                self.third_level = try self.fs.alloc.alloc_array(u32,
-                    self.fs.block_size / @sizeOf(u32));
-                get_third_level = true;
-            }
-            if (self.third_level_pos >= self.fs.max_entries_per_block) {
-                self.second_level_pos += 1;
-                self.third_level_pos = 0;
-                get_third_level = true;
-            }
-        }
-        var get_second_level = false;
-        if (self.first_level_pos >= second_level_index) {
-            if (self.second_level == null) {
-                self.second_level = try self.fs.alloc.alloc_array(u32,
-                    self.fs.block_size / @sizeOf(u32));
-                get_second_level = true;
-            }
-            if (self.second_level_pos >= self.fs.max_entries_per_block) {
-                self.first_level_pos += 1;
-                self.second_level_pos = 0;
-                get_second_level = true;
-            }
-        }
-
-        // Are We Done?
-        if (self.first_level_pos > fourth_level_index) return 0;
-
-        // Get New Levels if Needed and Bail if They're Not There
-        if (get_second_level) {
-            const get = self.inode.blocks[self.first_level_pos];
-            if (get == 0) return 0;
-            self.fs.get_entry_block(self.second_level.?, get);
-        }
-        if (get_third_level) {
-            const get = self.second_level.?[self.second_level_pos];
-            if (get == 0) return 0;
-            self.fs.get_entry_block(self.third_level.?, get);
-        }
-        if (get_fourth_level) {
-            const get = self.third_level.?[self.third_level_pos];
-            if (get == 0) return 0;
-            self.fs.get_entry_block(self.fourth_level.?, get);
-        }
-
-        // Return The Block Index
-        if (self.first_level_pos == second_level_index) {
-            return self.second_level.?[self.second_level_pos];
-        }
-        if (self.first_level_pos == third_level_index) {
-            return self.third_level.?[self.third_level_pos];
-        }
-        if (self.first_level_pos == fourth_level_index) {
-            return self.fourth_level.?[self.fourth_level_pos];
-        }
-        unreachable;
+        self.fs.get_entry_block(level.*.?, index);
     }
 
-    pub fn next(self: *DataBlockIterator) MemoryError!?[]u8 {
-        // if (self.blocks_left == 0) return null;
-        const block_index = try self.get_next_block_index();
-        if (block_index == 0) return null;
-        if (self.data_block == null) {
-            self.data_block = try self.fs.alloc.alloc_array(u8, self.fs.block_size);
+    fn prepare_level(self: *DataBlockIterator, index: usize,
+            level_pos: *usize, level: *?[]u32, parent_level_pos: *usize) bool {
+        if (self.first_level_pos < index) return false;
+        if (level_pos.* >= self.fs.max_entries_per_block) {
+            parent_level_pos.* += 1;
+            level_pos.* = 0;
+            return true;
         }
-        self.fs.get_data_block(self.data_block.?, block_index);
-        return self.data_block;
+        return level.* == null;
+    }
+
+    fn get_next_block_info(self: *DataBlockIterator) MemoryError!DataBlockInfo {
+        // print.format("get_next_block_index_i: {}\n", self.first_level_pos);
+        // First Level
+        if (self.first_level_pos <= max_first_level_index) {
+            const index = self.inode.blocks[self.first_level_pos];
+            self.first_level_pos += 1;
+            if (index == 0) {
+                return DataBlockInfo(.FillInZeros);
+            }
+            return DataBlockInfo{.Index = index};
+        }
+
+        // Figure Out Our Position
+        var get_fourth_level = self.prepare_level(
+            fourth_level_index, &self.fourth_level_pos, &self.fourth_level,
+            &self.third_level_pos);
+        var get_third_level = self.prepare_level(
+            third_level_index, &self.third_level_pos, &self.third_level,
+            &self.second_level_pos);
+        var get_second_level = self.prepare_level(
+            second_level_index, &self.second_level_pos, &self.second_level,
+            &self.first_level_pos);
+
+        // Check for end of blocks
+        if (self.first_level_pos > fourth_level_index) return DataBlockInfo(.EndOfFile);
+
+        // Get New Levels if Needed
+        if (get_second_level) {
+            const index = self.inode.blocks[self.first_level_pos];
+            if (index == 0) {
+                self.second_level_pos += 1;
+                return DataBlockInfo(.FillInZeros);
+            }
+            try self.get_level(&self.second_level, index);
+        }
+        if (get_third_level) {
+            const index = self.second_level.?[self.second_level_pos];
+            if (index == 0) {
+                self.third_level_pos += 1;
+                return DataBlockInfo(.FillInZeros);
+            }
+            try self.get_level(&self.third_level, index);
+        }
+        if (get_fourth_level) {
+            const index = self.third_level.?[self.third_level_pos];
+            if (index == 0) {
+                self.fourth_level_pos += 1;
+                return DataBlockInfo(.FillInZeros);
+            }
+            try self.get_level(&self.fourth_level, index);
+        }
+
+        // Return The Result
+        switch (self.first_level_pos) {
+            second_level_index => {
+                const index = self.second_level.?[self.second_level_pos];
+                if (index == 0) {
+                    self.second_level_pos += 1;
+                    return DataBlockInfo(.FillInZeros);
+                }
+                return DataBlockInfo{.Index = index};
+            },
+            third_level_index => {
+                const index = self.third_level.?[self.third_level_pos];
+                if (index == 0) {
+                    self.third_level_pos += 1;
+                    return DataBlockInfo(.FillInZeros);
+                }
+                return DataBlockInfo{.Index = index};
+            },
+            fourth_level_index => {
+                const index = self.fourth_level.?[self.fourth_level_pos];
+                if (index == 0) {
+                    self.fourth_level_pos += 1;
+                    return DataBlockInfo(.FillInZeros);
+                }
+                return DataBlockInfo{.Index = index};
+            },
+            else => unreachable,
+        }
+    }
+
+    pub fn next(self: *DataBlockIterator, dest: []u8) Error!?[]u8 {
+        if (dest.len < self.fs.block_size) {
+            return Error.NotEnoughDestination;
+        }
+        const dest_use = dest[0..self.fs.block_size];
+        switch (try self.get_next_block_info()) {
+            .Index => |index| {
+                self.fs.get_data_block(dest_use, index);
+            },
+            .FillInZeros => util.memory_set(dest_use, 0),
+            .EndOfFile => return null,
+        }
+        const got = util.min(u32, self.inode.size - self.got, self.fs.block_size);
+        self.got += got;
+        return dest_use[0..got];
     }
 
     pub fn done(self: *DataBlockIterator) void {
-        if (self.data_block) self.fs.alloc.free_array(u8, self.data_block);
         if (self.second_level) self.fs.alloc.free_array(u32, self.second_level);
         if (self.third_level) self.fs.alloc.free_array(u32, self.third_level);
         if (self.fourth_level) self.fs.alloc.free_array(u32, self.fourth_level);
@@ -250,13 +288,15 @@ pub const Ext2 = struct {
 
     pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) void {
         var block_group: BlockGroupDescriptor = undefined;
-        self.get_block_group_descriptor((n - 1) / self.superblock.inodes_per_group, &block_group);
+        const nm1 = n - 1;
+        self.get_block_group_descriptor(
+            nm1 / self.superblock.inodes_per_group, &block_group);
         const address = u64(block_group.inode_table) * self.block_size +
-            ((n - 1) % self.superblock.inodes_per_group) * @sizeOf(Inode);
+            (nm1 % self.superblock.inodes_per_group) * @sizeOf(Inode);
         if (read_from_drive(address, util.to_bytes(inode)) != @sizeOf(Inode)) {
             @panic("Could not read Inode!");
         }
-        print.format("inode {}\n{}\n", n, inode.*);
+        // print.format("inode {}\n{}\n", n, inode.*);
     }
 
     pub fn get_data_block(self: *Ext2, block: []u8, index: usize) void {
@@ -267,7 +307,7 @@ pub const Ext2 = struct {
         self.get_data_block(@ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
     }
 
-    pub fn initialize(self: *Ext2, alloc: *Allocator) MemoryError!void {
+    pub fn initialize(self: *Ext2, alloc: *Allocator) Error!void {
         self.alloc = alloc;
 
         if (read_from_drive(util.Ki(1),
@@ -291,6 +331,7 @@ pub const Ext2 = struct {
             i += 1;
         }
 
+        const buffer = try self.alloc.alloc_array(u8, self.block_size);
         var root_inode: Inode = undefined;
         self.get_inode(root_inode_number, &root_inode);
         var block: [1024]u8 = undefined;
@@ -306,16 +347,16 @@ pub const Ext2 = struct {
                 const entry = @ptrCast(*DirectoryEntry, &block[pos]);
                 const name_pos = pos + @sizeOf(DirectoryEntry);
                 const name = block[name_pos..name_pos + entry.name_size];
-                // print.format("{}\n", name);
                 print.format("{}\n{}\n", name, entry.*);
                 var entry_inode: Inode = undefined;
                 self.get_inode(entry.inode, &entry_inode);
+                print.format("{}\n", entry_inode);
 
-                var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
-                while (true) {
-                    const data_block = try iter.next();
-                    if (data_block == null) break;
-                    print.data_bytes(data_block.?);
+                if (entry_inode.is_file()) {
+                    var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
+                    while (try iter.next(buffer)) |data_block| {
+                        print.data_bytes(data_block);
+                    }
                 }
 
                 pos += entry.next_entry_offset;
