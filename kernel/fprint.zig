@@ -212,6 +212,13 @@ pub fn any(file: *File, value: var) FileError!void {
                 try string(file, "\n");
             }
         },
+        builtin.TypeId.Enum => {
+            if (util.enum_name(Type, value)) |name| {
+                try string(file, name);
+            } else {
+                try string(file, "<Invalid Value For " ++ @typeName(Type) ++ ">");
+            }
+        },
         else => @compileError("Can't Print " ++ @typeName(Type)),
     }
 }

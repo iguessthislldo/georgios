@@ -535,7 +535,7 @@ pub fn read_from_drive(address: u64, destination: []u8) usize {
         total_read_size += this_read_size;
 
         const dest = destination[dest_offset..new_dest_offset];
-        kutil.memory_copy_truncate(dest, sector.data[drive_offset..]);
+        _ = kutil.memory_copy_truncate(dest, sector.data[drive_offset..]);
         drive_offset = 0;
         // print.data_bytes(dest);
 

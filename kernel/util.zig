@@ -163,6 +163,17 @@ test "int_to_enum" {
     // assert(valid_enum(Abc, @bitCast(Abc, u8(4))));
 }
 
+pub fn enum_name(comptime EnumType: type, value: EnumType) ?[]const u8 {
+    const type_info = @typeInfo(EnumType).Enum;
+    inline for (type_info.fields) |*field| {
+        var enum_value = @ptrCast(*const type_info.tag_type, &value).*;
+        if (@intCast(type_info.tag_type, field.value) == enum_value) {
+            return field.name;
+        }
+    }
+    return null;
+}
+
 pub fn max(comptime T: type, a: T, b: T) T {
     return if (a > b) a else b;
 }
@@ -183,11 +194,12 @@ pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
 /// Copy contents from `source` to `destination`.
 ///
 /// If `source.len != destination.len` then the copy is truncated.
-pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) void {
+pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize {
     const size = min(usize, destination.len, source.len);
     for (destination[0..size]) |*ptr, i| {
         ptr.* = source[i];
     }
+    return size;
 }
 
 pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!void {

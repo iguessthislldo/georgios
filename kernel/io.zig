@@ -25,7 +25,7 @@ pub const File = struct {
     };
 
     pub const nop = struct {
-        pub fn read_impl(file: *File, to: []u8) FileError!usize {
+        pub fn read_impl(file: *File, to: []u8) anyerror!usize {
             return 0;
         }
 
@@ -43,7 +43,7 @@ pub const File = struct {
     };
 
     pub const unsupported = struct {
-        pub fn read_impl(file: *File, to: []u8) FileError!usize {
+        pub fn read_impl(file: *File, to: []u8) anyerror!usize {
             return FileError.Unsupported;
         }
 
@@ -61,7 +61,7 @@ pub const File = struct {
         }
     };
 
-    read_impl: fn(*File, []u8) FileError!usize = unsupported.read_impl,
+    read_impl: fn(*File, []u8) anyerror!usize = unsupported.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = unsupported.write_impl,
     seek_impl: fn(*File, isize, SeekType) FileError!usize =
         unsupported.seek_impl,
@@ -83,20 +83,21 @@ pub const File = struct {
         self.close_impl = unsupported.close_impl;
     }
 
+    // TODO: Restore proper error return?
     /// Tries to read as much as possible into the `to` slice and will return
     /// the amount read, which may be less than `to.len`. Can return 0 if the
     /// `to` slice is zero or the end of the file has been reached already. It
     /// should never return `FileError.OutOfBounds` or `FileError.EmptyBuffer`,
     /// but `read_or_error` will. The exact return values are defined by the
     /// file implementation.
-    pub inline fn read(file: *File, to: []u8) FileError!usize {
+    pub inline fn read(file: *File, to: []u8) anyerror!usize {
         return file.read_impl(file, to);
     }
 
     /// Same as `read`, but return `FileError.OutOfBounds` if an empty `to` was
     /// passed or `FileError.OutOfBounds` if trying to read from a file that's
     /// already reached the end.
-    pub inline fn read_or_error(file: *File, to: []u8) FileError!usize {
+    pub inline fn read_or_error(file: *File, to: []u8) anyerror!usize {
         if (to.len == 0) {
             return FileError.EmptyBuffer;
         }
@@ -229,7 +230,7 @@ pub const BufferFile = struct {
             self.buffer.len - self.position);
         if (read_size > 0) {
             const next_position = self.position + read_size;
-            util.memory_copy_truncate(to[0..read_size],
+            _ = util.memory_copy_truncate(to[0..read_size],
                 self.buffer[self.position..next_position]);
             self.position += read_size;
         }
@@ -242,7 +243,7 @@ pub const BufferFile = struct {
             self.buffer.len - self.position);
         if (write_size > 0) {
             const next_position = self.position + write_size;
-            util.memory_copy_truncate(self.buffer[self.position..next_position],
+            _ = util.memory_copy_truncate(self.buffer[self.position..next_position],
                 from[0..write_size]);
             self.position += write_size;
         }
@@ -272,7 +273,7 @@ test "BufferFile" {
     const string = "abc123";
     const len = string.len;
     var result_buffer: [128]u8 = undefined;
-    util.memory_copy_truncate(file_buffer[0..], string[0..]);
+    _ = util.memory_copy_truncate(file_buffer[0..], string[0..]);
     buffer_file.buffer.len = string.len;
     std.testing.expectEqual(len, try file.read(result_buffer[0..]));
     // TODO: Show strings if fail?
@@ -326,4 +327,15 @@ pub fn Files(max_file_count: usize) type {
             return FileError.MaxFilesReached;
         }
     };
+}
+
+pub fn copy(from: *File, to: *File, buffer: []u8) anyerror!usize {
+    var got: usize = 0;
+    while (true) {
+        const read_size = try from.read(buffer[0..]);
+        if (read_size == 0) return got;
+        const write_size = try to.write(buffer[0..read_size]);
+        if (write_size == 0) return got;
+        got += write_size;
+    }
 }

@@ -9,10 +9,14 @@ const util = @import("util.zig");
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
+const io = @import("io.zig");
 
-const Error = MemoryError || util.Error;
-
+// TODO: Make Abstract
 const read_from_drive = @import("platform.zig").impl.ata.read_from_drive;
+
+const Error = error {
+    FileNotFound,
+} || MemoryError || util.Error;
 
 const Superblock = packed struct {
     const expected_magic: u16 = 0xef53;
@@ -138,6 +142,36 @@ pub const DataBlockIterator = struct {
     third_level_pos: usize = 0,
     fourth_level: ?[]u32 = null,
     fourth_level_pos: usize = 0,
+    new_pos: bool = false,
+
+    pub fn set_position(self: *DataBlockIterator, block: usize) Error!void {
+        if (block <= max_first_level_index) {
+            self.first_level_pos = block;
+            self.second_level_pos = 0;
+            self.third_level_pos = 0;
+            self.fourth_level_pos = 0;
+        } else if (block >= Ext2.second_level_start and block < self.fs.third_level_start) {
+            self.first_level_pos = second_level_index;
+            self.second_level_pos = block - Ext2.second_level_start;
+            self.third_level_pos = 0;
+            self.fourth_level_pos = 0;
+        } else if (block >= self.fs.third_level_start and block < self.fs.fourth_level_start) {
+            self.first_level_pos = third_level_index;
+            const level_offset = block - self.fs.third_level_start;
+            self.second_level_pos = level_offset / self.fs.max_entries_per_block;
+            self.third_level_pos = level_offset % self.fs.max_entries_per_block;
+            self.fourth_level_pos = 0;
+        } else if (block >= self.fs.fourth_level_start and block < self.fs.max_fourth_level_entries) {
+            self.first_level_pos = fourth_level_index;
+            const level_offset = block - self.fs.fourth_level_start;
+            self.second_level_pos = level_offset / self.fs.max_third_level_entries;
+            const sub_level_offset = level_offset % self.fs.max_third_level_entries;
+            self.third_level_pos = sub_level_offset / self.fs.max_entries_per_block;
+            self.fourth_level_pos = sub_level_offset % self.fs.max_entries_per_block;
+        } else return Error.OutOfBounds;
+        self.got = block * self.fs.block_size;
+        self.new_pos = true;
+    }
 
     fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) MemoryError!void {
         if (level.* == null) {
@@ -154,7 +188,7 @@ pub const DataBlockIterator = struct {
             level_pos.* = 0;
             return true;
         }
-        return level.* == null;
+        return level.* == null or self.new_pos;
     }
 
     fn get_next_block_info(self: *DataBlockIterator) MemoryError!DataBlockInfo {
@@ -179,6 +213,7 @@ pub const DataBlockIterator = struct {
         var get_second_level = self.prepare_level(
             second_level_index, &self.second_level_pos, &self.second_level,
             &self.first_level_pos);
+        if (self.new_pos) self.new_pos = false;
 
         // Check for end of blocks
         if (self.first_level_pos > fourth_level_index) return DataBlockInfo(.EndOfFile);
@@ -252,6 +287,7 @@ pub const DataBlockIterator = struct {
             .EndOfFile => return null,
         }
         const got = util.min(u32, self.inode.size - self.got, self.fs.block_size);
+        // print.format("DataBlockIterator.next: got: {} {}\n", self.inode.size, self.got);
         self.got += got;
         return dest_use[0..got];
     }
@@ -268,12 +304,15 @@ const DirectoryEntry = packed struct {
     next_entry_offset: u16,
     name_size: u8,
     file_type: u8,
+    // NOTE: This field seems to always be 0 for the disk I am creating at the
+    // time of writing, so this field can't be relied on.
 };
 
 const DirectoryIterator = struct {
     pub const Value = struct {
-        inode: u32,
+        inode_number: u32,
         name: []u8,
+        inode: Inode,
     };
 
     fs: *Ext2,
@@ -283,6 +322,7 @@ const DirectoryIterator = struct {
     block_count: usize,
     buffer_pos: usize = 0,
     initial: bool = true,
+    value: Value = undefined,
 
     pub fn new(fs: *Ext2, inode: *Inode) Error!DirectoryIterator {
         return DirectoryIterator{
@@ -294,13 +334,13 @@ const DirectoryIterator = struct {
         };
     }
 
-    pub fn next(self: *DirectoryIterator) Error!?Value {
+    pub fn next(self: *DirectoryIterator) Error!bool {
         const get_next_block = self.buffer_pos >= self.fs.block_size;
         if (get_next_block) {
             self.buffer_pos = 0;
             self.block_count -= 1;
             if (self.block_count == 0) {
-                return null;
+                return false;
             }
         }
         if (get_next_block or self.initial) {
@@ -308,16 +348,16 @@ const DirectoryIterator = struct {
             // Zig Bug? Should try have higher precedence in order of
             // operations? (at least more than ==)
             if ((try self.data_block_iter.next(self.buffer)) == null) {
-                return null;
+                return false;
             }
         }
         const entry = @ptrCast(*DirectoryEntry, &self.buffer[self.buffer_pos]);
         const name_pos = self.buffer_pos + @sizeOf(DirectoryEntry);
         self.buffer_pos += entry.next_entry_offset;
-        return Value{
-            .inode = entry.inode,
-            .name = self.buffer[name_pos..name_pos + entry.name_size],
-        };
+        self.value.inode_number = entry.inode;
+        self.value.name = self.buffer[name_pos..name_pos + entry.name_size];
+        self.fs.get_inode(entry.inode, &self.value.inode);
+        return true;
     }
 
     pub fn done(self: *DirectoryIterator) Error!void {
@@ -326,13 +366,72 @@ const DirectoryIterator = struct {
     }
 };
 
+pub const File = struct {
+    const Self = @This();
+
+    const FileError = Error || io.FileError;
+
+    fs: *Ext2 = undefined,
+    inode: Inode = undefined,
+    io_file: io.File = undefined,
+    data_block_iter: DataBlockIterator = undefined,
+    buffer: ?[]u8 = null,
+    position: usize = 0,
+
+    pub fn initialize(self: *File, fs: *Ext2, inode: u32) void {
+        self.* = File{};
+        self.fs = fs;
+        fs.get_inode(inode, &self.inode);
+        self.data_block_iter = DataBlockIterator{.fs = fs, .inode = &self.inode};
+        self.io_file = io.File{
+            .read_impl = Self.read,
+            .write_impl = io.File.unsupported.write_impl,
+            .seek_impl = Self.seek,
+            .close_impl = io.File.nop.close_impl,
+        };
+    }
+
+    pub fn read(file: *io.File, to: []u8) FileError!usize {
+        const self = @fieldParentPtr(Self, "io_file", file);
+        if (self.buffer == null) {
+            self.buffer = try self.fs.alloc.alloc_array(u8, self.fs.block_size);
+        }
+        var got: usize = 0;
+        while (got < to.len) {
+            // TODO: See if buffer already has the data we need!!!
+            try self.data_block_iter.set_position(self.position / self.fs.block_size);
+            const block = try self.data_block_iter.next(self.buffer.?);
+            if (block == null) break;
+            const read_size = util.memory_copy_truncate(
+                to[got..], block.?[self.position % self.fs.block_size..]);
+            if (read_size == 0) break;
+            self.position += read_size;
+            got += read_size;
+        }
+        return got;
+    }
+
+    pub fn seek(file: *io.File,
+            offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
+        const self = @fieldParentPtr(Self, "io_file", file);
+        self.position = try io.File.generic_seek(
+            self.position, self.inode.size, false, offset, seek_type);
+        return self.position;
+    }
+};
+
 pub const Ext2 = struct {
+    const root_inode_number = usize(2);
+    const second_level_start = 12;
+
     alloc: *Allocator = undefined,
     superblock: Superblock = Superblock{},
     block_size: usize = 0,
     max_entries_per_block: usize = 0,
-
-    const root_inode_number = usize(2);
+    max_third_level_entries: usize = 0,
+    max_fourth_level_entries: usize = 0,
+    third_level_start: usize = 0,
+    fourth_level_start: usize = 0,
 
     pub fn get_block_group_descriptor(self: *Ext2,
             index: usize, dest: *BlockGroupDescriptor) void {
@@ -376,24 +475,28 @@ pub const Ext2 = struct {
 
         self.block_size = self.superblock.block_size();
         self.max_entries_per_block = self.block_size / @sizeOf(u32);
+        self.third_level_start = second_level_start + self.max_entries_per_block;
+        self.max_third_level_entries =
+            self.max_entries_per_block * self.max_entries_per_block;
+        self.fourth_level_start = self.third_level_start + self.max_third_level_entries;
+        self.max_fourth_level_entries =
+            self.max_third_level_entries * self.max_entries_per_block;
     }
 
-    pub fn get_file(self: *Ext2, name: []const u8) Error!void {
-        const buffer = try self.alloc.alloc_array(u8, self.block_size);
+    pub fn open(self: *Ext2, name: []const u8) Error!*File {
         var root_inode: Inode = undefined;
         self.get_inode(root_inode_number, &root_inode);
         var dir_iter = try DirectoryIterator.new(self, &root_inode);
-        while (try dir_iter.next()) |entry| {
-            var entry_inode: Inode = undefined;
-            self.get_inode(entry.inode, &entry_inode);
-            if (entry_inode.is_file() and util.memory_compare(name, entry.name)) {
-                var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
-                while (try iter.next(buffer)) |data_block| {
-                    print.data_bytes(data_block);
-                }
-                try iter.done();
+        defer dir_iter.done() catch |e| @panic(@typeName(@typeOf(e)));
+        while (try dir_iter.next()) {
+            // print.format("entry: {}\n", dir_iter.value);
+            if (dir_iter.value.inode.is_file() and
+                    util.memory_compare(name, dir_iter.value.name)) {
+                const file = try self.alloc.alloc(File);
+                file.initialize(self, dir_iter.value.inode_number);
+                return file;
             }
         }
-        try dir_iter.done();
+        return Error.FileNotFound;
     }
 };
