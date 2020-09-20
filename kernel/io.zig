@@ -17,9 +17,6 @@ pub const File = struct {
     valid: bool = false,
     index: usize = 0,
 
-    /// Pointer to Implementation Specific Data
-    impl_data: ?usize = null,
-
     /// Used for seek()
     pub const SeekType = enum {
         FromStart,
@@ -213,23 +210,21 @@ test "File.generic_seek" {
 pub const BufferFile = struct {
     const Self = @This();
 
-    file: *File = undefined,
+    file: File = undefined,
     buffer: []u8 = undefined,
     position: usize = 0,
 
-    pub fn initialize(self: *Self, file: *File, buffer: []u8) void {
-        file.impl_data = @ptrToInt(self);
-        file.read_impl = Self.read;
-        file.write_impl = Self.write;
-        file.seek_impl = Self.seek;
-        file.close_impl = File.nop.close_impl;
-        self.file = file;
+    pub fn initialize(self: *Self, buffer: []u8) void {
+        self.file.read_impl = Self.read;
+        self.file.write_impl = Self.write;
+        self.file.seek_impl = Self.seek;
+        self.file.close_impl = File.nop.close_impl;
         self.buffer = buffer;
         self.position = 0;
     }
 
     pub fn read(file: *File, to: []u8) FileError!usize {
-        const self = @intToPtr(*Self, file.impl_data.?);
+        const self = @fieldParentPtr(Self, "file", file);
         const read_size = util.min(usize, to.len,
             self.buffer.len - self.position);
         if (read_size > 0) {
@@ -242,7 +237,7 @@ pub const BufferFile = struct {
     }
 
     pub fn write(file: *File, from: []const u8) FileError!usize {
-        const self = @intToPtr(*Self, file.impl_data.?);
+        const self = @fieldParentPtr(Self, "file", file);
         const write_size = util.min(usize, from.len,
             self.buffer.len - self.position);
         if (write_size > 0) {
@@ -256,7 +251,7 @@ pub const BufferFile = struct {
 
     pub fn seek(file: *File,
             offset: isize, seek_type: File.SeekType) FileError!usize {
-        const self = @intToPtr(*Self, file.impl_data.?);
+        const self = @fieldParentPtr(Self, "file", file);
         const new_postion = try File.generic_seek(
             self.position, self.buffer.len, false, offset, seek_type);
         self.position = new_postion;
@@ -268,9 +263,9 @@ test "BufferFile" {
     const std = @import("std");
 
     var file_buffer: [128]u8 = undefined;
-    var file = File{};
     var buffer_file = BufferFile{};
-    buffer_file.initialize(&file, file_buffer[0..]);
+    buffer_file.initialize(file_buffer[0..]);
+    const file = &buffer_file.file;
 
     // Put "adc123" into `file_buffer`, read it into `result_buffer`, then
     // compare them.
@@ -324,7 +319,6 @@ pub fn Files(max_file_count: usize) type {
             for (self.array) |*file| {
                 if (!file.valid) {
                     file.valid = true;
-                    file.impl_data = null;
                     file.set_unsupported_impl();
                     return file;
                 }

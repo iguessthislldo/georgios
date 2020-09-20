@@ -128,11 +128,11 @@ test "address" {
 
     var file_buffer: [128]u8 = undefined;
     util.memory_set(file_buffer[0..], 0);
-    var file = File{};
     var buffer_file = BufferFile{};
-    buffer_file.initialize(&file, file_buffer[0..]);
+    buffer_file.initialize(file_buffer[0..]);
+    const file = &buffer_file.file;
 
-    try address(&file, 0x7bc75e39);
+    try address(file, 0x7bc75e39);
     const length = util.string_length(file_buffer[0..]);
 
     const expected = if (@sizeOf(usize) == 4)
