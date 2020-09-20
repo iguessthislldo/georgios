@@ -376,28 +376,17 @@ pub const Ext2 = struct {
 
         self.block_size = self.superblock.block_size();
         self.max_entries_per_block = self.block_size / @sizeOf(u32);
+    }
 
-        var i: usize = 0;
-        var block_group: BlockGroupDescriptor = undefined;
-        const block_group_count = self.superblock.block_group_count();
-        // print.format("block_group_count: {}\n", block_group_count);
-        while (i < block_group_count) {
-            self.get_block_group_descriptor(i, &block_group);
-            // print.format("Block Group Index {}\n{}\n", i, block_group);
-            i += 1;
-        }
-
+    pub fn get_file(self: *Ext2, name: []const u8) Error!void {
         const buffer = try self.alloc.alloc_array(u8, self.block_size);
         var root_inode: Inode = undefined;
         self.get_inode(root_inode_number, &root_inode);
         var dir_iter = try DirectoryIterator.new(self, &root_inode);
         while (try dir_iter.next()) |entry| {
-            print.format("{}\n", entry);
             var entry_inode: Inode = undefined;
             self.get_inode(entry.inode, &entry_inode);
-            print.format("{}\n", entry_inode);
-
-            if (entry_inode.is_file()) {
+            if (entry_inode.is_file() and util.memory_compare(name, entry.name)) {
                 var iter = DataBlockIterator{.fs = self, .inode = &entry_inode};
                 while (try iter.next(buffer)) |data_block| {
                     print.data_bytes(data_block);

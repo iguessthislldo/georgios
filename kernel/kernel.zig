@@ -49,6 +49,7 @@ pub const Kernel = struct {
 
         var ext2 = Ext2{};
         try ext2.initialize(self.memory.kalloc);
+        try ext2.get_file("test_prog.elf");
     }
 
     fn hidden() void {
