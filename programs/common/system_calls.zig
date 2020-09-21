@@ -1,4 +1,11 @@
-pub inline fn print_char(c: u8) void {
+pub inline fn print_string(s: []const u8) void {
     asm volatile ("int $100" ::
-        [syscall_number] "{eax}" (u32(99)), [arg1] "{ebx}" (u32(c)));
+        [syscall_number] "{eax}" (u32(0)), [arg1] "{ebx}" (@ptrToInt(&s)));
+}
+
+pub inline fn getc() u8 {
+    var c: u8 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (u32(1)), [arg1] "{ebx}" (@ptrToInt(&c)));
+    return c;
 }

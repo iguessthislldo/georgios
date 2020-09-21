@@ -35,8 +35,19 @@ const system_call_interrupt_number: u8 = 100;
 fn handle_system_call(interrupt_stack: *InterruptStack) void {
     const call_number = interrupt_stack.eax;
     const arg1 = interrupt_stack.ebx;
-    if (call_number == 99) {
-        print.char(@truncate(u8, arg1));
+    switch (call_number) {
+        0 => print.string(@intToPtr(*[]const u8, arg1).*),
+        1 => {
+            const ps2 = @import("ps2.zig");
+            while (true) {
+                if (ps2.get_char()) |c| {
+                    @intToPtr(*u8, arg1).* = c;
+                    break;
+                }
+                putil.wait_milliseconds(100);
+            }
+        },
+        else => @panic("Invalid System Call"),
     }
 }
 
@@ -72,7 +83,7 @@ const TablePointer = packed struct {
 };
 var table_pointer: TablePointer = undefined;
 
-fn load() void {
+pub fn load() void {
     asm volatile ("lidtl (%[p])" : : [p] "{ax}" (&table_pointer));
 }
 
@@ -93,8 +104,8 @@ fn set_entry(
 }
 
 // TODO: Figure out what these are...
-const kernel_flags: u8 = 0x8e;
-const user_flags: u8 = kernel_flags | (3 << 5);
+pub const kernel_flags: u8 = 0x8e;
+pub const user_flags: u8 = kernel_flags | (3 << 5);
 
 // Interrupt Handler Generation ==============================================
 
@@ -102,7 +113,7 @@ const user_flags: u8 = kernel_flags | (3 << 5);
 // probably because of stack corruption. See panic_message note in kernel run
 // and register contents when using a Zig panic.
 fn BaseInterruptHandler(
-        comptime i: u32, comptime dummy_error_code: bool, comptime software_panic: bool,
+        comptime i: u32, comptime dummy_error_code: bool, comptime software_panic: bool, comptime irq: bool,
         impl: fn(*InterruptStack) void) type {
     return struct {
         const index: u8 = i;
@@ -131,6 +142,10 @@ fn BaseInterruptHandler(
 
             impl(interrupt_stack);
 
+            if (irq) {
+                pic.silence_irq(i - pic.irq_0_7_interrupt_offset);
+            }
+
             asm volatile (
                 \\addl $4, %%esp // Pop Interrupt Code
                 \\popal // Restore Registers
@@ -152,7 +167,11 @@ fn BaseInterruptHandler(
 
 fn HardwareErrorInterruptHandler(
         comptime i: u32, comptime dummy_error_code: bool) type {
-    return BaseInterruptHandler(i, dummy_error_code, false, panic.show_panic_message);
+    return BaseInterruptHandler(i, dummy_error_code, false, false, panic.show_panic_message);
+}
+
+pub fn IrqInterruptHandler(comptime irq_number: u32, impl: fn(*InterruptStack) void) type {
+    return BaseInterruptHandler(irq_number + pic.irq_0_7_interrupt_offset, true, false, true, impl);
 }
 
 // CPU Exception Interrupts ==================================================
@@ -189,8 +208,8 @@ const exceptions = [_]Exception {
 
 // 8259 Programmable Interrupt Controller (PIC) ==============================
 
-const pic = struct {
-    const irq_0_7_interrupt_offset = @intCast(u8, exceptions.len);
+pub const pic = struct {
+    const irq_0_7_interrupt_offset: u8 = 32;
     const irq_8_15_interrupt_offset: u8 = irq_0_7_interrupt_offset + 8;
 
     const channel_port: u16 = 0x40;
@@ -203,16 +222,28 @@ const pic = struct {
     const init_command: u8 = 0x11;
     const reset_command: u8 = 0x20;
 
-    pub fn silence_irq(irq: u8) void {
-        if (irq >= 8) putil.out8(irq_8_15_data_port, reset_command);
-        putil.out8(irq_0_7_command_port, reset_command);
-    }
-
     fn busywork() void {
         asm volatile (
             \\add %%ch, %%bl
             \\add %%ch, %%bl
         );
+    }
+
+    pub fn silence_irq(irq: u8) void {
+        if (irq >= 8) putil.out8(irq_8_15_data_port, reset_command);
+        putil.out8(irq_0_7_command_port, reset_command);
+        busywork();
+    }
+
+    pub fn allow_irq(irq: u8, enabled: bool) void {
+        var offset = irq;
+        var port = irq_0_7_data_port;
+        if (irq >= 8) {
+            offset -= 8;
+            port = irq_8_15_data_port;
+        }
+        putil.out8(port, putil.in8(port) & ~(u8(1) << @intCast(u3, offset)));
+        busywork();
     }
 
     pub fn initialize() void {
@@ -221,20 +252,33 @@ const pic = struct {
         busywork();
         putil.out8(irq_8_15_command_port, init_command);
         busywork();
+
         // Set Interrupt Number Offsets for IRQs
         putil.out8(irq_0_7_data_port, irq_0_7_interrupt_offset);
         busywork();
         putil.out8(irq_8_15_data_port, irq_8_15_interrupt_offset);
-        // Tell PICs About Each Other
         busywork();
+
+        // Tell PICs About Each Other
         putil.out8(irq_0_7_data_port, 4);
         busywork();
         putil.out8(irq_8_15_data_port, 2);
-        // Set Mode of PICs
         busywork();
+
+        // Set Mode of PICs
         putil.out8(irq_0_7_data_port, 1);
         busywork();
         putil.out8(irq_8_15_data_port, 1);
+        busywork();
+
+        // Disable All IRQs for Now
+        putil.out8(irq_0_7_data_port, 0xff);
+        busywork();
+        putil.out8(irq_8_15_data_port, 0xff);
+        busywork();
+
+        // Enable Interrupts
+        putil.enable_interrupts();
     }
 };
 
@@ -263,11 +307,12 @@ pub fn initialize() void {
             ex.name, kernel_code_selector, kernel_flags);
     }
 
-    BaseInterruptHandler(50, true, true, panic.show_panic_message).set(
+    BaseInterruptHandler(50, true, true, false, panic.show_panic_message).set(
         "Software Panic", kernel_code_selector, kernel_flags);
 
-    BaseInterruptHandler(system_call_interrupt_number, true, false, handle_system_call).set(
-        "System Call", kernel_code_selector, user_flags);
+    BaseInterruptHandler(
+        system_call_interrupt_number, true, false, false, handle_system_call).set(
+            "System Call", kernel_code_selector, user_flags);
 
     load();
 

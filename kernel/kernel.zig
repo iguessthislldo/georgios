@@ -49,16 +49,8 @@ pub const Kernel = struct {
 
         var ext2 = Ext2{};
         try ext2.initialize(self.memory.kalloc);
-        var ext2_file = try ext2.open("test_prog.elf");
+        var ext2_file = try ext2.open("echoer.elf");
         const file = &ext2_file.io_file;
-
-        // var buffer: [512]u8 = undefined;
-        // while (true) {
-        //     const read_size = try file.read(buffer[0..]);
-        //     print.format("read {}\n", read_size);
-        //     if (read_size == 0) break;
-        //     print.data_bytes(buffer[0..read_size]);
-        // }
 
         var elf_object = try elf.Object.from_file(self.memory.kalloc, file);
 

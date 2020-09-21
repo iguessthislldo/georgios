@@ -101,11 +101,11 @@ pub fn build(b: *std.build.Builder) void {
     const libcommon = b.addStaticLibrary("common", "programs/common/common.zig");
     libcommon.setTheTarget(target);
 
-    // programs/test_prog
-    const test_prog = b.addExecutable("test_prog.elf", "programs/test_prog/test_prog.zig");
-    test_prog.setLinkerScriptPath("programs/common/linking.ld");
-    test_prog.setTheTarget(target);
-    test_prog.linkLibraryOrObject(libcommon);
-    test_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
-    test_prog.install();
+    // programs/echoer
+    const echoer = b.addExecutable("echoer.elf", "programs/echoer/echoer.zig");
+    echoer.setLinkerScriptPath("programs/common/linking.ld");
+    echoer.setTheTarget(target);
+    echoer.linkLibraryOrObject(libcommon);
+    echoer.addPackagePath("system_calls", "programs/common/system_calls.zig");
+    echoer.install();
 }

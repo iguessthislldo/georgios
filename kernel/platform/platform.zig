@@ -13,6 +13,7 @@ pub const util = @import("util.zig");
 pub const pci = @import("pci.zig");
 pub const ata = @import("ata.zig");
 pub const acpi = @import("acpi.zig");
+pub const ps2 = @import("ps2.zig");
 
 pub const panic = @import("panic.zig").panic;
 pub const frame_size = pmemory.frame_size;
@@ -77,6 +78,11 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     return from.len;
 }
 
+fn console_read(file: *io.File, to: []u8) anyerror!usize {
+    const r = ps2.get_text(to[0..]);
+    return r.len;
+}
+
 extern var stack: [util.Ki(16)]u8 align(16) linksection(".bss");
 pub fn print_stack_left() void {
     print.format("stack left: {}\n",
@@ -89,6 +95,7 @@ pub fn initialize(kernel: *Kernel) !void {
     cga_console.initialize();
     if (kernel.console) |f| {
         f.write_impl = console_write;
+        f.read_impl = console_read;
     } else {
         @panic("No Console File");
     }
@@ -111,6 +118,7 @@ pub fn initialize(kernel: *Kernel) !void {
 
     // Setup Devices
     pci.find_pci_devices();
+    ps2.initialize();
 
     acpi.initialize();
 }

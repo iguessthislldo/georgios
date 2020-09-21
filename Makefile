@@ -43,9 +43,9 @@ $(ISO): $(KERNEL) $(GRUB_CFG)
 	cp $(GRUB_PREFIX)/share/grub/unicode.pf2 $(ISO_BOOT_DIR)/grub
 	grub-mkrescue --directory=$(GRUB_LOCATION) --output=$(ISO) --modules="$(GRUB_MODULES)" $(ISO_DIR)
 
-$(ZIG_OUTPUT)/test_prog.elf: build_georgios
+$(ZIG_OUTPUT)/echoer.elf: build_georgios
 
-$(DISK): $(ZIG_OUTPUT)/test_prog.elf
+$(DISK): $(ZIG_OUTPUT)/echoer.elf
 	@mkdir -p $(DISK_DIR)
 	cp $^ $(DISK_DIR)
 	mke2fs -L '' -N 0 -O none -d $(DISK_DIR) -r 1 -t ext2 $(DISK) 1m
