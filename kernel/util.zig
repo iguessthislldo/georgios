@@ -510,3 +510,78 @@ pub inline fn to_bytes(value: var) []u8 {
         }
     }
 }
+
+pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
+    return struct {
+        const Self = @This();
+        const max_len = len_arg;
+
+        contents: [max_len]Type = undefined,
+        start: usize = 0,
+        end: usize = 0,
+        len: usize = 0,
+
+        inline fn increment(pos: *usize) void {
+            pos.* = (pos.* + 1) % max_len;
+        }
+
+        pub fn push(self: *Self, value: Type) void {
+            if (self.len < max_len) {
+                self.contents[self.end] = value;
+                increment(&self.end);
+                self.len += 1;
+            }
+        }
+
+        pub fn pop(self: *Self) ?Type {
+            if (self.len == 0) return null;
+            self.len -= 1;
+            defer increment(&self.start);
+            return self.contents[self.start];
+        }
+    };
+}
+
+test "CircularBuffer" {
+    const std = @import("std");
+    var buffer = CircularBuffer(usize, 4){};
+    const nil: ?usize = null;
+
+    // Empty
+    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(nil, buffer.pop());
+
+    // Push Some Values
+    buffer.push(1);
+    std.testing.expectEqual(usize(1), buffer.len);
+    buffer.push(2);
+    buffer.push(3);
+    std.testing.expectEqual(usize(3), buffer.len);
+
+    // Pop The Values
+    std.testing.expectEqual(usize(1), buffer.pop().?);
+    std.testing.expectEqual(usize(2), buffer.pop().?);
+    std.testing.expectEqual(usize(3), buffer.pop().?);
+
+    // It's empty again
+    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(nil, buffer.pop());
+
+    // Fill It
+    buffer.push(5);
+    buffer.push(4);
+    buffer.push(3);
+    buffer.push(2);
+    buffer.push(1);
+    std.testing.expectEqual(usize(4), buffer.len);
+
+    // Pop The Values
+    std.testing.expectEqual(usize(5), buffer.pop().?);
+    std.testing.expectEqual(usize(4), buffer.pop().?);
+    std.testing.expectEqual(usize(3), buffer.pop().?);
+    std.testing.expectEqual(usize(2), buffer.pop().?);
+
+    // It's empty yet again
+    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(nil, buffer.pop());
+}
