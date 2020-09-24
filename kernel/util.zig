@@ -6,6 +6,7 @@ pub const Error = error {
     NotEnoughDestination,
 };
 
+// NOTE: DO NOT TRY TO REMOVE INLINE ON THESE, WILL BREAK LOW KERNEL
 pub inline fn Ki(x: usize) usize {
     return x << 10;
 }

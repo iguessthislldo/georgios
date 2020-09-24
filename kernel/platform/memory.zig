@@ -113,6 +113,7 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
 /// http://ethv.net/workshops/osdev/notes/notes-2
 /// When a physical frame isn't being used it is part of a linked list.
 pub const Memory = struct {
+    const Self = @This();
     const FreeFramePtr = ?usize;
 
     extern var _VIRTUAL_LOW_START: u32;
@@ -123,10 +124,14 @@ pub const Memory = struct {
     virtual_page_address: usize = 0,
     virtual_page_index: usize = 0,
     start_of_virtual_space: usize = 0,
+    page_allocator: kmemory.Allocator = undefined,
 
     pub fn initialize(self: *Memory, kernel_memory: *KernelMemory,
             memory_map: *RealMemoryMap) void {
         self.kernel_memory = kernel_memory;
+        self.page_allocator.alloc_impl = Self.page_alloc;
+        self.page_allocator.free_impl = Self.page_free;
+        kernel_memory.big_alloc = &self.page_allocator;
         self.virtual_page_address = @ptrToInt(&_VIRTUAL_LOW_START);
         self.virtual_page_index = get_table_index(self.virtual_page_address);
 
@@ -301,9 +306,15 @@ pub const Memory = struct {
     // fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
     // }
 
-    fn get_kernel_space(self: *Memory, requested_size: usize) MemoryError!Range {
-        const range = try self.get_unused_kernel_space(requested_size);
+    fn page_alloc(allocator: *kmemory.Allocator, size: usize) MemoryError!usize {
+        const self = @fieldParentPtr(Self, "page_allocator", allocator);
+        const range = try self.get_unused_kernel_space(size);
         try self.mark_virtual_memory_present(range, false);
-        return range;
+        return range.start;
+    }
+
+    fn page_free(allocator: *kmemory.Allocator, address: usize) MemoryError!void {
+        const self = @fieldParentPtr(Self, "page_allocator", allocator);
+        // TODO
     }
 };

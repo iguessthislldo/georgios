@@ -40,11 +40,11 @@ pub const Kernel = struct {
         try self.initialize();
 
         var ext2 = Ext2{};
-        try ext2.initialize(self.memory.kalloc);
+        try ext2.initialize(self.memory.small_alloc);
         var ext2_file = try ext2.open("echoer.elf");
         const file = &ext2_file.io_file;
 
-        var elf_object = try elf.Object.from_file(self.memory.kalloc, file);
+        var elf_object = try elf.Object.from_file(self.memory.small_alloc, file);
 
         const Range = @import("memory.zig").Range;
         const range = Range{.start=0, .size=elf_object.program.len};
@@ -54,12 +54,11 @@ pub const Kernel = struct {
             @intToPtr(*allowzero u32, range.start + i).* = elf_object.program[i];
             i += 1;
         }
-        // asm volatile ("jmp *%[entry_point]" :: [entry_point] "{eax}" (elf_object.header.entry));
         const usermode_stack = Range{
             .start = platform.impl.kernel_to_virtual(0) - platform.frame_size,
             .size = platform.frame_size};
         try self.memory.platform_memory.mark_virtual_memory_present(usermode_stack, true);
-        const kernelmode_stack = try self.memory.platform_memory.get_kernel_space(util.Ki(4));
+        const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
         platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
         usermode(elf_object.header.entry, usermode_stack.end());
     }

@@ -91,19 +91,28 @@ pub const Allocator = struct {
             self: *Allocator, comptime Type: type, value: []Type) MemoryError!void {
         return self.free_impl(self, @ptrToInt(value.ptr));
     }
+
+    pub fn alloc_range(self: *Allocator, size: usize) MemoryError!Range {
+        return Range{.start = try self.alloc_impl(self, size), .size = size};
+    }
+
+    pub fn free_range(self: *Allocator, range: Range) MemoryError!void {
+        return self.free_impl(self, range.start);
+    }
 };
 
 /// Used by the kernel to manage system memory
 pub const Memory = struct {
-    const kalloc_size = util.Mi(1);
-    const KallocImplType = BuddyAllocator(kalloc_size);
+    const small_alloc_size = util.Mi(1);
+    const SmallAllocImplType = BuddyAllocator(small_alloc_size);
 
     platform_memory: PlatformMemory = PlatformMemory{},
     free_frame_count: usize = 0,
-    kalloc_range: Range = undefined,
-    kalloc_impl_range: Range = undefined,
-    kalloc_impl: *KallocImplType = undefined,
-    kalloc: *Allocator = undefined,
+    small_alloc_range: Range = undefined,
+    small_alloc_impl_range: Range = undefined,
+    small_alloc_impl: *SmallAllocImplType = undefined,
+    small_alloc: *Allocator = undefined,
+    big_alloc: *Allocator = undefined,
 
     /// To be called by the platform after it can give "map".
     pub fn initialize(self: *Memory, map: *RealMemoryMap) !void {
@@ -152,13 +161,9 @@ pub const Memory = struct {
             total_memory >> 20,
             total_memory >> 30);
 
-        // TODO: Tidy Up How This is Done
-        self.kalloc_impl_range = try self.platform_memory.get_kernel_space(
-            @sizeOf(KallocImplType));
-        self.kalloc_impl = self.kalloc_impl_range.to_ptr(*KallocImplType);
-        self.kalloc_range = try self.platform_memory.get_kernel_space(kalloc_size);
-        self.kalloc_impl.initialize(self.kalloc_range.start);
-        self.kalloc = &self.kalloc_impl.allocator;
+        self.small_alloc_impl = try self.big_alloc.alloc(SmallAllocImplType);
+        self.small_alloc_impl.initialize(@ptrToInt(try self.big_alloc.alloc([small_alloc_size]u8)));
+        self.small_alloc = &self.small_alloc_impl.allocator;
     }
 
     pub fn free_pmem(self: *Memory, frame: usize) void {
