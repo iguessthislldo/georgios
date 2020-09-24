@@ -3,14 +3,9 @@ const util = @import("util.zig");
 pub const FileError = error {
     /// The operation is not supported on the file.
     Unsupported,
-    /// The operation would cause the position of the file stream to became
-    /// invalid without getting anything else done.
-    OutOfBounds,
-    /// The source or destination buffer given has a size of zero.
-    EmptyBuffer,
     /// The file manager could not reserve a file.
     MaxFilesReached,
-};
+} || util.Error;
 
 /// File IO Interface
 pub const File = struct {
@@ -63,8 +58,7 @@ pub const File = struct {
 
     read_impl: fn(*File, []u8) anyerror!usize = unsupported.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = unsupported.write_impl,
-    seek_impl: fn(*File, isize, SeekType) FileError!usize =
-        unsupported.seek_impl,
+    seek_impl: fn(*File, isize, SeekType) FileError!usize = unsupported.seek_impl,
     close_impl: fn(*File) FileError!void = unsupported.close_impl,
 
     /// Set the file to do nothing when used.
@@ -87,9 +81,9 @@ pub const File = struct {
     /// Tries to read as much as possible into the `to` slice and will return
     /// the amount read, which may be less than `to.len`. Can return 0 if the
     /// `to` slice is zero or the end of the file has been reached already. It
-    /// should never return `FileError.OutOfBounds` or `FileError.EmptyBuffer`,
-    /// but `read_or_error` will. The exact return values are defined by the
-    /// file implementation.
+    /// should never return `FileError.OutOfBounds` or
+    /// `FileError.NotEnoughDestination`, but `read_or_error` will. The exact
+    /// return values are defined by the file implementation.
     pub inline fn read(file: *File, to: []u8) anyerror!usize {
         return file.read_impl(file, to);
     }
@@ -99,7 +93,7 @@ pub const File = struct {
     /// already reached the end.
     pub inline fn read_or_error(file: *File, to: []u8) anyerror!usize {
         if (to.len == 0) {
-            return FileError.EmptyBuffer;
+            return FileError.NotEnoughDestination;
         }
         const result = try file.read_impl(file, to);
         if (result == 0) {
@@ -112,8 +106,8 @@ pub const File = struct {
     /// written, which may be less than `from.len`. As with `read` this can be
     /// 0 if the file has a limit of what can be written and that limit was
     /// already reached. Also like `read` this should never return
-    /// `FileError.OutOfBounds` or `FileError.EmptyBuffer`, but `write_or_error`
-    /// can. The exact return values are defined by the file implementation.
+    /// `FileError.OutOfBounds`, but `write_or_error` can. The exact return
+    /// values are defined by the file implementation.
     pub inline fn write(file: *File, from: []const u8) FileError!usize {
         return file.write_impl(file, from);
     }

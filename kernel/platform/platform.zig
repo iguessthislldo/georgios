@@ -93,12 +93,8 @@ pub fn initialize(kernel: *Kernel) !void {
     // Finish Setup of Console Logging
     serial_log.initialize();
     cga_console.initialize();
-    if (kernel.console) |f| {
-        f.write_impl = console_write;
-        f.read_impl = console_read;
-    } else {
-        @panic("No Console File");
-    }
+    kernel.console.write_impl = console_write;
+    kernel.console.read_impl = console_read;
 
     // Setup Basic CPU Utilities
     segments.initialize();

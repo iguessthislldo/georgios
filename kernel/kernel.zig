@@ -28,19 +28,11 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
 extern fn usermode(ip: u32, sp: u32) noreturn;
 
 pub const Kernel = struct {
-    const Files = io.Files(32);
-
     memory: Memory = Memory{},
-    file_io: Files = Files{},
-    console: ?*io.File = null,
+    console: io.File = io.File{},
 
     pub fn initialize(self: *Kernel) !void {
-        // Get the Console Ready
-        try self.file_io.initialize();
-        self.console = try self.file_io.new_file();
-        print.initialize(self.console, build_options.debug_log);
-
-        // Do a Whole Bunch of Stuff
+        print.initialize(&self.console, build_options.debug_log);
         try platform.initialize(self);
     }
 
@@ -73,9 +65,10 @@ pub const Kernel = struct {
     }
 };
 
+var kernel = Kernel{};
+
 pub export fn kernel_main() void {
     panic_message = ""; // TODO: This is garbage when a panic happens
-    var kernel = Kernel{};
     if (kernel.run()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
