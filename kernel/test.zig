@@ -7,4 +7,5 @@ test "dummy" {
     const buddy_allocator = @import("buddy_allocator.zig");
     const unicode = @import("unicode.zig");
     const list = @import("list.zig");
+    const map = @import("map.zig");
 }
