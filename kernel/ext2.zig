@@ -293,9 +293,9 @@ pub const DataBlockIterator = struct {
     }
 
     pub fn done(self: *DataBlockIterator) Error!void {
-        if (self.second_level != null) try self.fs.alloc.free_array(u32, self.second_level.?);
-        if (self.third_level != null) try self.fs.alloc.free_array(u32, self.third_level.?);
-        if (self.fourth_level != null) try self.fs.alloc.free_array(u32, self.fourth_level.?);
+        if (self.second_level != null) try self.fs.alloc.free_array(self.second_level.?);
+        if (self.third_level != null) try self.fs.alloc.free_array(self.third_level.?);
+        if (self.fourth_level != null) try self.fs.alloc.free_array(self.fourth_level.?);
     }
 };
 
@@ -362,7 +362,7 @@ const DirectoryIterator = struct {
 
     pub fn done(self: *DirectoryIterator) Error!void {
         try self.data_block_iter.done();
-        try self.fs.alloc.free_array(u8, self.buffer);
+        try self.fs.alloc.free_array(self.buffer);
     }
 };
 

@@ -5,10 +5,13 @@ const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 const platform = @import("platform.zig");
 const PlatformMemory = platform.Memory;
 
-pub const MemoryError = error {
+pub const AllocError = error {
     OutOfMemory,
-    InvalidPointerArgument,
 };
+pub const FreeError = error {
+    InvalidFree,
+};
+pub const MemoryError = AllocError || FreeError;
 
 pub const Range = struct {
     start: usize = 0,
@@ -71,33 +74,64 @@ pub const RealMemoryMap = struct {
 };
 
 pub const Allocator = struct {
-    alloc_impl: fn(self: *Allocator, size: usize) MemoryError!usize,
-    free_impl: fn(self: *Allocator, address: usize) MemoryError!void,
+    alloc_impl: fn(self: *Allocator, size: usize) AllocError![]u8,
+    free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
 
-    pub fn alloc(self: *Allocator, comptime Type: type) MemoryError!*Type {
-        return @intToPtr(*Type, try self.alloc_impl(self, @sizeOf(Type)));
+    pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
+        return @ptrCast(*Type, @alignCast(
+            @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type))).ptr));
     }
 
-    pub fn free(self: *Allocator, comptime Type: type, address: *Type) MemoryError!void {
-        return self.free_impl(self, @ptrToInt(address));
+    pub fn free(self: *Allocator, value: var) FreeError!void {
+        try self.free_impl(self, util.to_bytes(value));
     }
 
     pub fn alloc_array(
-            self: *Allocator, comptime Type: type, count: usize) MemoryError![]Type {
-        return @intToPtr([*]Type, try self.alloc_impl(self, @sizeOf(Type) * count))[0..count];
+            self: *Allocator, comptime Type: type, count: usize) AllocError![]Type {
+        return @ptrCast([*]Type, @alignCast(
+            @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
     }
 
-    pub fn free_array(
-            self: *Allocator, comptime Type: type, value: []Type) MemoryError!void {
-        return self.free_impl(self, @ptrToInt(value.ptr));
+    pub fn free_array(self: *Allocator, array: var) FreeError!void {
+        try self.free_impl(self, @sliceToBytes(array));
     }
 
-    pub fn alloc_range(self: *Allocator, size: usize) MemoryError!Range {
-        return Range{.start = try self.alloc_impl(self, size), .size = size};
+    pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
+        return Range{.start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
     }
 
-    pub fn free_range(self: *Allocator, range: Range) MemoryError!void {
-        return self.free_impl(self, range.start);
+    pub fn free_range(self: *Allocator, range: Range) FreeError!void {
+        try self.free_impl(self, range.to_slice(u8));
+    }
+};
+
+pub const ZigAllocator = struct {
+    const Self = @This();
+
+    const std = @import("std");
+    const Impl = std.heap.ArenaAllocator;
+
+    allocator: Allocator = undefined,
+    impl: Impl = undefined,
+
+    pub fn initialize(self: *Self) void {
+        self.impl = Impl.init(std.heap.direct_allocator);
+        self.allocator.alloc_impl = Self.alloc;
+        self.allocator.free_impl = Self.free;
+    }
+
+    pub fn done(self: *Self) void {
+        self.impl.deinit();
+    }
+
+    pub fn alloc(allocator: *Allocator, size: usize) AllocError![]u8 {
+        const self = @fieldParentPtr(Self, "allocator", allocator);
+        return self.impl.allocator.alloc(u8, size) catch return AllocError.OutOfMemory;
+    }
+
+    pub fn free(allocator: *Allocator, value: []u8) FreeError!void {
+        const self = @fieldParentPtr(Self, "allocator", allocator);
+        self.impl.allocator.free(value);
     }
 };
 
@@ -171,16 +205,9 @@ pub const Memory = struct {
         self.free_frame_count += 1;
     }
 
-    pub fn alloc_pmem(self: *Memory) MemoryError!usize {
+    pub fn alloc_pmem(self: *Memory) AllocError!usize {
         const frame = try self.platform_memory.pop_frame();
         self.free_frame_count -= 1;
         return frame;
     }
-
-    // TODO: Virtual Memory Management
-    // pub fn alloc_vmem(self: *Memory, what: Range) MemoryError!void {
-    // }
-
-    // pub fn free_vmem(self: *Memory, what: Range) MemoryError!void {
-    // }
 };

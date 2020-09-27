@@ -7,6 +7,8 @@
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
 const MemoryError = memory.MemoryError;
+const AllocError = memory.AllocError;
+const FreeError = memory.FreeError;
 const util = @import("util.zig");
 
 const BlockStatus = packed enum(u2) {
@@ -21,7 +23,7 @@ const Error = error {
     InternalError,
     RequestedSizeTooSmall,
     RequestedSizeTooLarge,
-} || util.Error || MemoryError;
+} || util.Error;
 
 const FreeBlock = struct {
     const ConstPtr = *allowzero const FreeBlock;
@@ -181,11 +183,11 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 unique_id(new_level, buddy_index), BlockStatus.Free);
         }
 
-        pub fn alloc(allocator: *Allocator, size: usize) MemoryError!usize {
+        pub fn alloc(allocator: *Allocator, size: usize) AllocError![]u8 {
             const self = @fieldParentPtr(Self, "allocator", allocator);
 
             if (size > max_size) {
-                return MemoryError.OutOfMemory;
+                return AllocError.OutOfMemory;
             }
 
             const target_size = util.pow2_round_up(usize, size);
@@ -201,7 +203,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                     break;
                 }
                 if (level == 0) {
-                    return MemoryError.OutOfMemory;
+                    return AllocError.OutOfMemory;
                 }
                 level -= 1;
             }
@@ -226,7 +228,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             const id = unique_id(target_level, index);
             self.block_statuses.set(id, .Used) catch unreachable;
 
-            return @ptrToInt(address);
+            return @ptrCast([*]u8, address)[0..size];
         }
 
         fn merge(self: *Self, level: usize, index: usize) Error!void {
@@ -258,8 +260,12 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             try self.block_statuses.set(new_unique_id, .Free);
         }
 
-        fn free(allocator: *Allocator, address: usize) MemoryError!void {
+        fn free(allocator: *Allocator, value: []u8) FreeError!void {
             const self = @fieldParentPtr(Self, "allocator", allocator);
+
+            if (value.len > max_size) return FreeError.InvalidFree;
+
+            const address = @ptrToInt(value.ptr);
             const block = @intToPtr(FreeBlock.Ptr, address);
 
             // Find the level
@@ -281,7 +287,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 }
             }
             if (id_maybe == null) {
-                return MemoryError.InvalidPointerArgument;
+                return FreeError.InvalidFree;
             }
             const id = id_maybe.?;
 
@@ -357,7 +363,7 @@ test "BuddyAllocator" {
             "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
             "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff";
         std.testing.expectEqualSlices(u8, expected[0..], m[0..]);
-        try a.free([s]u8, p);
+        try a.free(p);
     }
     {
         const s = 32;

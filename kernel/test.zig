@@ -6,4 +6,5 @@ test "dummy" {
     const fprint = @import("fprint.zig");
     const buddy_allocator = @import("buddy_allocator.zig");
     const unicode = @import("unicode.zig");
+    const list = @import("list.zig");
 }

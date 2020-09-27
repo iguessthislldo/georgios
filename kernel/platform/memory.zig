@@ -2,7 +2,8 @@ const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const KernelMemory = kmemory.Memory;
 const RealMemoryMap = kmemory.RealMemoryMap;
-const MemoryError = kmemory.MemoryError;
+const AllocError = kmemory.AllocError;
+const FreeError = kmemory.FreeError;
 const Range = kmemory.Range;
 const print = @import("../print.zig");
 
@@ -179,7 +180,7 @@ pub const Memory = struct {
         self.next_free_frame = frame;
     }
 
-    pub fn pop_frame(self: *Memory) MemoryError!usize {
+    pub fn pop_frame(self: *Memory) AllocError!usize {
         if (self.next_free_frame) |frame| {
             const prev = frame;
             // Map fixed virtual address to next_free_frame.
@@ -191,10 +192,10 @@ pub const Memory = struct {
             // Return the previous next_free_frame
             return prev;
         }
-        return MemoryError.OutOfMemory;
+        return AllocError.OutOfMemory;
     }
 
-    fn get_unused_kernel_space(self: *Memory, requested_size: usize) MemoryError!Range {
+    fn get_unused_kernel_space(self: *Memory, requested_size: usize) AllocError!Range {
         // print.format("get_unused_kernel_space {:x}\n", requested_size);
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
@@ -243,10 +244,10 @@ pub const Memory = struct {
             }
             dir_index += 1;
         }
-        return MemoryError.OutOfMemory;
+        return AllocError.OutOfMemory;
     }
 
-    pub fn new_page_table(self: *Memory, dir_index: usize) MemoryError!void {
+    pub fn new_page_table(self: *Memory, dir_index: usize) AllocError!void {
         // print.format("new_page_table {:x}\n", dir_index);
         // TODO: Go through memory.Memory
         const table_address = try self.pop_frame();
@@ -263,7 +264,7 @@ pub const Memory = struct {
 
     // TODO: Read/Write and Any Other Options
     fn mark_virtual_memory_present(
-            self: *Memory, range: Range, user: bool) MemoryError!void {
+            self: *Memory, range: Range, user: bool) AllocError!void {
         // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
@@ -306,14 +307,14 @@ pub const Memory = struct {
     // fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
     // }
 
-    fn page_alloc(allocator: *kmemory.Allocator, size: usize) MemoryError!usize {
+    fn page_alloc(allocator: *kmemory.Allocator, size: usize) AllocError![]u8 {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
         const range = try self.get_unused_kernel_space(size);
         try self.mark_virtual_memory_present(range, false);
-        return range.start;
+        return range.to_slice(u8);
     }
 
-    fn page_free(allocator: *kmemory.Allocator, address: usize) MemoryError!void {
+    fn page_free(allocator: *kmemory.Allocator, value: []u8) FreeError!void {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
         // TODO
     }
