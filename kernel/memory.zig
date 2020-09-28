@@ -105,7 +105,7 @@ pub const Allocator = struct {
     }
 };
 
-pub const ZigAllocator = struct {
+pub const UnitTestAllocator = struct {
     const Self = @This();
 
     const std = @import("std");
@@ -113,24 +113,30 @@ pub const ZigAllocator = struct {
 
     allocator: Allocator = undefined,
     impl: Impl = undefined,
+    allocated: usize = undefined,
 
     pub fn initialize(self: *Self) void {
         self.impl = Impl.init(std.heap.direct_allocator);
         self.allocator.alloc_impl = Self.alloc;
         self.allocator.free_impl = Self.free;
+        self.allocated = 0;
     }
 
     pub fn done(self: *Self) void {
+        std.testing.expectEqual(usize(0), self.allocated);
         self.impl.deinit();
     }
 
     pub fn alloc(allocator: *Allocator, size: usize) AllocError![]u8 {
         const self = @fieldParentPtr(Self, "allocator", allocator);
+        self.allocated += size;
         return self.impl.allocator.alloc(u8, size) catch return AllocError.OutOfMemory;
     }
 
     pub fn free(allocator: *Allocator, value: []u8) FreeError!void {
         const self = @fieldParentPtr(Self, "allocator", allocator);
+        std.testing.expectEqual(true, self.allocated >= value.len);
+        self.allocated -= value.len;
         self.impl.allocator.free(value);
     }
 };

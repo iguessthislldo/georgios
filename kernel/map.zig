@@ -27,6 +27,7 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
                 } else {
                     @panic("Map.replace_child: Not a child of node!");
                 }
+                if (new_child) |node| node.parent = self;
             }
 
             pub fn get_child(self: *const Node, right: bool) ?*Node {
@@ -62,23 +63,25 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
             }
         }
 
+        pub fn insert_node(self: *Self, node: *Node) void {
+            if (self.root == null) {
+                node.parent = null;
+                self.root = node;
+            } else {
+                const r = self.find_parent(node.key, self.root.?);
+                node.parent = r.parent;
+                r.leaf.* = node;
+            }
+            self.len += 1;
+        }
+
         pub fn insert(self: *Self, key: KeyType, value: ValueType) memory.MemoryError!*Node {
             const node = try self.alloc.alloc(Node);
             node.left = null;
             node.right = null;
             node.key = key;
             node.value = value;
-
-            if (self.root == null) {
-                node.parent = null;
-                self.root = node;
-            } else {
-                const r = self.find_parent(key, self.root.?);
-                node.parent = r.parent;
-                r.leaf.* = node;
-            }
-            self.len += 1;
-
+            self.insert_node(node);
             return node;
         }
 
@@ -99,29 +102,28 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
             return null;
         }
 
-        fn replace_node(self: *Self, current: *Node, new: ?*Node) memory.MemoryError!void {
+        fn replace_node(self: *Self, current: *Node, new: ?*Node) void {
             if (current == self.root) {
                 self.root = new;
             } else {
                 current.parent.?.replace_child(current, new);
             }
-            try self.alloc.free(current);
         }
 
-        pub fn remove_node(self: *Self, node: *Node) memory.MemoryError!void {
+        pub fn remove_node(self: *Self, node: *Node) void {
             const right_null = node.right == null;
             const left_null = node.left == null;
             if (right_null and left_null) {
-                try self.replace_node(node, null);
+                self.replace_node(node, null);
             } else if (right_null and !left_null) {
-                try self.replace_node(node, node.left);
+                self.replace_node(node, node.left);
             } else if (!right_null and left_null) {
-                try self.replace_node(node, node.right);
+                self.replace_node(node, node.right);
             } else {
                 const replacement = node.left.?;
                 const reattach = node.right.?;
-                try self.replace_node(node, replacement);
-                const r = self.find_parent(reattach.value, replacement);
+                self.replace_node(node, replacement);
+                const r = self.find_parent(reattach.key, replacement);
                 reattach.parent = r.parent;
                 r.leaf.* = reattach;
             }
@@ -132,7 +134,12 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
             if (node == null) {
                 @import("std").debug.warn("null");
             } else {
-                @import("std").debug.warn("({}: ", node.?.key);
+                @import("std").debug.warn("({} (", node.?.key);
+                if (node.?.parent == null) {
+                    @import("std").debug.warn("null): ");
+                } else {
+                    @import("std").debug.warn("{}): ", node.?.parent.?.key);
+                }
                 self.dump_node(node.?.right);
                 @import("std").debug.warn(", ");
                 self.dump_node(node.?.left);
@@ -146,7 +153,8 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
 
         pub fn remove(self: *Self, key: KeyType) memory.MemoryError!bool {
             if (self.find_node(key)) |node| {
-                try self.remove_node(node);
+                self.remove_node(node);
+                try self.alloc.free(node);
                 return true;
             }
             return false;
@@ -166,7 +174,9 @@ fn usize_cmp(a: usize, b: usize) bool {
 
 test "Map" {
     const std = @import("std");
-    var alloc = memory.ZigAllocator{};
+    var alloc = memory.UnitTestAllocator{};
+    const equal = std.testing.expectEqual;
+
     alloc.initialize();
     defer alloc.done();
 
@@ -175,41 +185,42 @@ test "Map" {
     const nil: ?usize = null;
 
     // Empty
-    std.testing.expectEqual(usize(0), map.len);
-    std.testing.expectEqual(nil, map.find(45));
+    equal(usize(0), map.len);
+    equal(nil, map.find(45));
 
     // Insert Some Values
     _ = try map.insert(4, 65);
-    std.testing.expectEqual(usize(1), map.len);
+    equal(usize(1), map.len);
     _ = try map.insert(1, 44);
     _ = try map.insert(10, 12345);
     _ = try map.insert(23, 5678);
     _ = try map.insert(7, 53);
-    std.testing.expectEqual(usize(5), map.len);
+    equal(usize(5), map.len);
 
     // Find Them
-    std.testing.expectEqual(usize(12345), map.find(10).?);
-    std.testing.expectEqual(usize(44), map.find(1).?);
-    std.testing.expectEqual(usize(5678), map.find(23).?);
-    std.testing.expectEqual(usize(65), map.find(4).?);
-    std.testing.expectEqual(usize(53), map.find(7).?);
+    equal(usize(12345), map.find(10).?);
+    equal(usize(44), map.find(1).?);
+    equal(usize(5678), map.find(23).?);
+    equal(usize(65), map.find(4).?);
+    equal(usize(53), map.find(7).?);
 
     // Try to Find Non-Existent Key
-    std.testing.expectEqual(nil, map.find(45));
-    std.testing.expectEqual(false, try map.remove(45));
+    equal(nil, map.find(45));
+    equal(false, try map.remove(45));
 
     // Remove Node with Two Children
-    std.testing.expectEqual(true, try map.remove(10));
-    std.testing.expectEqual(usize(4), map.len);
+    equal(true, try map.remove(10));
+    equal(usize(4), map.len);
+    equal(usize(4), map.find_node(7).?.parent.?.key);
 
     // Remove the Rest
-    std.testing.expectEqual(true, try map.remove(1));
-    std.testing.expectEqual(true, try map.remove(23));
-    std.testing.expectEqual(true, try map.remove(4));
-    std.testing.expectEqual(true, try map.remove(7));
-    std.testing.expectEqual(usize(0), map.len);
+    equal(true, try map.remove(1));
+    equal(true, try map.remove(23));
+    equal(true, try map.remove(4));
+    equal(true, try map.remove(7));
+    equal(usize(0), map.len);
 
     // Try to Find Keys That Once Existed
-    std.testing.expectEqual(nil, map.find(1));
-    std.testing.expectEqual(nil, map.find(4));
+    equal(nil, map.find(1));
+    equal(nil, map.find(4));
 }

@@ -4,142 +4,181 @@ pub fn List(comptime Type: type) type {
     return struct {
         const Self = @This();
 
-        pub const Element = struct {
-            next: ?*Element,
-            prev: ?*Element,
+        pub const Node = struct {
+            next: ?*Node,
+            prev: ?*Node,
             value: Type,
         };
 
         alloc: *memory.Allocator,
-        head: ?*Element = null,
-        tail: ?*Element = null,
+        head: ?*Node = null,
+        tail: ?*Node = null,
         len: usize = 0,
 
-        pub fn push_front(self: *Self, value: Type) memory.MemoryError!void {
-            const element = try self.alloc.alloc(Element);
-            element.value = value;
-            element.next = self.head;
-            element.prev = null;
-            if (self.head) |head| {
-                head.prev = element;
+        pub fn remove_node(self: *Self, node_maybe: ?*Node) void {
+            if (node_maybe) |node| {
+                if (node.next) |next| {
+                    next.prev = node.prev;
+                }
+                if (node.prev) |prev| {
+                    prev.next = node.next;
+                }
+                if (node == self.head) {
+                    self.head = node.next;
+                }
+                if (node == self.tail) {
+                    self.tail = node.prev;
+                }
+                self.len -= 1;
             }
-            self.head = element;
+        }
+
+        pub fn push_front_node(self: *Self, node: *Node) void {
+            node.next = self.head;
+            node.prev = null;
+            if (self.head) |head| {
+                head.prev = node;
+            }
+            self.head = node;
             if (self.len == 0) {
-                self.tail = element;
+                self.tail = node;
             }
             self.len += 1;
+        }
+
+        pub fn push_front(self: *Self, value: Type) memory.MemoryError!void {
+            const node = try self.alloc.alloc(Node);
+            node.value = value;
+            self.push_front_node(node);
+        }
+
+        pub fn pop_front_node(self: *Self) ?*Node {
+            const node = self.head;
+            self.remove_node(node);
+            return node;
         }
 
         pub fn pop_front(self: *Self) memory.MemoryError!?Type {
-            if (self.head == null) {
-                return null;
+            if (self.pop_front_node()) |node| {
+                const value = node.value;
+                try self.alloc.free(node);
+                return value;
             }
-            const element = self.head.?;
-            if (element.next) |next| {
-                next.prev = null;
-            }
-            self.head = element.next;
-            const value = element.value;
-            try self.alloc.free(element);
-            self.len -= 1;
-            if (self.len == 0) {
-                self.tail = null;
-            }
-            return value;
+            return null;
         }
 
-        pub fn push_back(self: *Self, value: Type) memory.MemoryError!void {
-            const element = try self.alloc.alloc(Element);
-            element.value = value;
-            element.next = null;
-            element.prev = self.tail;
-            if (self.tail) |tail| {
-                tail.next = element;
+        pub fn bump_node_to_front(self: *Self, node: *Node) void {
+            if (self.head == node) {
+                return;
             }
-            self.tail = element;
+            self.remove_node(node);
+            self.push_front_node(node);
+        }
+
+        pub fn push_back_node(self: *Self, node: *Node) void {
+            node.next = null;
+            node.prev = self.tail;
+            if (self.tail) |tail| {
+                tail.next = node;
+            }
+            self.tail = node;
             if (self.len == 0) {
-                self.head = element;
+                self.head = node;
             }
             self.len += 1;
         }
 
+        pub fn push_back(self: *Self, value: Type) memory.MemoryError!void {
+            const node = try self.alloc.alloc(Node);
+            node.value = value;
+            self.push_back_node(node);
+        }
+
+        pub fn pop_back_node(self: *Self) ?*Node {
+            const node = self.tail;
+            self.remove_node(node);
+            return node;
+        }
+
         pub fn pop_back(self: *Self) memory.MemoryError!?Type {
-            if (self.tail == null) {
-                return null;
+            if (self.pop_back_node()) |node| {
+                const value = node.value;
+                try self.alloc.free(node);
+                return value;
             }
-            const element = self.tail.?;
-            if (element.prev) |prev| {
-                prev.next = null;
+            return null;
+        }
+
+        pub fn bump_node_to_back(self: *Self, node: *Node) void {
+            if (self.tail == node) {
+                return;
             }
-            self.tail = element.prev;
-            const value = element.value;
-            try self.alloc.free(element);
-            self.len -= 1;
-            if (self.len == 0) {
-                self.head = null;
-            }
-            return value;
+            self.remove_node(node);
+            self.push_back_node(node);
         }
     };
 }
 
 test "List" {
     const std = @import("std");
-    var alloc = memory.ZigAllocator{};
+    const equal = std.testing.expectEqual;
+
+    var alloc = memory.UnitTestAllocator{};
     alloc.initialize();
     defer alloc.done();
+
     const UsizeList = List(usize);
     var list = UsizeList{.alloc = &alloc.allocator};
     const nilv: ?usize = null;
-    const nile: ?*UsizeList.Element = null;
+    const niln: ?*UsizeList.Node = null;
 
     // Empty
-    std.testing.expectEqual(usize(0), list.len);
-    std.testing.expectEqual(nilv, try list.pop_back());
-    std.testing.expectEqual(nilv, try list.pop_front());
-    std.testing.expectEqual(nile, list.head);
-    std.testing.expectEqual(nile, list.tail);
+    equal(usize(0), list.len);
+    equal(nilv, try list.pop_back());
+    equal(nilv, try list.pop_front());
+    equal(niln, list.head);
+    equal(niln, list.tail);
 
     // Push Some Values
     try list.push_back(1);
-    std.testing.expectEqual(usize(1), list.len);
+    equal(usize(1), list.len);
     try list.push_back(2);
-    std.testing.expectEqual(usize(2), list.len);
+    equal(usize(2), list.len);
     try list.push_back(3);
-    std.testing.expectEqual(usize(3), list.len);
+    equal(usize(3), list.len);
 
     // pop_back The Values
-    std.testing.expectEqual(usize(3), (try list.pop_back()).?);
-    std.testing.expectEqual(usize(2), list.len);
-    std.testing.expectEqual(usize(2), (try list.pop_back()).?);
-    std.testing.expectEqual(usize(1), list.len);
-    std.testing.expectEqual(usize(1), (try list.pop_back()).?);
+    equal(usize(3), (try list.pop_back()).?);
+    equal(usize(2), list.len);
+    equal(usize(2), (try list.pop_back()).?);
+    equal(usize(1), list.len);
+    equal(usize(1), (try list.pop_back()).?);
 
     // It's empty again
-    std.testing.expectEqual(usize(0), list.len);
-    std.testing.expectEqual(nilv, try list.pop_back());
-    std.testing.expectEqual(nilv, try list.pop_front());
-    std.testing.expectEqual(nile, list.head);
-    std.testing.expectEqual(nile, list.tail);
+    equal(usize(0), list.len);
+    equal(nilv, try list.pop_back());
+    equal(nilv, try list.pop_front());
+    equal(niln, list.head);
+    equal(niln, list.tail);
 
     // Push Some Values
     try list.push_front(1);
-    std.testing.expectEqual(usize(1), list.len);
+    equal(usize(1), list.len);
     try list.push_back(2);
     try list.push_front(3);
     try list.push_front(10);
-    std.testing.expectEqual(usize(4), list.len);
+    equal(usize(4), list.len);
 
     // pop_back The Values
-    std.testing.expectEqual(usize(10), (try list.pop_front()).?);
-    std.testing.expectEqual(usize(3), (try list.pop_front()).?);
-    std.testing.expectEqual(usize(1), (try list.pop_front()).?);
-    std.testing.expectEqual(usize(2), (try list.pop_front()).?);
+    equal(usize(10), (try list.pop_front()).?);
+    equal(usize(3), (try list.pop_front()).?);
+    equal(usize(1), (try list.pop_front()).?);
+    equal(usize(2), (try list.pop_front()).?);
 
     // It's empty yet again
-    std.testing.expectEqual(usize(0), list.len);
-    std.testing.expectEqual(nilv, try list.pop_back());
-    std.testing.expectEqual(nilv, try list.pop_front());
-    std.testing.expectEqual(nile, list.head);
-    std.testing.expectEqual(nile, list.tail);
+    equal(usize(0), list.len);
+    equal(nilv, try list.pop_back());
+    equal(nilv, try list.pop_front());
+    equal(niln, list.head);
+    equal(niln, list.tail);
 }

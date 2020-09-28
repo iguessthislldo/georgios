@@ -8,4 +8,5 @@ test "dummy" {
     const unicode = @import("unicode.zig");
     const list = @import("list.zig");
     const map = @import("map.zig");
+    const mapped_list = @import("mapped_list.zig");
 }
