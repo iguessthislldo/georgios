@@ -1,6 +1,6 @@
 // Second Extended File System (Ext2)
 //
-// For Refernce See:
+// For Reference See:
 //   https://en.wikipedia.org/wiki/Ext2
 //   https://wiki.osdev.org/Ext2
 //   https://www.nongnu.org/ext2-doc/ext2.html

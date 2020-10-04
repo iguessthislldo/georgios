@@ -1,6 +1,11 @@
+// Buddy System Allocation Implementation
+//
 // Based on http://bitsquid.blogspot.com/2015/08/allocation-adventures-3-buddy-allocator.html
 //
 // Also see prototype at scripts/prototypes/buddy.py
+//
+// For Reference See:
+//   https://en.wikipedia.org/wiki/Buddy_memory_allocation
 //
 // TODO: Make Resizable
 
@@ -238,9 +243,9 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
             const buddy_index = get_buddy_index(index);
             const new_level = level - 1;
-            const new_index = index << 1;
+            const new_index = index >> 1;
 
-            // Assert existing blocks are free and new/parrent block is split
+            // Assert existing blocks are free and new/parent block is split
             const this_unique_id = try self.assert_unique_id(level, index, .Free);
             const buddy_unique_id = try self.assert_unique_id(level, buddy_index, .Free);
             const new_unique_id = try self.assert_unique_id(new_level, new_index, .Split);
@@ -313,6 +318,14 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
     };
 }
 
+const List = @import("list.zig").List;
+const AllocList = List([]u8);
+fn test_helper(
+        a: *Allocator, al: *AllocList, size: usize, fill: u8) MemoryError!void {
+    const s = try a.alloc_array(u8, size);
+    for (s) |*e| e.* = fill;
+    try al.push_front(s);
+}
 test "BuddyAllocator" {
     const std = @import("std");
 
@@ -339,43 +352,29 @@ test "BuddyAllocator" {
     var m: [size]u8 = undefined;
     b.initialize(@ptrToInt(&m));
     const a = &b.allocator;
-    {
-        const s = 32;
-        const p = try a.alloc([s]u8);
-        @memset(p, 0x01, s);
-    }
-    {
-        const s = 32;
-        const p = try a.alloc([s]u8);
-        @memset(p, 0x04, s);
-    }
-    {
-        const s = 64;
-        const p = try a.alloc([s]u8);
-        @memset(p, 0xff, s);
-        const expected =
-            "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-            "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-            "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-            "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-            "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff";
-        std.testing.expectEqualSlices(u8, expected[0..], m[0..]);
-        try a.free(p);
-    }
-    {
-        const s = 32;
-        const p = try a.alloc([s]u8);
-        @memset(p, 0x88, s);
-    }
-    {
-        const s = 32;
-        const p = try a.alloc([s]u8);
-        @memset(p, 0x77, s);
-    }
-    const expected_final =
+
+    var al_alloc = memory.UnitTestAllocator{};
+    al_alloc.initialize();
+    defer al_alloc.done();
+    var al = AllocList{.alloc = &al_alloc.allocator};
+
+    try test_helper(a, &al, usize(32), u8(0x01));
+    try test_helper(a, &al, usize(32), u8(0x04));
+    try test_helper(a, &al, usize(64), u8(0xff));
+    std.testing.expectEqualSlices(u8,
+        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
+        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
+        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
+        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
+        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
+        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+        m[0..]);
+    try a.free_array((try al.pop_front()).?);
+    try test_helper(a, &al, usize(32), u8(0x88));
+    try test_helper(a, &al, usize(32), u8(0x77));
+    std.testing.expectEqualSlices(u8,
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
@@ -383,6 +382,9 @@ test "BuddyAllocator" {
         "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
         "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
         "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77" ++
-        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77";
-    std.testing.expectEqualSlices(u8, expected_final[0..], m[0..]);
+        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77",
+        m[0..]);
+    while (try al.pop_front()) |slice| {
+        try a.free_array(slice);
+    }
 }
