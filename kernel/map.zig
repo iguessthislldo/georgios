@@ -140,9 +140,9 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
                 } else {
                     @import("std").debug.warn("{}): ", node.?.parent.?.key);
                 }
-                self.dump_node(node.?.right);
-                @import("std").debug.warn(", ");
                 self.dump_node(node.?.left);
+                @import("std").debug.warn(", ");
+                self.dump_node(node.?.right);
                 @import("std").debug.warn(")");
             }
         }
@@ -160,7 +160,53 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
             return false;
         }
 
-        // TODO: Iterate
+        /// Iterator that uses Morris Traversal
+        pub const Iterator = struct {
+            next_node: ?*Node = null,
+
+            pub fn init(self: *Iterator, root: ?*Node) void {
+                if (root == null) return;
+
+                self.next_node = root;
+                while (self.next_node.?.left) |node| {
+                    self.next_node = node;
+                }
+            }
+
+            pub fn next(self: *Iterator) ?*Node {
+                if (self.next_node == null) {
+                    return null;
+                }
+                const rv = self.next_node.?;
+
+                if (rv.right != null) {
+                    self.next_node = rv.right;
+                    while (self.next_node.?.left) |node| {
+                        self.next_node = node;
+                    }
+                    return rv;
+                }
+
+                while (true) {
+                    const node = self.next_node.?;
+                    if (node.parent) |parent| {
+                        defer self.next_node = parent;
+                        if (parent.left == self.next_node) break;
+                    } else {
+                        self.next_node = null;
+                        break;
+                    }
+                }
+
+                return rv;
+            }
+        };
+
+        pub fn iterate(self: *Self) Iterator {
+            var rv = Iterator{};
+            rv.init(self.root);
+            return rv;
+        }
     };
 }
 
@@ -183,6 +229,7 @@ test "Map" {
     const UsizeUsizeMap = Map(usize, usize, usize_eql, usize_cmp);
     var map = UsizeUsizeMap{.alloc = &alloc.allocator};
     const nil: ?usize = null;
+    const niln: ?*UsizeUsizeMap.Node = null;
 
     // Empty
     equal(usize(0), map.len);
@@ -203,6 +250,14 @@ test "Map" {
     equal(usize(5678), map.find(23).?);
     equal(usize(65), map.find(4).?);
     equal(usize(53), map.find(7).?);
+
+    var it = map.iterate();
+    equal(usize(1), it.next().?.key);
+    equal(usize(4), it.next().?.key);
+    equal(usize(7), it.next().?.key);
+    equal(usize(10), it.next().?.key);
+    equal(usize(23), it.next().?.key);
+    equal(niln, it.next());
 
     // Try to Find Non-Existent Key
     equal(nil, map.find(45));
