@@ -8,6 +8,7 @@ pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
 pub const util = @import("util.zig");
 pub const Ext2 = @import("ext2.zig").Ext2;
+pub const Devices = @import("devices.zig").Devices;
 
 pub var panic_message: []const u8 = "";
 
@@ -28,17 +29,48 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
 extern fn usermode(ip: u32, sp: u32) noreturn;
 
 pub const Kernel = struct {
-    memory: Memory = Memory{},
     console: io.File = io.File{},
+    memory: Memory = Memory{},
+    devices: Devices = Devices{},
+    raw_block_store: ?*io.BlockStore = null,
+    block_store: io.CachedBlockStore = io.CachedBlockStore{},
 
     pub fn initialize(self: *Kernel) !void {
         print.initialize(&self.console, build_options.debug_log);
         try platform.initialize(self);
+        if (self.raw_block_store) |raw| {
+            self.block_store.init(self.memory.small_alloc, raw, 1);
+        } else {
+            print.format("No block store set\n");
+        }
     }
 
     pub fn run(self: *Kernel) !void {
         try self.initialize();
 
+        var data1: [512]u8 = undefined;
+        _ = platform.impl.ata.read_from_drive(1024, data1[0..]);
+        print.data_bytes(data1[0..]);
+
+        {
+            var data: [512]u8 = undefined;
+            try self.block_store.block_store.read(1024, data[0..]);
+            print.data_bytes(data[0..]);
+        }
+
+        {
+            var data: [512]u8 = undefined;
+            try self.block_store.block_store.read(1024 + 512, data[0..]);
+            print.data_bytes(data[0..]);
+        }
+
+        {
+            var data: [512]u8 = undefined;
+            try self.block_store.block_store.read(1024, data[0..]);
+            print.data_bytes(data[0..]);
+        }
+
+        if (false) {
         var ext2 = Ext2{};
         try ext2.initialize(self.memory.small_alloc);
         var ext2_file = try ext2.open("echoer.elf");
@@ -61,6 +93,7 @@ pub const Kernel = struct {
         const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
         platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
         usermode(elf_object.header.entry, usermode_stack.end());
+        }
     }
 };
 

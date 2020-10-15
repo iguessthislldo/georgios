@@ -1,6 +1,11 @@
 const print = @import("../print.zig");
 const kutil = @import("../util.zig");
-const io = @import("../io.zig"); // Temp, see TODO for read_from_drive
+const io = @import("../io.zig");
+const memory = @import("../memory.zig");
+const MemoryError = memory.MemoryError;
+const Allocator = memory.Allocator;
+const devices = @import("../devices.zig");
+const Kernel = @import("../kernel.zig").Kernel;
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
@@ -10,7 +15,7 @@ pub const Error = error {
     Timeout,
     UnexpectedValues,
     OperationError,
-};
+} || MemoryError;
 
 const log_indent = "     ";
 
@@ -60,28 +65,6 @@ const CommandStatus = packed struct {
             return Error.OperationError;
         }
         return self.data_ready;
-    }
-
-    pub fn print(self: *const CommandStatus) void {
-        print.format(
-            \\in_error: {}
-            \\unused_index: {}
-            \\unused_corrected: {}
-            \\data_ready: {}
-            \\unused_seek_complete: {}
-            \\fault: {}
-            \\drive_ready: {}
-            \\busy: {}
-            \\
-            ,
-            self.in_error,
-            self.unused_index,
-            self.unused_corrected,
-            self.data_ready,
-            self.unused_seek_complete,
-            self.fault,
-            self.drive_ready,
-            self.busy);
     }
 };
 
@@ -143,9 +126,9 @@ const IndentifyResults = struct {
         const raw_bit_size = kutil.packed_bit_size(Raw);
         const sector_bit_size = Sector.size * 8;
         if (raw_bit_size != sector_bit_size) {
-            @compileLog("Indentifyraw is ", raw_bit_size, " bits");
+            @compileLog("IndentifyResults.Raw is ", raw_bit_size, " bits");
             @compileLog("Sector is ", sector_bit_size, " bits");
-            @compileError("Indentifyraw must match the size of a sector");
+            @compileError("IndentifyResults.Raw must match the size of a sector");
         }
     }
 
@@ -210,6 +193,8 @@ const Controller = struct {
         id: Id,
         present: bool = false,
         selected: bool = false,
+        alloc: *memory.Allocator = undefined,
+        block_store_interface: io.BlockStore = undefined,
 
         fn get_channel(self: *Device) *Channel {
             return if (self.id == .Master) @fieldParentPtr(Channel, "master", self)
@@ -254,8 +239,7 @@ const Controller = struct {
             while (!try channel.read_control_status().drive_is_ready()) {
                 milliseconds_left -= 1;
                 if (milliseconds_left == 0) {
-                    print.string("wait_for_drive Timeout\n");
-                    channel.read_control_status().print();
+                    print.format("wait_for_drive Timeout {}\n", channel.read_control_status());
                     return Error.Timeout;
                 }
                 putil.wait_milliseconds(1);
@@ -308,19 +292,19 @@ const Controller = struct {
             print.format(log_indent ++ "    - type: {:x}\n", channel.read_cylinder());
         }
 
-        pub fn initialize(self: *Device) Error!void {
+        pub fn initialize(self: *Device, temp_sector: *Sector, alloc: *memory.Allocator) Error!void {
             print.format(log_indent ++ "  - {}\n",
                 if (self.id == .Master) "Master" else "Slave");
             const channel = self.get_channel();
+            self.alloc = alloc;
             try self.reset();
 
             try self.wait_for_drive();
             channel.identify_command();
             _ = channel.read_command_status();
             try self.wait_for_data();
-            var sector: Sector = undefined;
-            channel.read_sector(&sector);
-            const identity = try IndentifyResults.from_sector(&sector);
+            channel.read_sector(temp_sector);
+            const identity = try IndentifyResults.from_sector(temp_sector);
             print.format(
                 log_indent ++ "    - Drive Model: \"{}\"\n", identity.model);
             print.format(
@@ -329,12 +313,17 @@ const Controller = struct {
             print.format(
                 log_indent ++ "    - Sector Count: {}\n",
                 @intCast(usize, identity.sector_count));
+            self.present = true;
+            self.block_store_interface.block_size = Sector.size;
+            self.block_store_interface.read_block_impl = Device.read_block;
+            self.block_store_interface.free_block_impl = Device.free_block;
         }
 
-        pub fn read(self: *Device, sector: *Sector) Error!void {
+        pub fn read_impl(self: *Device, address: u64, data: []u8) Error!void {
+            try self.select();
             const channel = self.get_channel();
             try self.wait_for_drive();
-            channel.write_lba48(self.id, sector.address, 1);
+            channel.write_lba48(self.id, address, 1);
             putil.wait_microseconds(5);
             channel.read_sectors_command();
             _ = channel.read_command_status();
@@ -345,7 +334,27 @@ const Controller = struct {
                 return Error.OperationError;
             }
             try self.wait_for_data();
-            channel.read_sector(sector);
+            channel.read_sector_impl(data);
+        }
+
+        pub fn read_sector(self: *Device, sector: *Sector) Error!void {
+            try self.read_impl(sector.address, sector.data[0..]);
+        }
+
+        pub fn read_block(block_store: *io.BlockStore, block: *io.Block) io.BlockError!void {
+            const self = @fieldParentPtr(Device, "block_store_interface", block_store);
+            if (block.data == null) {
+                block.data = try self.alloc.alloc_array(u8, Sector.size);
+            }
+            self.read_impl(block.address, block.data.?[0..])
+                catch return io.BlockError.Internal;
+        }
+
+        pub fn free_block(block_store: *io.BlockStore, block: *const io.Block) io.BlockError!void {
+            const self = @fieldParentPtr(Device, "block_store_interface", block_store);
+            if (block.data) |data| {
+                try self.alloc.free_array(data);
+            }
         }
     };
 
@@ -404,7 +413,8 @@ const Controller = struct {
         }
 
         pub fn write_select(self: *Channel, value: Device.Id) void {
-            self.write_drive_head_select(DriveHeadSelect{.select_slave = value == Device.Id.Slave});
+            self.write_drive_head_select(
+                DriveHeadSelect{.select_slave = value == Device.Id.Slave});
         }
 
         const sector_count_register = 2;
@@ -413,7 +423,8 @@ const Controller = struct {
         const lba_high_register = 5;
         const drive_head_register = 6;
 
-        pub fn write_lba48(self: *Channel, device: Device.Id, lba: u64, sector_count: u16) void {
+        pub fn write_lba48(self: *Channel,
+                device: Device.Id, lba: u64, sector_count: u16) void {
             putil.out8(self.io_base_port + sector_count_register,
                 @truncate(u8, sector_count >> 8));
             putil.out8(self.io_base_port + lba_low_register,
@@ -449,7 +460,11 @@ const Controller = struct {
         }
 
         pub fn read_sector(self: *Channel, sector: *Sector) void {
-            putil.insw(self.io_base_port + 0, sector.data[0..]);
+            self.read_sector_impl(sector.data[0..]);
+        }
+
+        pub fn read_sector_impl(self: *Channel, data: []u8) void {
+            putil.insw(self.io_base_port + 0, data);
         }
 
         pub fn initialize(self: *Channel) void {
@@ -477,12 +492,18 @@ const Controller = struct {
         .control_base_port = default_secondary_control_base_port,
         .irq = default_secondary_irq,
     },
+    device_interface: devices.Device = undefined,
+    alloc: *Allocator = undefined,
 
-    pub fn initialize(self: *Controller, location: pci.Location, header: *const pci.Header) void {
+    pub fn initialize(self: *Controller,
+            alloc: *Allocator, location: pci.Location, header: *const pci.Header) void {
         self.pci_location = location;
+        self.alloc = alloc;
+        self.device_interface.deinit_impl = Controller.deinit;
 
         // Make sure this is Triton II controller emulated by QEMU
-        if (header.vendor_id != 0x8086 or header.device_id != 0x7010 or header.prog_if != 0x80) {
+        if (header.vendor_id != 0x8086 or header.device_id != 0x7010 or
+                header.prog_if != 0x80) {
             print.string(log_indent ++ "- Unknown IDE Controller\n");
             return;
         }
@@ -491,12 +512,21 @@ const Controller = struct {
         // const normal_header = pci.NormalHeader.get(location);
         // _ = normal_header.print(print.get_console_file().?) catch {};
 
+        // TODO Better error handling
+        const temp_sector = alloc.alloc(Sector) catch @panic("ATA init alloc error");
+        defer alloc.free(temp_sector) catch @panic("ATA init free error");
+
         // self.primary.initialize();
         // self.secondary.initialize();
-
-        self.primary.master.initialize() catch |e| {
+        self.primary.master.initialize(temp_sector, alloc) catch |e| {
             print.string("Drive Initialize Failed\n");
+            return;
         };
+    }
+
+    pub fn deinit(device: *devices.Device) anyerror!void {
+        const self = @fieldParentPtr(Controller, "device_interface", device);
+        try self.alloc.free(self);
     }
 };
 
@@ -506,6 +536,8 @@ const Controller = struct {
 //    sector in the cache.
 //  - Eventually do DMA.
 pub fn read_from_drive(address: u64, destination: []u8) usize {
+    if (controller == null) return 0;
+    const controller_ptr = controller.?;
     // print.format("read_from_drive: address: {}\n", address);
 
     const start_sector = address / Sector.size;
@@ -523,7 +555,7 @@ pub fn read_from_drive(address: u64, destination: []u8) usize {
 
     while (sector.address < end_sector) {
         // print.format("  read sector: {}\n", sector.address);
-        controller.primary.master.read(&sector) catch |e| {
+        controller_ptr.primary.master.read_sector(&sector) catch |e| {
             print.string("Read Failed\n");
         };
         // sector.dump();
@@ -546,9 +578,20 @@ pub fn read_from_drive(address: u64, destination: []u8) usize {
     return total_read_size;
 }
 
-// TODO: Make dynamic
-var controller = Controller{};
+var controller: ?*Controller = null;
 
-pub fn initialize(location: pci.Location, header: *const pci.Header) void {
-    controller.initialize(location, header);
+pub fn initialize(kernel: *Kernel, location: pci.Location,
+        header: *const pci.Header) void {
+    controller = kernel.memory.small_alloc.alloc(Controller) catch {
+        @panic("Failure");
+    };
+    const controller_ptr = controller.?;
+    controller_ptr.* = Controller{};
+    controller_ptr.initialize(kernel.memory.small_alloc, location, header);
+    kernel.devices.add_device(&controller_ptr.device_interface) catch {
+        @panic("Failure");
+    };
+    if (controller_ptr.primary.master.present) {
+        kernel.raw_block_store = &controller_ptr.primary.master.block_store_interface;
+    }
 }

@@ -2,6 +2,7 @@ const io = @import("../io.zig");
 const print = @import("../print.zig");
 const Kernel = @import("../kernel.zig").Kernel;
 const kmemory = @import("../memory.zig");
+const Devices = @import("../devices.zig").Devices;
 
 pub const serial_log = @import("serial_log.zig");
 pub const cga_console = @import("cga_console.zig");
@@ -113,7 +114,8 @@ pub fn initialize(kernel: *Kernel) !void {
     try kernel.memory.initialize(&real_memory_map);
 
     // Setup Devices
-    pci.find_pci_devices();
+    kernel.devices.init(kernel.memory.small_alloc);
+    pci.find_pci_devices(kernel);
     ps2.initialize();
 
     acpi.initialize();

@@ -1,11 +1,16 @@
 const util = @import("util.zig");
+const memory = @import("memory.zig");
+const Allocator = memory.Allocator;
+const MemoryError = memory.MemoryError;
+const MappedList = @import("mapped_list.zig").MappedList;
+const print = @import("print.zig");
 
 pub const FileError = error {
-    /// The operation is not supported on the file.
+    /// The operation is not supported.
     Unsupported,
-    /// The file manager could not reserve a file.
-    MaxFilesReached,
-} || util.Error;
+    /// An Implementation-Related Error Occured.
+    Internal,
+} || MemoryError || util.Error;
 
 /// File IO Interface
 pub const File = struct {
@@ -291,45 +296,115 @@ test "BufferFile" {
     std.testing.expectEqualSlices(u8, "abcdef", result_buffer[0..len]);
 }
 
-// TODO: open for BufferFile
-// pub fn BufferFile_open(files: *Files, buffer: []u8) FileError!*File {
-// }
+pub const BlockError = error {
+    InvalidBlockSize,
+} || FileError || MemoryError;
 
-/// File manager
-/// TODO: Make file container size dynamic
-pub fn Files(max_file_count: usize) type {
-    return struct {
-        const Self = @This();
+pub const AddressType = u64;
 
-        array: [max_file_count]File = undefined,
+fn address_eql(a: AddressType, b: AddressType) bool {
+    return a == b;
+}
 
-        pub fn initialize(self: *Self) FileError!void {
-            for (self.array) |*file, i| {
-                file.valid = false;
-                file.index = i;
-            }
+fn address_cmp(a: AddressType, b: AddressType) bool {
+    return a > b;
+}
+
+pub const Block = struct {
+    address: AddressType,
+    data: ?[]u8 = null,
+};
+
+/// Abstract Block IO Interface
+pub const BlockStore = struct {
+    const Self = @This();
+
+    block_size: u64,
+    read_block_impl: fn(*BlockStore, *Block) BlockError!void = default.read_block_impl,
+    free_block_impl: fn(*BlockStore, *const Block) BlockError!void = default.free_block_impl,
+
+    pub const default = struct {
+        pub fn read_block_impl(*BlockStore, *Block) BlockError!void {
+            return BlockError.Unsupported;
         }
 
-        pub fn new_file(self: *Self) FileError!*File {
-            for (self.array) |*file| {
-                if (!file.valid) {
-                    file.valid = true;
-                    file.set_unsupported_impl();
-                    return file;
-                }
-            }
-            return FileError.MaxFilesReached;
+        pub fn free_block_impl(*BlockStore, *const Block) BlockError!void {
+            // Nop
         }
     };
-}
 
-pub fn copy(from: *File, to: *File, buffer: []u8) anyerror!usize {
-    var got: usize = 0;
-    while (true) {
-        const read_size = try from.read(buffer[0..]);
-        if (read_size == 0) return got;
-        const write_size = try to.write(buffer[0..read_size]);
-        if (write_size == 0) return got;
-        got += write_size;
+    pub fn read_block(self: *BlockStore, block: *Block) BlockError!void {
+        try self.read_block_impl(self, block);
     }
-}
+
+    pub fn free_block(self: *BlockStore, block: *const Block) BlockError!void {
+        try self.free_block_impl(self, block);
+    }
+
+    pub fn read(self: *BlockStore, address: AddressType, to: []u8) BlockError!void {
+        const start_block = address / self.block_size;
+        const block_count = util.div_round_up(u64, @intCast(u64, to.len), self.block_size);
+        const end_block = start_block + block_count;
+        var block = Block{.address = start_block};
+        var dest_offset: usize = 0;
+        var src_offset = @intCast(usize, address % self.block_size);
+        while (block.address < end_block) {
+            try self.read_block(&block);
+            const new_dest_offset = dest_offset + util.min(usize,
+                @intCast(usize, self.block_size), to.len - dest_offset);
+            _ = util.memory_copy_truncate(
+                to[dest_offset..new_dest_offset], block.data.?[src_offset..]);
+            src_offset = 0;
+            dest_offset = new_dest_offset;
+            block.address += 1;
+        }
+    }
+};
+
+/// Cached Block IO Interface
+///
+/// TODO: Use Slab Alloc for MappedList, Pages for Block Data?
+pub const CachedBlockStore = struct {
+    const Self = @This();
+    const Cache = MappedList(AddressType, Block, address_eql, address_cmp);
+
+    alloc: *Allocator = undefined,
+    real_block_store: *BlockStore = undefined,
+    max_block_count: usize = undefined,
+    cache: Cache = undefined,
+    block_store: BlockStore = undefined,
+
+    pub fn init(self: *Self, alloc: *Allocator,
+            real_block_store: *BlockStore, max_block_count: usize) void {
+        self.alloc = alloc;
+        self.real_block_store = real_block_store;
+        self.max_block_count = max_block_count;
+        self.cache = Cache{.alloc = alloc};
+        self.block_store.block_size = real_block_store.block_size;
+        self.block_store.read_block_impl = Self.read_block_impl;
+        self.block_store.free_block_impl = Self.free_block_impl;
+    }
+
+    fn read_block_impl(block_store: *BlockStore, block: *Block) BlockError!void {
+        const self = @fieldParentPtr(Self, "block_store", block_store);
+        if (self.cache.find_bump_to_front(block.address)) |cached_block| {
+            block.* = cached_block;
+            return;
+        }
+        try self.real_block_store.read_block(block);
+        try self.cache.push_front(block.address, block.*);
+        if (self.cache.len() > self.max_block_count) {
+            if (try self.cache.pop_back()) |popped| {
+                print.format("Popping block at {} out of the cache\n", popped.address);
+                try self.real_block_store.free_block(&popped);
+            } else {
+                @panic("Cache is full, but null pop_back?");
+            }
+        }
+    }
+
+    fn free_block_impl(block_store: *BlockStore, block: *const Block) BlockError!void {
+        const self = @fieldParentPtr(Self, "block_store", block_store);
+        try self.real_block_store.free_block(block);
+    }
+};

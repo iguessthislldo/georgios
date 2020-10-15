@@ -7,6 +7,7 @@ const kutil = @import("../util.zig");
 const print = @import("../print.zig");
 const fprint = @import("../fprint.zig");
 const io = @import("../io.zig");
+const Kernel = @import("../kernel.zig").Kernel;
 
 const putil = @import("util.zig");
 const ata = @import("ata.zig");
@@ -287,25 +288,25 @@ pub const NormalHeader = packed struct {
     }
 };
 
-inline fn check_function(location: Location, header: *const Header) void {
+fn check_function(kernel: *Kernel, location: Location, header: *const Header) void {
     if (header.is_invalid()) return;
     print.format("   - Bus {}, Device {}, Function {}\n",
         location.bus, location.device, location.function);
     _ = header.print(print.get_console_file().?) catch {};
     if (header.get_class()) |class| {
         if (class == .BridgeDevice and header.subclass == 0x04) {
-            check_bus(read_config8(location, 0x19));
+            check_bus(kernel, read_config8(location, 0x19));
         }
         if (class == .MassStorageController and header.subclass == 0x01) {
-            ata.initialize(location, header);
+            ata.initialize(kernel, location, header);
         }
     }
 }
 
-inline fn check_device(bus: Bus, device: Device) void {
+fn check_device(kernel: *Kernel, bus: Bus, device: Device) void {
     const root_location = Location{.bus = bus, .device = device, .function = 0};
     const header = Header.get(root_location);
-    check_function(root_location, &header);
+    check_function(kernel, root_location, &header);
     if (header.get_header_type()) |header_type| {
         if (header_type.is_multifunction()) {
             // Header Type is Multi-Function, Check Them
@@ -314,22 +315,22 @@ inline fn check_device(bus: Bus, device: Device) void {
                 const location = Location{
                     .bus = bus, .device = device, .function = i};
                 const subheader = Header.get(location);
-                check_function(location, &subheader);
+                check_function(kernel, location, &subheader);
                 if (i == 7) break;
             }
         }
     }
 }
 
-fn check_bus(bus: u8) void {
+fn check_bus(kernel: *Kernel, bus: u8) void {
     var i: Device = 0;
     while (true) : (i += 1) {
-        check_device(bus, i);
+        check_device(kernel, bus, i);
         if (i == 31) break;
     }
 }
 
-pub fn find_pci_devices() void {
+pub fn find_pci_devices(kernel: *Kernel) void {
     print.string(" - Seaching for PCI Devices\n");
-    check_bus(0);
+    check_bus(kernel, 0);
 }
