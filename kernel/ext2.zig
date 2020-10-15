@@ -11,12 +11,10 @@ const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
 
-// TODO: Make Abstract
-const read_from_drive = @import("platform.zig").impl.ata.read_from_drive;
-
 const Error = error {
     FileNotFound,
-} || MemoryError || util.Error;
+    InvalidFilesystem,
+} || io.BlockError || MemoryError || util.Error;
 
 const Superblock = packed struct {
     const expected_magic: u16 = 0xef53;
@@ -52,16 +50,19 @@ const Superblock = packed struct {
     inode_size: u32 = 0,
     // Rest have been left out for now
 
-    pub fn verify(self: *const Superblock) void {
+    pub fn verify(self: *const Superblock) Error!void {
         if (self.magic != expected_magic) {
-            @panic("Invalid Ext2 Magic");
+            print.string("Invalid Ext2 Magic\n");
+            return Error.InvalidFilesystem;
         }
         if (self.major_revision != 1) {
-            @panic("Invalid Ext2 Revision");
+            print.string("Invalid Ext2 Revision");
+            return Error.InvalidFilesystem;
         }
         if ((util.align_up(self.inode_count, self.inodes_per_group) / self.inodes_per_group)
                 != self.block_group_count()) {
-            @panic("Inconsistent Ext2 Block Group Count");
+            print.string("Inconsistent Ext2 Block Group Count");
+            return Error.InvalidFilesystem;
         }
     }
 
@@ -161,7 +162,8 @@ pub const DataBlockIterator = struct {
             self.second_level_pos = level_offset / self.fs.max_entries_per_block;
             self.third_level_pos = level_offset % self.fs.max_entries_per_block;
             self.fourth_level_pos = 0;
-        } else if (block >= self.fs.fourth_level_start and block < self.fs.max_fourth_level_entries) {
+        } else if (block >= self.fs.fourth_level_start and
+                block < self.fs.max_fourth_level_entries) {
             self.first_level_pos = fourth_level_index;
             const level_offset = block - self.fs.fourth_level_start;
             self.second_level_pos = level_offset / self.fs.max_third_level_entries;
@@ -173,11 +175,11 @@ pub const DataBlockIterator = struct {
         self.new_pos = true;
     }
 
-    fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) MemoryError!void {
+    fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) Error!void {
         if (level.* == null) {
             level.* = try self.fs.alloc.alloc_array(u32, self.fs.block_size / @sizeOf(u32));
         }
-        self.fs.get_entry_block(level.*.?, index);
+        try self.fs.get_entry_block(level.*.?, index);
     }
 
     fn prepare_level(self: *DataBlockIterator, index: usize,
@@ -191,7 +193,7 @@ pub const DataBlockIterator = struct {
         return level.* == null or self.new_pos;
     }
 
-    fn get_next_block_info(self: *DataBlockIterator) MemoryError!DataBlockInfo {
+    fn get_next_block_info(self: *DataBlockIterator) Error!DataBlockInfo {
         // print.format("get_next_block_index_i: {}\n", self.first_level_pos);
         // First Level
         if (self.first_level_pos <= max_first_level_index) {
@@ -281,7 +283,7 @@ pub const DataBlockIterator = struct {
         const dest_use = dest[0..self.fs.block_size];
         switch (try self.get_next_block_info()) {
             .Index => |index| {
-                self.fs.get_data_block(dest_use, index);
+                try self.fs.get_data_block(dest_use, index);
             },
             .FillInZeros => util.memory_set(dest_use, 0),
             .EndOfFile => return null,
@@ -356,7 +358,7 @@ const DirectoryIterator = struct {
         self.buffer_pos += entry.next_entry_offset;
         self.value.inode_number = entry.inode;
         self.value.name = self.buffer[name_pos..name_pos + entry.name_size];
-        self.fs.get_inode(entry.inode, &self.value.inode);
+        try self.fs.get_inode(entry.inode, &self.value.inode);
         return true;
     }
 
@@ -378,10 +380,10 @@ pub const File = struct {
     buffer: ?[]u8 = null,
     position: usize = 0,
 
-    pub fn initialize(self: *File, fs: *Ext2, inode: u32) void {
+    pub fn initialize(self: *File, fs: *Ext2, inode: u32) Error!void {
         self.* = File{};
         self.fs = fs;
-        fs.get_inode(inode, &self.inode);
+        try fs.get_inode(inode, &self.inode);
         self.data_block_iter = DataBlockIterator{.fs = fs, .inode = &self.inode};
         self.io_file = io.File{
             .read_impl = Self.read,
@@ -424,7 +426,9 @@ pub const Ext2 = struct {
     const root_inode_number = usize(2);
     const second_level_start = 12;
 
+    initialized: bool = false,
     alloc: *Allocator = undefined,
+    block_store: *io.BlockStore = undefined,
     superblock: Superblock = Superblock{},
     block_size: usize = 0,
     max_entries_per_block: usize = 0,
@@ -434,44 +438,39 @@ pub const Ext2 = struct {
     fourth_level_start: usize = 0,
 
     pub fn get_block_group_descriptor(self: *Ext2,
-            index: usize, dest: *BlockGroupDescriptor) void {
+            index: usize, dest: *BlockGroupDescriptor) Error!void {
         const address = util.Ki(2) + @sizeOf(BlockGroupDescriptor) * index;
-        if (read_from_drive(address, util.to_bytes(dest)) != @sizeOf(BlockGroupDescriptor)) {
-            @panic("Could not read block group descriptor!");
-        }
+        try self.block_store.read(address, util.to_bytes(dest));
     }
 
-    pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) void {
+    pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) Error!void {
         var block_group: BlockGroupDescriptor = undefined;
         const nm1 = n - 1;
-        self.get_block_group_descriptor(
+        try self.get_block_group_descriptor(
             nm1 / self.superblock.inodes_per_group, &block_group);
         const address = u64(block_group.inode_table) * self.block_size +
             (nm1 % self.superblock.inodes_per_group) * @sizeOf(Inode);
-        if (read_from_drive(address, util.to_bytes(inode)) != @sizeOf(Inode)) {
-            @panic("Could not read Inode!");
-        }
+        try self.block_store.read(address, util.to_bytes(inode));
         // print.format("inode {}\n{}\n", n, inode.*);
     }
 
-    pub fn get_data_block(self: *Ext2, block: []u8, index: usize) void {
-        _ = read_from_drive(index * self.block_size, block);
+    pub fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
+        try self.block_store.read(index * self.block_size, block);
     }
 
-    pub fn get_entry_block(self: *Ext2, block: []u32, index: usize) void {
-        self.get_data_block(@ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
+    pub fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
+        try self.get_data_block(
+            @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
     }
 
-    pub fn initialize(self: *Ext2, alloc: *Allocator) Error!void {
+    pub fn initialize(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
         self.alloc = alloc;
+        self.block_store = block_store;
 
-        if (read_from_drive(util.Ki(1),
-                util.to_bytes(&self.superblock)) != @sizeOf(Superblock)) {
-            @panic("Could not read Ext2 Superblock!");
-        }
+        try block_store.read(util.Ki(1), util.to_bytes(&self.superblock));
 
         // print.format("{}\n", self.superblock);
-        self.superblock.verify();
+        try self.superblock.verify();
 
         self.block_size = self.superblock.block_size();
         self.max_entries_per_block = self.block_size / @sizeOf(u32);
@@ -481,11 +480,14 @@ pub const Ext2 = struct {
         self.fourth_level_start = self.third_level_start + self.max_third_level_entries;
         self.max_fourth_level_entries =
             self.max_third_level_entries * self.max_entries_per_block;
+
+        self.initialized = true;
     }
 
     pub fn open(self: *Ext2, name: []const u8) Error!*File {
+        if (!self.initialized) return Error.InvalidFilesystem;
         var root_inode: Inode = undefined;
-        self.get_inode(root_inode_number, &root_inode);
+        try self.get_inode(root_inode_number, &root_inode);
         var dir_iter = try DirectoryIterator.new(self, &root_inode);
         defer dir_iter.done() catch |e| @panic(@typeName(@typeOf(e)));
         while (try dir_iter.next()) {
@@ -493,7 +495,7 @@ pub const Ext2 = struct {
             if (dir_iter.value.inode.is_file() and
                     util.memory_compare(name, dir_iter.value.name)) {
                 const file = try self.alloc.alloc(File);
-                file.initialize(self, dir_iter.value.inode_number);
+                try file.initialize(self, dir_iter.value.inode_number);
                 return file;
             }
         }

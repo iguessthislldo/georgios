@@ -350,7 +350,7 @@ const Controller = struct {
                 catch return io.BlockError.Internal;
         }
 
-        pub fn free_block(block_store: *io.BlockStore, block: *const io.Block) io.BlockError!void {
+        pub fn free_block(block_store: *io.BlockStore, block: *io.Block) io.BlockError!void {
             const self = @fieldParentPtr(Device, "block_store_interface", block_store);
             if (block.data) |data| {
                 try self.alloc.free_array(data);
@@ -530,68 +530,17 @@ const Controller = struct {
     }
 };
 
-// TODO: Do this smarter:
-//  - Move this to an abstract layer.
-//  - Cache the sectors and  only do an actual read when we don't have that
-//    sector in the cache.
-//  - Eventually do DMA.
-pub fn read_from_drive(address: u64, destination: []u8) usize {
-    if (controller == null) return 0;
-    const controller_ptr = controller.?;
-    // print.format("read_from_drive: address: {}\n", address);
-
-    const start_sector = address / Sector.size;
-    // print.format("  start_sector: {}\n", start_sector);
-    const sector_count = kutil.div_round_up(u64,
-        @intCast(u64, destination.len), Sector.size);
-    // print.format("  sector_count: {}\n", sector_count);
-    const end_sector = start_sector + sector_count;
-    // print.format("  end_sector: {}\n", end_sector);
-
-    var sector = Sector{.address = start_sector};
-    var dest_offset: usize = 0;
-    var drive_offset = @intCast(usize, address % Sector.size);
-    var total_read_size: usize = 0;
-
-    while (sector.address < end_sector) {
-        // print.format("  read sector: {}\n", sector.address);
-        controller_ptr.primary.master.read_sector(&sector) catch |e| {
-            print.string("Read Failed\n");
-        };
-        // sector.dump();
-
-        const this_read_size = kutil.min(usize,
-            @intCast(usize, Sector.size), destination.len - dest_offset);
-        // print.format("  read: {}\n", this_read_size);
-        const new_dest_offset = dest_offset + this_read_size;
-        total_read_size += this_read_size;
-
-        const dest = destination[dest_offset..new_dest_offset];
-        _ = kutil.memory_copy_truncate(dest, sector.data[drive_offset..]);
-        drive_offset = 0;
-        // print.data_bytes(dest);
-
-        dest_offset = new_dest_offset;
-        sector.address += 1;
-    }
-
-    return total_read_size;
-}
-
-var controller: ?*Controller = null;
-
 pub fn initialize(kernel: *Kernel, location: pci.Location,
         header: *const pci.Header) void {
-    controller = kernel.memory.small_alloc.alloc(Controller) catch {
+    var controller = kernel.memory.small_alloc.alloc(Controller) catch {
         @panic("Failure");
     };
-    const controller_ptr = controller.?;
-    controller_ptr.* = Controller{};
-    controller_ptr.initialize(kernel.memory.small_alloc, location, header);
-    kernel.devices.add_device(&controller_ptr.device_interface) catch {
+    controller.* = Controller{};
+    controller.initialize(kernel.memory.small_alloc, location, header);
+    kernel.devices.add_device(&controller.device_interface) catch {
         @panic("Failure");
     };
-    if (controller_ptr.primary.master.present) {
-        kernel.raw_block_store = &controller_ptr.primary.master.block_store_interface;
+    if (controller.primary.master.present) {
+        kernel.raw_block_store = &controller.primary.master.block_store_interface;
     }
 }

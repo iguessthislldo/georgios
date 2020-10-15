@@ -321,14 +321,14 @@ pub const BlockStore = struct {
 
     block_size: u64,
     read_block_impl: fn(*BlockStore, *Block) BlockError!void = default.read_block_impl,
-    free_block_impl: fn(*BlockStore, *const Block) BlockError!void = default.free_block_impl,
+    free_block_impl: fn(*BlockStore, *Block) BlockError!void = default.free_block_impl,
 
     pub const default = struct {
         pub fn read_block_impl(*BlockStore, *Block) BlockError!void {
             return BlockError.Unsupported;
         }
 
-        pub fn free_block_impl(*BlockStore, *const Block) BlockError!void {
+        pub fn free_block_impl(*BlockStore, *Block) BlockError!void {
             // Nop
         }
     };
@@ -337,18 +337,20 @@ pub const BlockStore = struct {
         try self.read_block_impl(self, block);
     }
 
-    pub fn free_block(self: *BlockStore, block: *const Block) BlockError!void {
+    pub fn free_block(self: *BlockStore, block: *Block) BlockError!void {
         try self.free_block_impl(self, block);
+        block.data = null;
     }
 
     pub fn read(self: *BlockStore, address: AddressType, to: []u8) BlockError!void {
         const start_block = address / self.block_size;
         const block_count = util.div_round_up(u64, @intCast(u64, to.len), self.block_size);
         const end_block = start_block + block_count;
-        var block = Block{.address = start_block};
+        var block_address = start_block;
         var dest_offset: usize = 0;
         var src_offset = @intCast(usize, address % self.block_size);
-        while (block.address < end_block) {
+        while (block_address < end_block) {
+            var block = Block{.address = block_address};
             try self.read_block(&block);
             const new_dest_offset = dest_offset + util.min(usize,
                 @intCast(usize, self.block_size), to.len - dest_offset);
@@ -356,7 +358,7 @@ pub const BlockStore = struct {
                 to[dest_offset..new_dest_offset], block.data.?[src_offset..]);
             src_offset = 0;
             dest_offset = new_dest_offset;
-            block.address += 1;
+            block_address += 1;
         }
     }
 };
@@ -395,15 +397,16 @@ pub const CachedBlockStore = struct {
         try self.cache.push_front(block.address, block.*);
         if (self.cache.len() > self.max_block_count) {
             if (try self.cache.pop_back()) |popped| {
-                print.format("Popping block at {} out of the cache\n", popped.address);
-                try self.real_block_store.free_block(&popped);
+                // print.format("Popping block at {} out of the cache\n", popped.address);
+                var block_copy = popped;
+                try self.real_block_store.free_block(&block_copy);
             } else {
                 @panic("Cache is full, but null pop_back?");
             }
         }
     }
 
-    fn free_block_impl(block_store: *BlockStore, block: *const Block) BlockError!void {
+    fn free_block_impl(block_store: *BlockStore, block: *Block) BlockError!void {
         const self = @fieldParentPtr(Self, "block_store", block_store);
         try self.real_block_store.free_block(block);
     }

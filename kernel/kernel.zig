@@ -34,12 +34,14 @@ pub const Kernel = struct {
     devices: Devices = Devices{},
     raw_block_store: ?*io.BlockStore = null,
     block_store: io.CachedBlockStore = io.CachedBlockStore{},
+    filesystem: Ext2 = Ext2{},
 
     pub fn initialize(self: *Kernel) !void {
         print.initialize(&self.console, build_options.debug_log);
         try platform.initialize(self);
         if (self.raw_block_store) |raw| {
-            self.block_store.init(self.memory.small_alloc, raw, 1);
+            self.block_store.init(self.memory.small_alloc, raw, 128);
+            try self.filesystem.initialize(self.memory.small_alloc, &self.block_store.block_store);
         } else {
             print.format("No block store set\n");
         }
@@ -48,36 +50,9 @@ pub const Kernel = struct {
     pub fn run(self: *Kernel) !void {
         try self.initialize();
 
-        var data1: [512]u8 = undefined;
-        _ = platform.impl.ata.read_from_drive(1024, data1[0..]);
-        print.data_bytes(data1[0..]);
-
-        {
-            var data: [512]u8 = undefined;
-            try self.block_store.block_store.read(1024, data[0..]);
-            print.data_bytes(data[0..]);
-        }
-
-        {
-            var data: [512]u8 = undefined;
-            try self.block_store.block_store.read(1024 + 512, data[0..]);
-            print.data_bytes(data[0..]);
-        }
-
-        {
-            var data: [512]u8 = undefined;
-            try self.block_store.block_store.read(1024, data[0..]);
-            print.data_bytes(data[0..]);
-        }
-
-        if (false) {
-        var ext2 = Ext2{};
-        try ext2.initialize(self.memory.small_alloc);
-        var ext2_file = try ext2.open("echoer.elf");
+        var ext2_file = try self.filesystem.open("echoer.elf");
         const file = &ext2_file.io_file;
-
         var elf_object = try elf.Object.from_file(self.memory.small_alloc, file);
-
         const Range = @import("memory.zig").Range;
         const range = Range{.start=0, .size=elf_object.program.len};
         try self.memory.platform_memory.mark_virtual_memory_present(range, true);
@@ -93,7 +68,6 @@ pub const Kernel = struct {
         const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
         platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
         usermode(elf_object.header.entry, usermode_stack.end());
-        }
     }
 };
 
