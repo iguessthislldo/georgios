@@ -73,26 +73,39 @@ pub const RealMemoryMap = struct {
     }
 };
 
+var alloc_debug = false;
 pub const Allocator = struct {
     alloc_impl: fn(self: *Allocator, size: usize) AllocError![]u8,
     free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
-        return @ptrCast(*Type, @alignCast(
+        const rv = @ptrCast(*Type, @alignCast(
             @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type))).ptr));
+        if (alloc_debug) print.format(
+            "Allocator.alloc: " ++ @typeName(Type) ++ ": {:a}\n", @ptrToInt(rv));
+        return rv;
     }
 
     pub fn free(self: *Allocator, value: var) FreeError!void {
-        try self.free_impl(self, util.to_bytes(value));
+        const bytes = util.to_bytes(value);
+        if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@typeOf(value)) ++
+            ": {:a}\n", @ptrToInt(bytes.ptr));
+        try self.free_impl(self, bytes);
     }
 
     pub fn alloc_array(
             self: *Allocator, comptime Type: type, count: usize) AllocError![]Type {
-        return @ptrCast([*]Type, @alignCast(
-            @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
+        const rv = @ptrCast([*]Type, @alignCast(@alignOf(Type),
+            (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
+        if (alloc_debug) print.format("Allocator.alloc_array: [{}]" ++ @typeName(Type) ++
+            ": {:a}\n", count, @ptrToInt(rv.ptr));
+        return rv;
     }
 
     pub fn free_array(self: *Allocator, array: var) FreeError!void {
+        const traits = @typeInfo(@typeOf(array)).Pointer;
+        if (alloc_debug) print.format("Allocator.free_array: [{}]" ++ @typeName(traits.child) ++
+            ": {:a}\n", array.len, @ptrToInt(array.ptr));
         try self.free_impl(self, @sliceToBytes(array));
     }
 

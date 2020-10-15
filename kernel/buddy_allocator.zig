@@ -15,6 +15,7 @@ const MemoryError = memory.MemoryError;
 const AllocError = memory.AllocError;
 const FreeError = memory.FreeError;
 const util = @import("util.zig");
+const print = @import("print.zig");
 
 const BlockStatus = packed enum(u2) {
     Invalid = 0,
@@ -272,6 +273,19 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
             const address = @ptrToInt(value.ptr);
             const block = @intToPtr(FreeBlock.Ptr, address);
+            {
+                const size = util.pow2_round_up(usize, value.len);
+                const level = block_size_to_level(size);
+                const index = self.get_index(level, block);
+                const id = unique_id(level, index);
+                const status = self.block_statuses.get(id) catch unreachable;
+                if (status != .Used) {
+                    print.format(
+                        "Error: BuddyAllocator.free will return InvalidFree for {:a} " ++
+                        "size {} because its block at level {} index {} has status {}\n",
+                        address, value.len, level, index, status);
+                }
+            }
 
             // Find the level
             var level = level_count - 1;
