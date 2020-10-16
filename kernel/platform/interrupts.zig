@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 
+const kutil = @import("../util.zig");
 const print = @import("../print.zig");
 
 const putil = @import("util.zig");
@@ -10,8 +11,6 @@ const putil = @import("util.zig");
 const panic = @import("panic.zig");
 
 pub const InterruptStack = packed struct {
-    // Pushed by us
-    idt_index: u32,
     // Pushed by us using pusha
     edi: u32,
     esi: u32,
@@ -21,7 +20,7 @@ pub const InterruptStack = packed struct {
     edx: u32,
     ecx: u32,
     eax: u32,
-    // Pushed by us if the CPU didn't push one
+    // Set to zero if the CPU didn't push one
     error_code: u32,
     // Pushed by CPU
     eip: u32,
@@ -32,7 +31,7 @@ pub const InterruptStack = packed struct {
 // System Calls ==============================================================
 
 const system_call_interrupt_number: u8 = 100;
-fn handle_system_call(interrupt_stack: *InterruptStack) void {
+fn handle_system_call(interrupt_number: u32, interrupt_stack: *InterruptStack) void {
     const call_number = interrupt_stack.eax;
     const arg1 = interrupt_stack.ebx;
     switch (call_number) {
@@ -109,49 +108,52 @@ pub const user_flags: u8 = kernel_flags | (3 << 5);
 
 // Interrupt Handler Generation ==============================================
 
-// TODO : Rethink this approach. It's causing weird results on the other side,
-// probably because of stack corruption. See panic_message note in kernel run
-// and register contents when using a Zig panic.
 fn BaseInterruptHandler(
-        comptime i: u32, comptime dummy_error_code: bool, comptime software_panic: bool, comptime irq: bool,
-        impl: fn(*InterruptStack) void) type {
+        comptime i: u32, comptime error_code: bool, comptime irq: bool,
+        impl: fn(u32, *InterruptStack) void) type {
     return struct {
         const index: u8 = i;
 
+        fn inner_handler(real_interrupt_stack: u32) void {
+            // Copy Interrupt Stack And Insert Dummy Error Code If Needed
+            const real_interrupt_stack_bytes = kutil.to_bytes(
+                @intToPtr(*InterruptStack, real_interrupt_stack));
+            var interrupt_stack: InterruptStack = undefined;
+            const interrupt_stack_bytes = kutil.to_bytes(&interrupt_stack);
+            if (error_code) {
+                _ = kutil.memory_copy_truncate(
+                    interrupt_stack_bytes, real_interrupt_stack_bytes);
+            } else {
+                const error_code_offset = @byteOffsetOf(InterruptStack, "error_code");
+                _ = kutil.memory_copy_truncate(
+                    interrupt_stack_bytes, real_interrupt_stack_bytes[0..error_code_offset]);
+                interrupt_stack.error_code = 0;
+                _ = kutil.memory_copy_truncate(
+                    interrupt_stack_bytes[error_code_offset + @sizeOf(u32)..],
+                    real_interrupt_stack_bytes[error_code_offset..]);
+            }
+
+            // Call the Handler Implementation
+            if (irq) {
+                const irq_number = u32(i - pic.irq_0_7_interrupt_offset);
+                pic.silence_irq(irq_number);
+                impl(irq_number, &interrupt_stack);
+            } else {
+                impl(u32(i), &interrupt_stack);
+            }
+        }
+
         pub nakedcc fn handler() noreturn {
             asm volatile ("cli");
-            if (dummy_error_code) {
-                if (software_panic) {
-                    // This is a left over from being able to set the error
-                    // code for the C panic.
-                    // Also see panic function that puts this value in the
-                    // stack in ./panic.zig.
-                    // TODO: Remove or Reuse?
-                    asm volatile ("pushl 12(%%esp)");
-                } else {
-                    asm volatile ("pushl $0");
-                }
-            }
-            asm volatile ("pushal"); // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
-            // TODO: Bug? This has to be a var in the function, it can't be a
-            // const, i, or index.
-            var in = @intCast(u32, index);
-            asm volatile ("pushl %[interrupt_number]" :: [interrupt_number] "{eax}" (in));
-            const interrupt_stack = @intToPtr(*InterruptStack,
-                asm volatile ("mov %%esp, %[interrupt_stack]" : [interrupt_stack] "={eax}" (-> u32)));
+            // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
+            asm volatile ("pushal");
 
-            impl(interrupt_stack);
+            inner_handler(asm volatile ("mov %%esp, %[interrupt_stack]"
+                : [interrupt_stack] "={eax}" (-> u32)));
 
-            if (irq) {
-                pic.silence_irq(i - pic.irq_0_7_interrupt_offset);
-            }
-
-            asm volatile (
-                \\addl $4, %%esp // Pop Interrupt Code
-                \\popal // Restore Registers
-                \\addl $4, %%esp // Pop Error Code
-                \\iret
-                );
+            asm volatile ("popal"); // Restore Registers
+            if (error_code) asm volatile ("addl $4, %%esp"); // Pop Error Code
+            asm volatile ("iret");
             unreachable;
         }
 
@@ -166,12 +168,14 @@ fn BaseInterruptHandler(
 }
 
 fn HardwareErrorInterruptHandler(
-        comptime i: u32, comptime dummy_error_code: bool) type {
-    return BaseInterruptHandler(i, dummy_error_code, false, false, panic.show_panic_message);
+        comptime i: u32, comptime error_code: bool) type {
+    return BaseInterruptHandler(i, error_code, false, panic.show_panic_message);
 }
 
-pub fn IrqInterruptHandler(comptime irq_number: u32, impl: fn(*InterruptStack) void) type {
-    return BaseInterruptHandler(irq_number + pic.irq_0_7_interrupt_offset, true, false, true, impl);
+pub fn IrqInterruptHandler(
+        comptime irq_number: u32, impl: fn(u32, *InterruptStack) void) type {
+    return BaseInterruptHandler(
+        irq_number + pic.irq_0_7_interrupt_offset, false, true, impl);
 }
 
 // CPU Exception Interrupts ==================================================
@@ -303,15 +307,15 @@ pub fn initialize() void {
     print.debug_print = debug_print_value;
 
     inline for (exceptions) |ex| {
-        HardwareErrorInterruptHandler(ex.index, !ex.error_code).set(
+        HardwareErrorInterruptHandler(ex.index, ex.error_code).set(
             ex.name, kernel_code_selector, kernel_flags);
     }
 
-    BaseInterruptHandler(50, true, true, false, panic.show_panic_message).set(
+    BaseInterruptHandler(50, false, false, panic.show_panic_message).set(
         "Software Panic", kernel_code_selector, kernel_flags);
 
     BaseInterruptHandler(
-        system_call_interrupt_number, true, false, false, handle_system_call).set(
+        system_call_interrupt_number, false, false, handle_system_call).set(
             "System Call", kernel_code_selector, user_flags);
 
     load();

@@ -9,35 +9,31 @@ const print = @import("../print.zig");
 const kernel = @import("../kernel.zig");
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
-    // The push $0 is a left over from being able to set the error code for the
-    // C panic.
-    // Also see handler code for this in ./interrupts.zig.
-    // TODO: Remove or Reuse?
-    asm volatile ("pushl $0\n\tint $50");
+    asm volatile ("int $50");
     unreachable;
 }
 
-pub fn show_panic_message(interrupt_stack: *const interrupts.InterruptStack) void {
+pub fn show_panic_message(
+        interrupt_number: u32, interrupt_stack: *const interrupts.InterruptStack) void {
     const Color = cga_console.Color;
     cga_console.new_page();
     cga_console.set_colors(Color.Black, Color.Red);
     cga_console.fill_screen(' ');
     const ec = interrupt_stack.error_code;
-    const index = interrupt_stack.idt_index;
     print.format(
         \\==============================<!>Kernel Panic<!>==============================
         \\The system has encountered an unrecoverable error:
         \\  Interrupt Number: {}
         \\  Error Code: {}
         \\  Message:
-        , index, ec);
+        , interrupt_number, ec);
     print.char(' ');
 
-    if (!interrupts.is_exception(index)) {
+    if (!interrupts.is_exception(interrupt_number)) {
         print.string(kernel.panic_message);
     } else {
-        print.string(interrupts.get_name(index));
-        if (index == 13) {
+        print.string(interrupts.get_name(interrupt_number));
+        if (interrupt_number == 13) {
             // Explain General Protection Fault Cause
             const table = @intCast(u2, (ec >> 1) & 3);
             const table_index = (ec >> 3) & 8191;
@@ -57,7 +53,7 @@ pub fn show_panic_message(interrupt_stack: *const interrupts.InterruptStack) voi
                 print.format(" ({})", interrupts.get_name(table_index));
             }
 
-        } else if (index == 14) {
+        } else if (interrupt_number == 14) {
             // Explain Page Fault Cause
             print.format("\n    {}{} While {} {:a} while in {} Ring",
                 if ((ec & 1) > 0) "Page Protection Violation" else "Missing Page",
