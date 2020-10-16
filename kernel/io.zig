@@ -189,7 +189,6 @@ pub const File = struct {
 
 /// Test for normal situation.
 fn generic_seek_subtest(seek_type: File.SeekType, expected_from: usize) FileError!void {
-    const std = @import("std");
     std.testing.expectEqual(expected_from,
         try File.generic_seek(1, 4, true, 0, seek_type));
     std.testing.expectEqual(expected_from + 5,
@@ -203,8 +202,6 @@ fn generic_seek_subtest(seek_type: File.SeekType, expected_from: usize) FileErro
 }
 
 test "File.generic_seek" {
-    const std = @import("std");
-
     // Some normal situations
     try generic_seek_subtest(.FromStart, 0);
     try generic_seek_subtest(.FromHere, 1);
@@ -279,8 +276,6 @@ pub const BufferFile = struct {
 };
 
 test "BufferFile" {
-    const std = @import("std");
-
     var file_buffer: [128]u8 = undefined;
     var buffer_file = BufferFile{};
     buffer_file.initialize(file_buffer[0..]);
