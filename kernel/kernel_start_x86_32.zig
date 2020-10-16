@@ -240,6 +240,12 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
 
     // Start the generic main function, jumping to high memory kernel at the
     // same time.
-    @newStackCall(stack[0..], kernel_main);
+    asm volatile (
+        \\mov %[stack_end], %%esp
+    ::
+        [stack_end] "{eax}" (
+            @ptrToInt(&stack[0]) + stack.len)
+    );
+    kernel_main();
     unreachable;
 }
