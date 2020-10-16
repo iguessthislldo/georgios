@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const build_options = @import("build_options");
+const std = @import("std");
 
 pub const platform = @import("platform.zig");
 pub const print = @import("print.zig");
@@ -11,17 +12,113 @@ pub const Ext2 = @import("ext2.zig").Ext2;
 pub const Devices = @import("devices.zig").Devices;
 
 pub var panic_message: []const u8 = "";
+extern var __debug_info_start: u8;
+extern var __debug_info_end: u8;
+extern var __debug_abbrev_start: u8;
+extern var __debug_abbrev_end: u8;
+extern var __debug_str_start: u8;
+extern var __debug_str_end: u8;
+extern var __debug_line_start: u8;
+extern var __debug_line_end: u8;
+extern var __debug_ranges_start: u8;
+extern var __debug_ranges_end: u8;
+var kernel_panic_allocator_bytes: [100 * 1024]u8 = undefined;
+var kernel_panic_allocator_state = std.heap.FixedBufferAllocator.init(kernel_panic_allocator_bytes[0..]);
+const kernel_panic_allocator = &kernel_panic_allocator_state.allocator;
+
+fn dwarfSectionFromSymbolAbs(start: *u8, end: *u8) std.debug.DwarfInfo.Section {
+    return std.debug.DwarfInfo.Section{
+        .offset = 0,
+        .size = @ptrToInt(end) - @ptrToInt(start),
+    };
+}
+
+fn dwarfSectionFromSymbol(start: *u8, end: *u8) std.debug.DwarfInfo.Section {
+    return std.debug.DwarfInfo.Section{
+        .offset = @ptrToInt(start),
+        .size = @ptrToInt(end) - @ptrToInt(start),
+    };
+}
+
+fn getSelfDebugInfo() !*std.debug.DwarfInfo {
+    const S = struct {
+        var have_self_debug_info = false;
+        var self_debug_info: std.debug.DwarfInfo = undefined;
+
+        var in_stream_state = std.io.InStream(anyerror){ .readFn = readFn };
+        var in_stream_pos: u64 = 0;
+        const in_stream = &in_stream_state;
+
+        fn readFn(self: *std.io.InStream(anyerror), buffer: []u8) anyerror!usize {
+            const ptr = @intToPtr([*]const u8, @intCast(usize, in_stream_pos));
+            @memcpy(buffer.ptr, ptr, buffer.len);
+            in_stream_pos += buffer.len;
+            return buffer.len;
+        }
+
+        const SeekableStream = std.io.SeekableStream(anyerror, anyerror);
+        var seekable_stream_state = SeekableStream{
+            .seekToFn = seekToFn,
+            .seekByFn = seekByFn,
+
+            .getPosFn = getPosFn,
+            .getEndPosFn = getEndPosFn,
+        };
+        const seekable_stream = &seekable_stream_state;
+
+        fn seekToFn(self: *SeekableStream, pos: u64) anyerror!void {
+            in_stream_pos = pos;
+        }
+        fn seekByFn(self: *SeekableStream, pos: i64) anyerror!void {
+            in_stream_pos = @bitCast(u64, @bitCast(i64, in_stream_pos) +% pos);
+        }
+        fn getPosFn(self: *SeekableStream) anyerror!u64 {
+            return in_stream_pos;
+        }
+        fn getEndPosFn(self: *SeekableStream) anyerror!u64 {
+            return @ptrToInt(&__debug_ranges_end);
+        }
+    };
+    if (S.have_self_debug_info) return &S.self_debug_info;
+
+    S.self_debug_info = std.debug.DwarfInfo{
+        .dwarf_seekable_stream = S.seekable_stream,
+        .dwarf_in_stream = S.in_stream,
+        .endian = builtin.Endian.Little,
+        .debug_info = dwarfSectionFromSymbol(&__debug_info_start, &__debug_info_end),
+        .debug_abbrev = dwarfSectionFromSymbolAbs(&__debug_abbrev_start, &__debug_abbrev_end),
+        .debug_str = dwarfSectionFromSymbolAbs(&__debug_str_start, &__debug_str_end),
+        .debug_line = dwarfSectionFromSymbol(&__debug_line_start, &__debug_line_end),
+        .debug_ranges = dwarfSectionFromSymbolAbs(&__debug_ranges_start, &__debug_ranges_end),
+        .abbrev_table_list = undefined,
+        .compile_unit_list = undefined,
+        .func_list = undefined,
+    };
+    try std.debug.openDwarfDebugInfo(&S.self_debug_info, kernel_panic_allocator);
+    return &S.self_debug_info;
+}
+
+fn printLineFromFile(out_stream: var, line_info: std.debug.LineInfo) anyerror!void {
+    print.string("TODO print line from the file\n");
+}
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     panic_message = msg;
-    if (trace) |t| {
-        print.format("index: {}\n", t.index);
-        for (t.instruction_addresses) |addr| {
-            if (addr == 0) break;
-            print.format(" - {:a}\n", addr);
+    const dwarf_info = getSelfDebugInfo() catch |e| {
+        print.format("Failed to get debug info: {}\n", @errorName(e));
+        platform.panic(msg, trace);
+    };
+    if (print.console_file) |file| {
+        const out = file.get_std_out_stream();
+        var i = std.debug.StackIterator.init(@returnAddress());
+        while (i.next()) |address| {
+            std.debug.printSourceAtAddressDwarf(
+                    dwarf_info, out, address, false, printLineFromFile) catch |e| {
+                print.format("Failed to get line info for {:a}: {}\n",
+                    address, @errorName(e));
+                continue;
+            };
         }
-    } else {
-        print.string("No Stack Trace\n");
     }
     platform.panic(msg, trace);
 }

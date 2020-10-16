@@ -7,7 +7,7 @@ const isspace = @import("util.zig").isspace;
 const fprint = @import("fprint.zig");
 const io = @import("io.zig");
 
-var console_file: ?*io.File = null;
+pub var console_file: ?*io.File = null;
 pub var debug_print = false;
 
 pub fn initialize(file: ?*io.File, debug: bool) void {
