@@ -79,6 +79,8 @@ pub const Allocator = struct {
     free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
+        if (alloc_debug) print.format(
+            "Allocator.alloc: " ++ @typeName(Type) ++ "\n");
         const rv = @ptrCast(*Type, @alignCast(
             @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type))).ptr));
         if (alloc_debug) print.format(
@@ -95,6 +97,8 @@ pub const Allocator = struct {
 
     pub fn alloc_array(
             self: *Allocator, comptime Type: type, count: usize) AllocError![]Type {
+        if (alloc_debug) print.format(
+            "Allocator.alloc_array: [{}]" ++ @typeName(Type) ++ "\n", count);
         const rv = @ptrCast([*]Type, @alignCast(@alignOf(Type),
             (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
         if (alloc_debug) print.format("Allocator.alloc_array: [{}]" ++ @typeName(Type) ++
@@ -104,16 +108,23 @@ pub const Allocator = struct {
 
     pub fn free_array(self: *Allocator, array: var) FreeError!void {
         const traits = @typeInfo(@typeOf(array)).Pointer;
-        if (alloc_debug) print.format("Allocator.free_array: [{}]" ++ @typeName(traits.child) ++
-            ": {:a}\n", array.len, @ptrToInt(array.ptr));
+        if (alloc_debug) print.format(
+            "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
+            array.len, @ptrToInt(array.ptr));
         try self.free_impl(self, @sliceToBytes(array));
     }
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
-        return Range{.start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
+        if (alloc_debug) print.format("Allocator.alloc_range: {}\n", size);
+        const rv = Range{
+            .start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
+        if (alloc_debug) print.format("Allocator.alloc_range: {}: {:a}\n", size, rv.start);
+        return rv;
     }
 
     pub fn free_range(self: *Allocator, range: Range) FreeError!void {
+        if (alloc_debug) print.format(
+            "Allocator.free_range: {}: {:a}\n", range.size, range.start);
         try self.free_impl(self, range.to_slice(u8));
     }
 };
