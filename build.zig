@@ -7,7 +7,6 @@ const p_path = k_path ++ "platform/";
 
 const s_sources = [_][]const u8 {
     p_path ++ "threading.s",
-    // p_path ++ "irq_handlers.s",
 };
 
 const boot_path = t_path ++ "iso/boot/";

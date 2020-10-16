@@ -37,7 +37,7 @@ setup_process:
     pushl $0 // esi
     pushl $0 // edi
     // for context_switch
-    /* pushl $irq0_return */
+    pushl $irq0_return
 
     // Restore Stack
     movl %esp, %eax // Return Context
@@ -46,6 +46,12 @@ setup_process:
     popl %esi // Restore esi
     popl %ebx // Restore ebx
     ret
+
+.section .text
+.global irq0_return
+irq0_return:
+    popal
+    iret
 
 // void context_switch(mem_t * old, mem_t new);
 .section .text
