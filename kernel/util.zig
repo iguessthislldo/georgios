@@ -203,13 +203,15 @@ pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize 
     return size;
 }
 
-pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!void {
+pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usize {
     if (destination.len < source.len) {
-        return Error.NotEnougDestination;
+        return Error.NotEnoughDestination;
     }
+    const size = source.len;
     for (destination[0..size]) |*ptr, i| {
         ptr.* = source[i];
     }
+    return size;
 }
 
 /// Set all the elements of `destination` to `value`.

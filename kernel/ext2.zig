@@ -417,7 +417,7 @@ pub const File = struct {
             offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
         const self = @fieldParentPtr(Self, "io_file", file);
         self.position = try io.File.generic_seek(
-            self.position, self.inode.size, false, offset, seek_type);
+            self.position, self.inode.size, null, offset, seek_type);
         return self.position;
     }
 };
