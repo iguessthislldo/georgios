@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const util = @import("util.zig");
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
@@ -14,8 +16,12 @@ pub const FileError = error {
 
 /// File IO Interface
 pub const File = struct {
+    pub const StdOutStream = std.io.OutStream(FileError);
+
     valid: bool = false,
     index: usize = 0,
+    set_up_std_out_stream: bool = false,
+    _std_out_stream: StdOutStream = undefined,
 
     /// Used for seek()
     pub const SeekType = enum {
@@ -165,6 +171,19 @@ pub const File = struct {
             return result;
         }
         return FileError.OutOfBounds;
+    }
+
+    pub fn get_std_out_stream(self: *File) *StdOutStream {
+        if (!self.set_up_std_out_stream) {
+            self._std_out_stream = StdOutStream{.writeFn = std_out_stream_write };
+            self.set_up_std_out_stream = true;
+        }
+        return &self._std_out_stream;
+    }
+
+    fn std_out_stream_write(std_out_stream: *StdOutStream, bytes: []const u8) FileError!void {
+        const self = @fieldParentPtr(File, "_std_out_stream", std_out_stream);
+        _ = try self.write(bytes);
     }
 };
 
