@@ -119,4 +119,6 @@ pub fn initialize(kernel: *Kernel) !void {
     ps2.initialize();
 
     acpi.initialize();
+
+    interrupts.pic.start_ticking(100);
 }

@@ -284,9 +284,22 @@ pub const pic = struct {
         // Enable Interrupts
         putil.enable_interrupts();
     }
+
+    pub fn start_ticking(frequency: u32) void {
+        // TODO: Magic Numbers
+        const div = @intCast(u16, 1193180 / frequency);
+        putil.out8(mode_port, 0x36);
+        putil.out8(channel_port, @truncate(u8, div));
+        putil.out8(channel_port, @truncate(u8, div >> 8));
+        pic.allow_irq(0, true);
+    }
 };
 
 // Public Interface ==========================================================
+
+fn tick(irq_number: u32, interrupt_stack: *InterruptStack) void {
+    print.char('!');
+}
 
 pub fn initialize() void {
     table_pointer.limit = @sizeOf(Entry) * table.len;
@@ -317,6 +330,9 @@ pub fn initialize() void {
     BaseInterruptHandler(
         system_call_interrupt_number, false, false, handle_system_call).set(
             "System Call", kernel_code_selector, user_flags);
+
+    IrqInterruptHandler(0, tick).set(
+        "IRQ0: Timer", kernel_code_selector, kernel_flags);
 
     load();
 
