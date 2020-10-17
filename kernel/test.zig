@@ -9,4 +9,5 @@ test "dummy" {
     const list = @import("list.zig");
     const map = @import("map.zig");
     const mapped_list = @import("mapped_list.zig");
+    const log = @import("log.zig");
 }
