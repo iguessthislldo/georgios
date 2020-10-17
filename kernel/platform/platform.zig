@@ -15,6 +15,7 @@ pub const pci = @import("pci.zig");
 pub const ata = @import("ata.zig");
 pub const acpi = @import("acpi.zig");
 pub const ps2 = @import("ps2.zig");
+pub const threading = @import("threading.zig");
 
 pub const panic = @import("panic.zig").panic;
 pub const frame_size = pmemory.frame_size;

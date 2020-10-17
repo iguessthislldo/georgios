@@ -26,8 +26,6 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     platform.panic(msg, trace);
 }
 
-extern fn usermode(ip: u32, sp: u32) noreturn;
-
 pub const Kernel = struct {
     console: io.File = io.File{},
     memory: Memory = Memory{},
@@ -41,7 +39,8 @@ pub const Kernel = struct {
         try platform.initialize(self);
         if (self.raw_block_store) |raw| {
             self.block_store.init(self.memory.small_alloc, raw, 128);
-            try self.filesystem.initialize(self.memory.small_alloc, &self.block_store.block_store);
+            try self.filesystem.initialize(
+                self.memory.small_alloc, &self.block_store.block_store);
         } else {
             print.format("No block store set\n");
         }
@@ -67,13 +66,13 @@ pub const Kernel = struct {
         try self.memory.platform_memory.mark_virtual_memory_present(usermode_stack, true);
         const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
         platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
-        usermode(elf_object.header.entry, usermode_stack.end());
+        platform.impl.threading.usermode(elf_object.header.entry, usermode_stack.end());
     }
 };
 
 var kernel = Kernel{};
 
-pub export fn kernel_main() void {
+pub fn kernel_main() void {
     if (kernel.run()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }

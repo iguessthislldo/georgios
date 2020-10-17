@@ -21,7 +21,7 @@ setup_process:
     // for iret
     cmp %eax, 0
     je setup_process_kernel_mode // Skip Pushing these if Going to Kernel Mode
-    pushl $0x23 // ss (user data selector)
+    pushl (user_data_selector) // ss
     pushl %ebx // esp
   setup_process_kernel_mode:
     pushl %ecx // eflags
