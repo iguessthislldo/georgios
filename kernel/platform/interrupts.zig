@@ -311,11 +311,17 @@ pub fn initialize() void {
 
     const debug_print_value = print.debug_print;
     print.debug_print = false; // Too many lines
-    comptime var index = 0;
-    inline while (index < 256) {
-        HardwareErrorInterruptHandler(index, false).set(
-            "Unknown Interrupt", kernel_code_selector, kernel_flags);
-        index += 1;
+    comptime var interrupt_number = 0;
+    comptime var exceptions_index = 0;
+    inline while (interrupt_number < 256) {
+        if (exceptions_index < exceptions.len and
+                exceptions[exceptions_index].index == interrupt_number) {
+            exceptions_index += 1;
+        } else {
+            HardwareErrorInterruptHandler(interrupt_number, false).set(
+                "Unknown Interrupt", kernel_code_selector, kernel_flags);
+        }
+        interrupt_number += 1;
     }
     print.debug_print = debug_print_value;
 
