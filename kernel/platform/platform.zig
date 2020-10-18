@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+
 const io = @import("../io.zig");
 const print = @import("../print.zig");
 const Kernel = @import("../kernel.zig").Kernel;
@@ -17,9 +19,13 @@ pub const acpi = @import("acpi.zig");
 pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 
-pub const panic = @import("panic.zig").panic;
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
+
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    asm volatile ("int $50");
+    unreachable;
+}
 
 pub fn done() noreturn {
     asm volatile ("cli");

@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 
+const kernel = @import("../kernel.zig");
 const kutil = @import("../util.zig");
 const print = @import("../print.zig");
 
@@ -8,30 +9,38 @@ const putil = @import("util.zig");
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
-const panic = @import("panic.zig");
+const cga_console = @import("cga_console.zig");
+const segments = @import("segments.zig");
 
-pub const InterruptStack = packed struct {
-    // Pushed by us using pusha
-    edi: u32,
-    esi: u32,
-    ebp: u32,
-    esp: u32,
-    ebx: u32,
-    edx: u32,
-    ecx: u32,
-    eax: u32,
-    // Set to zero if the CPU didn't push one
-    error_code: u32,
-    // Pushed by CPU
-    eip: u32,
-    cs: u32,
-    eflags: u32,
-};
+pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
+    const ErrorCode = if (include_error_code) u32 else void;
+    return packed struct {
+        const has_error_code = include_error_code;
+
+        // Pushed by us using pusha
+        edi: u32,
+        esi: u32,
+        ebp: u32,
+        esp: u32,
+        ebx: u32,
+        edx: u32,
+        ecx: u32,
+        eax: u32,
+        // Pushed By Some Exceptions
+        error_code: ErrorCode,
+        // Pushed by CPU
+        eip: u32,
+        cs: u32,
+        eflags: u32,
+    };
+}
+pub const InterruptStack = InterruptStackTemplate(false);
+pub const InterruptStackEc = InterruptStackTemplate(true);
 
 // System Calls ==============================================================
 
 const system_call_interrupt_number: u8 = 100;
-fn handle_system_call(interrupt_number: u32, interrupt_stack: *InterruptStack) void {
+fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptStack) void {
     const call_number = interrupt_stack.eax;
     const arg1 = interrupt_stack.ebx;
     switch (call_number) {
@@ -108,38 +117,111 @@ pub const user_flags: u8 = kernel_flags | (3 << 5);
 
 // Interrupt Handler Generation ==============================================
 
+pub fn PanicMessage(comptime InterruptStackType: type) type {
+    return struct {
+        pub fn show(interrupt_number: u32, interrupt_stack: *const InterruptStackType) void {
+            const Color = cga_console.Color;
+            cga_console.new_page();
+            cga_console.set_colors(Color.Black, Color.Red);
+            cga_console.fill_screen(' ');
+            const has_ec = InterruptStackType.has_error_code;
+            const ec = interrupt_stack.error_code;
+            print.format(
+                \\==============================<!>Kernel Panic<!>==============================
+                \\The system has encountered an unrecoverable error:
+                \\  Interrupt Number: {}
+                \\
+                , interrupt_number);
+            if (has_ec) {
+                print.format("  Error Code: {}\n", ec);
+            }
+            print.string("  Message: ");
+            if (!is_exception(interrupt_number)) {
+                print.string(kernel.panic_message);
+            } else {
+                print.string(get_name(interrupt_number));
+                if (has_ec and interrupt_number == 13) {
+                    // Explain General Protection Fault Cause
+                    const which_table = @intCast(u2, (ec >> 1) & 3);
+                    const table_index = (ec >> 3) & 8191;
+                    print.format("{} Caused By {}[{}]",
+                        if ((ec & 1) == 1) " Externally" else "",
+                        switch (which_table) {
+                            0 => "GDT",
+                            1 => "IDT",
+                            2 => "LDT",
+                            3 => "IDT",
+                        }, table_index);
+                    if (which_table == 0) {
+                        // Print Selector if GDT
+                        print.format(" ({})", segments.get_name(table_index));
+                    } else if ((which_table & 1) == 1) {
+                        // Print Interrupt if IDT
+                        print.format(" ({})", get_name(table_index));
+                    }
+
+                } else if (has_ec and interrupt_number == 14) {
+                    // Explain Page Fault Cause
+                    print.format("\n    {}{} While {} {:a} while in {} Ring",
+                        if ((ec & 1) > 0) "Page Protection Violation" else "Missing Page",
+                        if ((ec & 8) > 0) " (Reserved bits set in directory entry)" else "",
+                        if ((ec & 16) > 0)
+                            "Fetching an Instruction From"
+                        else
+                            (if ((ec & 2) > 0) "Writing to" else "Reading From"),
+                        putil.cr2(),
+                        if ((ec & 4) > 0) "User" else "Non-User");
+                }
+            }
+
+            print.format(
+                \\
+                \\
+                \\--Registers-------------------------------------------------------------------
+                \\    EIP: {:a}
+                \\    EFLAGS: {:x}
+                \\    EAX: {:x}
+                \\    ECX: {:x}
+                \\    EDX: {:x}
+                \\    EBX: {:x}
+                \\    ESP: {:a}
+                \\    EBP: {:a}
+                \\    ESI: {:x}
+                \\    EDI: {:x}
+                \\    CS: {:x} ({})
+                ,
+                interrupt_stack.eip,
+                interrupt_stack.eflags,
+                interrupt_stack.eax,
+                interrupt_stack.ecx,
+                interrupt_stack.edx,
+                interrupt_stack.ebx,
+                interrupt_stack.esp,
+                interrupt_stack.ebp,
+                interrupt_stack.esi,
+                interrupt_stack.edi,
+                interrupt_stack.cs,
+                segments.get_name(interrupt_stack.cs / 8),
+            );
+
+            putil.halt();
+        }
+    };
+}
+
 fn BaseInterruptHandler(
-        comptime i: u32, comptime error_code: bool, comptime irq: bool,
-        impl: fn(u32, *InterruptStack) void) type {
+        comptime i: u32, comptime InterruptStackType: type, comptime irq: bool,
+        impl: fn(u32, *const InterruptStackType) void) type {
     return struct {
         const index: u8 = i;
 
-        fn inner_handler(real_interrupt_stack: u32) void {
-            // Copy Interrupt Stack And Insert Dummy Error Code If Needed
-            const real_interrupt_stack_bytes = kutil.to_bytes(
-                @intToPtr(*InterruptStack, real_interrupt_stack));
-            var interrupt_stack: InterruptStack = undefined;
-            const interrupt_stack_bytes = kutil.to_bytes(&interrupt_stack);
-            if (error_code) {
-                _ = kutil.memory_copy_truncate(
-                    interrupt_stack_bytes, real_interrupt_stack_bytes);
-            } else {
-                const error_code_offset = @byteOffsetOf(InterruptStack, "error_code");
-                _ = kutil.memory_copy_truncate(
-                    interrupt_stack_bytes, real_interrupt_stack_bytes[0..error_code_offset]);
-                interrupt_stack.error_code = 0;
-                _ = kutil.memory_copy_truncate(
-                    interrupt_stack_bytes[error_code_offset + @sizeOf(u32)..],
-                    real_interrupt_stack_bytes[error_code_offset..]);
-            }
-
-            // Call the Handler Implementation
+        fn inner_handler(interrupt_stack: *const InterruptStackType) void {
             if (irq) {
                 const irq_number = u32(i - pic.irq_0_7_interrupt_offset);
                 pic.silence_irq(irq_number);
-                impl(irq_number, &interrupt_stack);
+                impl(irq_number, interrupt_stack);
             } else {
-                impl(u32(i), &interrupt_stack);
+                impl(u32(i), interrupt_stack);
             }
         }
 
@@ -149,10 +231,12 @@ fn BaseInterruptHandler(
             asm volatile ("pushal");
 
             inner_handler(asm volatile ("mov %%esp, %[interrupt_stack]"
-                : [interrupt_stack] "={eax}" (-> u32)));
+                : [interrupt_stack] "={eax}" (-> *const InterruptStackType)));
 
             asm volatile ("popal"); // Restore Registers
-            if (error_code) asm volatile ("addl $4, %%esp"); // Pop Error Code
+            if (InterruptStackType.has_error_code) {
+                asm volatile ("addl $4, %%esp"); // Pop Error Code
+            }
             asm volatile ("iret");
             unreachable;
         }
@@ -169,13 +253,19 @@ fn BaseInterruptHandler(
 
 fn HardwareErrorInterruptHandler(
         comptime i: u32, comptime error_code: bool) type {
-    return BaseInterruptHandler(i, error_code, false, panic.show_panic_message);
+    const InterruptStackType = InterruptStackTemplate(error_code);
+    return BaseInterruptHandler(
+        i, InterruptStackType, false, PanicMessage(InterruptStackType).show);
 }
 
 pub fn IrqInterruptHandler(
-        comptime irq_number: u32, impl: fn(u32, *InterruptStack) void) type {
-    return BaseInterruptHandler(
-        irq_number + pic.irq_0_7_interrupt_offset, false, true, impl);
+        comptime irq_number: u32, impl: fn(u32, *const InterruptStack) void) type {
+    return BaseInterruptHandler(irq_number + pic.irq_0_7_interrupt_offset,
+        InterruptStack, true, impl);
+}
+
+fn InterruptHandler(comptime i: u32, impl: fn(u32, *const InterruptStack) void) type {
+    return BaseInterruptHandler(i, InterruptStack, false, impl);
 }
 
 // CPU Exception Interrupts ==================================================
@@ -297,7 +387,7 @@ pub const pic = struct {
 
 // Public Interface ==========================================================
 
-fn tick(irq_number: u32, interrupt_stack: *InterruptStack) void {
+fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
     print.char('!');
 }
 
@@ -313,7 +403,8 @@ pub fn initialize() void {
     print.debug_print = false; // Too many lines
     comptime var interrupt_number = 0;
     comptime var exceptions_index = 0;
-    inline while (interrupt_number < 256) {
+    @setEvalBranchQuota(2000);
+    inline while (interrupt_number < 150) {
         if (exceptions_index < exceptions.len and
                 exceptions[exceptions_index].index == interrupt_number) {
             exceptions_index += 1;
@@ -330,12 +421,11 @@ pub fn initialize() void {
             ex.name, kernel_code_selector, kernel_flags);
     }
 
-    BaseInterruptHandler(50, false, false, panic.show_panic_message).set(
+    InterruptHandler(50, PanicMessage(InterruptStack).show).set(
         "Software Panic", kernel_code_selector, kernel_flags);
 
-    BaseInterruptHandler(
-        system_call_interrupt_number, false, false, handle_system_call).set(
-            "System Call", kernel_code_selector, user_flags);
+    InterruptHandler(system_call_interrupt_number, handle_system_call).set(
+        "System Call", kernel_code_selector, user_flags);
 
     IrqInterruptHandler(0, tick).set(
         "IRQ0: Timer", kernel_code_selector, kernel_flags);
