@@ -5,6 +5,7 @@ const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
 
+const platform = @import("platform.zig");
 const pmemory = @import("memory.zig");
 const interrupts = @import("interrupts.zig");
 const InterruptStack = interrupts.InterruptStack;
@@ -30,8 +31,8 @@ pub const ThreadImpl = struct {
         @intToPtr(*Type, self.context).* = value;
     }
 
-    fn pop_from_context(self: *ThreadImpl, Type: type) Type {
-        defer self.context -= @sizeOf(Type);
+    fn pop_from_context(self: *ThreadImpl, comptime Type: type) Type {
+        defer self.context += @sizeOf(Type);
         return @intToPtr(*Type, self.context).*;
     }
 
@@ -53,6 +54,10 @@ pub const ThreadImpl = struct {
     }
 
     fn start(self: *ThreadImpl) Error!void {
+        // TODO: Real Context Switch
+        _ = self.pop_from_context(usize);
+        const is = self.pop_from_context(InterruptStack);
+        usermode(is.eip, is.esp);
     }
 };
 
@@ -60,27 +65,40 @@ pub const ProcessImpl = struct {
     process: *Process,
     page_directory: []u32 = undefined,
 
-    pub inline fn mem(self: *ProcessImpl) *pmemory.Memory {
-        return &self.process.memory_manager.platform_memory;
+    pub inline fn kmem(self: *ProcessImpl) *kmemory.Memory {
+        return self.process.memory_manager;
+    }
+
+    pub inline fn pmem(self: *ProcessImpl) *pmemory.Memory {
+        return &self.kmem().platform_memory;
     }
 
     pub fn init(self: *ProcessImpl, process: *Process) Error!void {
         self.process = process;
-        self.page_directory = try self.mem().new_page_directory();
+        self.page_directory = try self.pmem().new_page_directory();
     }
 
     pub fn start(self: *ProcessImpl) Error!void {
+        const usermode_stack = Range{
+            .start = platform.kernel_to_virtual(0) - platform.frame_size,
+            .size = platform.frame_size};
+        try self.pmem().mark_virtual_memory_present(
+            self.page_directory, usermode_stack, true);
+        const kernelmode_stack = try self.kmem().big_alloc.alloc_range(kutil.Ki(4));
+        platform.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
         try pmemory.load_page_directory(self.page_directory, null);
+        self.process.main_thread.impl.setup_context(
+            usermode_stack.end() - 1, self.process.entry);
         try self.process.main_thread.start();
     }
 
     pub fn address_space_copy(self: *ProcessImpl,
             address: usize, data: []const u8) kmemory.AllocError!void {
-        try self.mem().page_directory_memory_copy(self.page_directory, address, data);
+        try self.pmem().page_directory_memory_copy(self.page_directory, address, data);
     }
 
     pub fn address_space_set(self: *ProcessImpl,
             address: usize, byte: u8, len: usize) kmemory.AllocError!void {
-        try self.mem().page_directory_memory_set(self.page_directory, address, byte, len);
+        try self.pmem().page_directory_memory_set(self.page_directory, address, byte, len);
     }
 };

@@ -57,19 +57,8 @@ pub const Kernel = struct {
         var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
         // TODO: Function to set up a Process from an elf.Object
         try a.address_space_copy(elf_object.program_address, elf_object.program);
-        // TODO: Move Stack Setup into ThreadImpl
-        const Range = @import("memory.zig").Range;
-        const usermode_stack = Range{
-            .start = platform.impl.kernel_to_virtual(0) - platform.frame_size,
-            .size = platform.frame_size};
-        try self.memory.platform_memory.mark_virtual_memory_present(
-            a.impl.page_directory, usermode_stack, true);
-        const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
-        platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
+        a.entry = elf_object.header.entry;
         try self.threading_manager.start_process(a);
-        // TODO: Setup Context in ThreadImpl.start
-        platform.impl.threading.usermode(elf_object.header.entry, usermode_stack.end());
-        // TODO: Start Context Swtiching
     }
 };
 

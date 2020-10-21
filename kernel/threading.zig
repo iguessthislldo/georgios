@@ -31,6 +31,7 @@ pub const Process = struct {
     id: Id = undefined,
     impl: pthreading.ProcessImpl = undefined,
     main_thread: Thread = Thread{},
+    entry: usize = 0,
 
     pub fn init(self: *Process, memory_manager: *memory.Memory) Error!void {
         self.memory_manager = memory_manager;
