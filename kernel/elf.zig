@@ -221,7 +221,7 @@ pub const Object = struct {
                 _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
                 object.program = try alloc.alloc_array(u8, program_header.size_in_file);
                 _ = try file.read_or_error(object.program);
-                print.data_bytes(object.program);
+                print.dump_bytes(object.program);
             }
         }
         if (!got_load) @panic("No LOADs in ELF!");

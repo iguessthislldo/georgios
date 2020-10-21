@@ -336,9 +336,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!voi
     }
 }
 
-// TODO: Better name these binary printing functions
-
-pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
+pub fn dump_memory(file: *File, ptr: usize, size: usize) FileError!void {
     // Print hex data like this:
     //                        VV group_sep
     // 00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F
@@ -369,7 +367,7 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
         print_buffer = !has_next;
         {
             const new_pos = buffer_pos + 2;
-            byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*u8, ptr + i).*);
+            byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*allowzero u8, ptr + i).*);
             buffer_pos = new_pos;
         }
         byte_i += 1;
@@ -402,13 +400,13 @@ pub fn data(file: *File, ptr: usize, size: usize) FileError!void {
     }
 }
 
-pub fn data_bytes(file: *File, byteslice: []u8) FileError!void {
-    try data(file, @ptrToInt(byteslice.ptr), byteslice.len);
+pub fn dump_bytes(file: *File, byteslice: []u8) FileError!void {
+    try dump_memory(file, @ptrToInt(byteslice.ptr), byteslice.len);
 }
 
-pub fn bytes(file: *File, comptime Type: type, value: *Type) FileError!void {
+pub fn dump_raw_object(file: *File, comptime Type: type, value: *Type) FileError!void {
     const size: usize = @sizeOf(Type);
     const ptr: usize = @ptrToInt(value);
     try format(file, "type: {} at {:a} size: {} data:\n", @typeName(Type), ptr, size);
-    try data(file, ptr, size);
+    try dump_memory(file, ptr, size);
 }

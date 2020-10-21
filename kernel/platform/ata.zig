@@ -24,10 +24,6 @@ const Sector = struct {
 
     address: u64,
     data: [size]u8 align(8) = undefined,
-
-    pub fn dump(self: *const Sector) void {
-        print.data(@ptrToInt(&self.data[0]), self.data.len);
-    }
 };
 
 const CommandStatus = packed struct {

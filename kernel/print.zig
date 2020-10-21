@@ -109,29 +109,23 @@ pub fn format(comptime fmtstr: []const u8, args: ...) void {
     }
 }
 
-pub fn data(ptr: usize, size: usize) void {
+pub fn dump_memory(ptr: usize, size: usize) void {
     if (console_file) |o| {
-        fprint.data(o, ptr, size) catch unreachable;
+        fprint.dump_memory(o, ptr, size) catch unreachable;
     }
 }
 
-pub fn data_bytes(byteslice: []u8) void {
+pub fn dump_bytes(byteslice: []u8) void {
     if (console_file) |o| {
-        fprint.data_bytes(o, byteslice) catch unreachable;
+        fprint.dump_bytes(o, byteslice) catch unreachable;
     }
 }
 
-pub fn bytes(comptime Type: type, value: *Type) void {
+pub fn dump_raw_object(comptime Type: type, value: *Type) void {
     if (console_file) |o| {
-        fprint.bytes(o, Type, value) catch unreachable;
+        fprint.dump_raw_object(o, Type, value) catch unreachable;
     }
 }
-
-// void print_data(u1 * ptr, u4 size);
-
-// size_t sprint_uint(u4 value, char * output);
-
-// size_t sprint_size(mem_t size, char * buffer, size_t buffer_size);
 
 // print.string("0x0 -> ");
 // print.hex(0x0);
@@ -261,20 +255,20 @@ pub fn debug_format(comptime fmtstr: []const u8, args: ...) void {
     }
 }
 
-pub fn debug_data(ptr: usize, size: usize) void {
+pub fn debug_dump_memory(ptr: usize, size: usize) void {
     if (debug_print) {
-        data(ptr, size);
+        dump_memory(ptr, size);
     }
 }
 
-pub fn debug_data_bytes(byteslice: []u8) void {
+pub fn debug_dump_bytes(byteslice: []u8) void {
     if (debug_print) {
-        data_bytes(byteslice);
+        dump_bytes(byteslice);
     }
 }
 
-pub fn debug_bytes(comptime Type: type, value: *Type) void {
+pub fn debug_dump_raw_object(comptime Type: type, value: *Type) void {
     if (debug_print) {
-        bytes(Type, value);
+        dump_raw_object(Type, value);
     }
 }
