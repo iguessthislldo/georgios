@@ -107,4 +107,20 @@ pub fn build(b: *std.build.Builder) void {
     echoer.linkLibraryOrObject(libcommon);
     echoer.addPackagePath("system_calls", "programs/common/system_calls.zig");
     echoer.install();
+
+    // programs/a
+    const a_prog = b.addExecutable("a.elf", "programs/a/a.zig");
+    a_prog.setLinkerScriptPath("programs/common/linking.ld");
+    a_prog.setTheTarget(target);
+    a_prog.linkLibraryOrObject(libcommon);
+    a_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
+    a_prog.install();
+
+    // programs/b
+    const b_prog = b.addExecutable("b.elf", "programs/b/b.zig");
+    b_prog.setLinkerScriptPath("programs/common/linking.ld");
+    b_prog.setTheTarget(target);
+    b_prog.linkLibraryOrObject(libcommon);
+    b_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
+    b_prog.install();
 }

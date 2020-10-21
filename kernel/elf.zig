@@ -159,6 +159,7 @@ pub const Object = struct {
     section_headers: []SectionHeader = undefined,
     program_headers: []ProgramHeader = undefined,
     program: []u8 = undefined,
+    program_address: usize = undefined,
 
     pub fn from_file(alloc: *Allocator, file: *io.File) !Object {
         var object = Object{.alloc = alloc};
@@ -222,6 +223,7 @@ pub const Object = struct {
                 object.program = try alloc.alloc_array(u8, program_header.size_in_file);
                 _ = try file.read_or_error(object.program);
                 print.dump_bytes(object.program);
+                object.program_address = program_header.virtual_address;
             }
         }
         if (!got_load) @panic("No LOADs in ELF!");

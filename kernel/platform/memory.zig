@@ -17,7 +17,7 @@ const table_pages_size = page_size * pages_per_table;
 const tables_per_directory = kutil.Ki(1);
 const table_size = @sizeOf(u32) * pages_per_table;
 
-export var page_directory: [tables_per_directory]u32
+export var active_page_directory: [tables_per_directory]u32
     align(frame_size) linksection(".data") = undefined;
 export var kernel_page_tables: []u32 = undefined;
 pub export var kernel_range_start_available: u32 = undefined;
@@ -32,6 +32,11 @@ pub inline fn get_directory_index(address: u32) u32 {
     return (address & 0xffc00000) >> 22;
 }
 
+extern var _VIRTUAL_OFFSET: u32;
+pub inline fn get_kernel_space_start_directory_index() u32 {
+    return get_directory_index(@ptrToInt(&_VIRTUAL_OFFSET));
+}
+
 pub inline fn table_is_present(entry: u32) bool {
     return (entry & 1) == 1;
 }
@@ -43,15 +48,6 @@ pub inline fn get_table_address(entry: u32) u32 {
 pub inline fn get_table(dir_entry: u32) [*]allowzero u32 {
     return @intToPtr([*]allowzero u32, to_virtual(get_table_address(dir_entry)));
 }
-
-// fn get_table(address: u32) ?[*]u32 {
-//     const dir_index = get_directory_index(address);
-//     const dir_entry = page_directory[dir_index];
-//     if (!table_is_present(dir_entry)) {
-//         return null;
-//     }
-//     return ;
-// }
 // (End of Page Directory Operations)
 
 // Page Table Operations
@@ -73,7 +69,7 @@ pub inline fn present_entry(address: u32) u32 {
 
 pub inline fn set_entry(entry: *allowzero u32, address: usize, user: bool) void {
     // TODO: Seperate User and Write
-    entry.* = present_entry(address) | ((if (user) u32(0b11) else u32(0)) << 1);
+    entry.* = present_entry(address) | (if (user) u32(0b110) else u32(0));
 }
 // (End of Page Table Operations)
 
@@ -81,10 +77,31 @@ pub fn invalidate_page(address: u32) void {
     asm volatile ("invlpg (%[address])" : : [address] "{eax}" (address));
 }
 
+pub fn reload_active_page_directory() void {
+    asm volatile (
+        \\ movl $low_page_directory, %%eax
+        \\ movl %%eax, %%cr3
+    :::
+        "eax"
+    );
+}
+
+pub fn load_page_directory(new: []const u32, old: ?[]u32) kutil.Error!void {
+    const end = get_kernel_space_start_directory_index();
+    if (old) |o| {
+        _ = try kutil.memory_copy_error(
+            @sliceToBytes(o[0..end]), @sliceToBytes(active_page_directory[0..end]));
+    }
+    _ = try kutil.memory_copy_error(
+        @sliceToBytes(active_page_directory[0..end]), @sliceToBytes(new[0..end]));
+    reload_active_page_directory();
+}
+
 pub fn unmap_low_kernel() void {
-    for (page_directory[0..kernel_page_table_count]) |*ptr| {
+    for (active_page_directory[0..kernel_page_table_count]) |*ptr| {
         ptr.* = 0;
     }
+    reload_active_page_directory();
 }
 
 /// Add Frame Groups to Our Memory Map from Multiboot Memory Map
@@ -206,7 +223,7 @@ pub const Memory = struct {
         while (dir_index < tables_per_directory) {
             // print.format(" - Table {:x}\n", dir_index);
             const dir_offset = dir_index * table_pages_size;
-            const dir_entry = page_directory[dir_index];
+            const dir_entry = active_page_directory[dir_index];
             if (!table_is_present(dir_entry)) {
                 if (range.size == 0) {
                     range.start = dir_offset;
@@ -219,7 +236,7 @@ pub const Memory = struct {
                 dir_index += 1;
                 continue;
             }
-            self.map_virtual_page(get_table_address(page_directory[dir_index]));
+            self.map_virtual_page(get_table_address(active_page_directory[dir_index]));
             const table = @intToPtr([*]allowzero u32, self.virtual_page_address);
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
@@ -247,12 +264,13 @@ pub const Memory = struct {
         return AllocError.OutOfMemory;
     }
 
-    pub fn new_page_table(self: *Memory, dir_index: usize) AllocError!void {
+    pub fn new_page_table(self: *Memory, page_directory: []u32,
+            dir_index: usize, user: bool) AllocError!void {
         // print.format("new_page_table {:x}\n", dir_index);
         // TODO: Go through memory.Memory
         const table_address = try self.pop_frame();
         // TODO set_entry for page_directory
-        set_entry(&page_directory[dir_index], table_address, false);
+        set_entry(&page_directory[dir_index], table_address, user);
         self.map_virtual_page(table_address);
         const table = @intToPtr([*]u32, self.virtual_page_address);
         var i: usize = 0;
@@ -264,7 +282,7 @@ pub const Memory = struct {
 
     // TODO: Read/Write and Any Other Options
     fn mark_virtual_memory_present(
-            self: *Memory, range: Range, user: bool) AllocError!void {
+            self: *Memory, page_directory: []u32, range: Range, user: bool) AllocError!void {
         // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
@@ -272,9 +290,8 @@ pub const Memory = struct {
         var marked: usize = 0;
         while (dir_index < tables_per_directory) {
             // print.format(" - Table {:x}\n", dir_index);
-            const dir_offset = dir_index * table_pages_size;
             if (!table_is_present(page_directory[dir_index])) {
-                try self.new_page_table(dir_index);
+                try self.new_page_table(page_directory, dir_index, user);
             }
             self.map_virtual_page(get_table_address(page_directory[dir_index]));
             if (user) {
@@ -295,7 +312,9 @@ pub const Memory = struct {
                 const frame = try self.pop_frame();
                 self.map_virtual_page(get_table_address(page_directory[dir_index]));
                 set_entry(&table[table_index], frame, user);
-                invalidate_page(get_address(dir_index, table_index));
+                if (&page_directory[0] == &active_page_directory[0]) {
+                    invalidate_page(get_address(dir_index, table_index));
+                }
                 marked += page_size;
                 if (marked >= range.size) return;
                 table_index += 1;
@@ -304,18 +323,71 @@ pub const Memory = struct {
         }
     }
 
-    // fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
-    // }
+    // TODO
+    fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
+    }
 
     fn page_alloc(allocator: *kmemory.Allocator, size: usize) AllocError![]u8 {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
         const range = try self.get_unused_kernel_space(size);
-        try self.mark_virtual_memory_present(range, false);
+        try self.mark_virtual_memory_present(active_page_directory[0..], range, false);
         return range.to_slice(u8);
     }
 
     fn page_free(allocator: *kmemory.Allocator, value: []u8) FreeError!void {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
+        // TODO
+    }
+
+    pub fn new_page_directory(self: *Memory) AllocError![]u32 {
+        const end = get_kernel_space_start_directory_index();
+        const page_directory =
+            try self.kernel_memory.big_alloc.alloc_array(u32, tables_per_directory);
+        _ = kutil.memory_set(@sliceToBytes(page_directory[0..]), 0);
+        return page_directory;
+    }
+
+    pub fn page_directory_memory_copy(self: *Memory, page_directory: []u32,
+            address: usize, data: []const u8) AllocError!void {
+        const dir_index_start = get_directory_index(address);
+        const table_index_start = get_table_index(address);
+        var dir_index: usize = dir_index_start;
+        var marked: usize = 0;
+        var data_left = data;
+        while (data_left.len > 0 and dir_index < tables_per_directory) {
+            if (!table_is_present(page_directory[dir_index])) {
+                try self.new_page_table(page_directory, dir_index, true);
+            }
+            var table_index: usize =
+                if (dir_index == dir_index_start) table_index_start else 0;
+            while (data_left.len > 0 and table_index < pages_per_table) {
+                self.map_virtual_page(get_table_address(page_directory[dir_index]));
+                const table = @intToPtr([*]u32, self.virtual_page_address);
+                if (!page_is_present(table[table_index])) {
+                    // TODO: Go through memory.Memory for pop_frame
+                    const frame = try self.pop_frame();
+                    self.map_virtual_page(get_table_address(page_directory[dir_index]));
+                    set_entry(&table[table_index], frame, true);
+                    if (&page_directory[0] == &active_page_directory[0]) {
+                        invalidate_page(get_address(dir_index, table_index));
+                    }
+                }
+                self.map_virtual_page(get_page_address(table[table_index]));
+                const page = @intToPtr([*]u8, self.virtual_page_address)[0..page_size];
+                const copied = kutil.memory_copy_truncate(page, data_left);
+                data_left = data_left[copied..];
+                table_index += 1;
+            }
+            dir_index += 1;
+        }
+
+        if (data_left.len > 0) {
+            @panic("address_space_copy: data_left.len > 0 at end!");
+        }
+    }
+
+    pub fn address_space_set(self: *Memory, page_directory: []u32,
+            address: usize, byte: u8, len: usize) AllocError!void {
         // TODO
     }
 };

@@ -45,9 +45,10 @@ $(ISO): $(KERNEL) $(GRUB_CFG)
 
 $(ZIG_OUTPUT)/echoer.elf: build_georgios
 
-$(DISK): $(ZIG_OUTPUT)/echoer.elf
+$(DISK): $(ZIG_OUTPUT)/echoer.elf $(ZIG_OUTPUT)/a.elf $(ZIG_OUTPUT)/b.elf
 	@mkdir -p $(DISK_DIR)
 	cp $^ $(DISK_DIR)
+	rm -f $(DISK)
 	mke2fs -L '' -N 0 -O none -d $(DISK_DIR) -r 1 -t ext2 $(DISK) 1m
 
 .PHONY: bochs

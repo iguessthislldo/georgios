@@ -13,7 +13,7 @@ _VIRTUAL_LOW_START = _REAL_LOW_START + _VIRTUAL_OFFSET;
 _VIRTUAL_LOW_END = _REAL_LOW_END + _VIRTUAL_OFFSET;
 
 /* Create some low versions of symbols we need */
-low_page_directory = page_directory - _VIRTUAL_OFFSET;
+low_page_directory = active_page_directory - _VIRTUAL_OFFSET;
 low_multiboot_info = multiboot_info - _VIRTUAL_OFFSET;
 low_kernel_range_start_available =
     kernel_range_start_available - _VIRTUAL_OFFSET;

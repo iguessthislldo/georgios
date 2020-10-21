@@ -9,6 +9,7 @@ pub const elf = @import("elf.zig");
 pub const util = @import("util.zig");
 pub const Ext2 = @import("ext2.zig").Ext2;
 pub const Devices = @import("devices.zig").Devices;
+pub const threading = @import("threading.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -33,6 +34,7 @@ pub const Kernel = struct {
     raw_block_store: ?*io.BlockStore = null,
     block_store: io.CachedBlockStore = io.CachedBlockStore{},
     filesystem: Ext2 = Ext2{},
+    threading_manager: threading.Manager = undefined,
 
     pub fn initialize(self: *Kernel) !void {
         print.initialize(&self.console, build_options.debug_log);
@@ -44,29 +46,30 @@ pub const Kernel = struct {
         } else {
             print.format("No block store set\n");
         }
+        self.threading_manager = threading.Manager{.memory_manager = &self.memory};
     }
 
     pub fn run(self: *Kernel) !void {
         try self.initialize();
 
-        var ext2_file = try self.filesystem.open("echoer.elf");
-        const file = &ext2_file.io_file;
-        var elf_object = try elf.Object.from_file(self.memory.small_alloc, file);
+        const a = try self.threading_manager.new_process();
+        var ext2_file = try self.filesystem.open("a.elf");
+        var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
+        // TODO: Function to set up a Process from an elf.Object
+        try a.address_space_copy(elf_object.program_address, elf_object.program);
+        // TODO: Move Stack Setup into ThreadImpl
         const Range = @import("memory.zig").Range;
-        const range = Range{.start=0, .size=elf_object.program.len};
-        try self.memory.platform_memory.mark_virtual_memory_present(range, true);
-        var i: usize = 0;
-        while (i < range.size) {
-            @intToPtr(*allowzero u32, range.start + i).* = elf_object.program[i];
-            i += 1;
-        }
         const usermode_stack = Range{
             .start = platform.impl.kernel_to_virtual(0) - platform.frame_size,
             .size = platform.frame_size};
-        try self.memory.platform_memory.mark_virtual_memory_present(usermode_stack, true);
+        try self.memory.platform_memory.mark_virtual_memory_present(
+            a.impl.page_directory, usermode_stack, true);
         const kernelmode_stack = try self.memory.big_alloc.alloc_range(util.Ki(4));
         platform.impl.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
+        try self.threading_manager.start_process(a);
+        // TODO: Setup Context in ThreadImpl.start
         platform.impl.threading.usermode(elf_object.header.entry, usermode_stack.end());
+        // TODO: Start Context Swtiching
     }
 };
 
