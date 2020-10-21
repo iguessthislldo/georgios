@@ -400,11 +400,11 @@ pub fn dump_memory(file: *File, ptr: usize, size: usize) FileError!void {
     }
 }
 
-pub fn dump_bytes(file: *File, byteslice: []u8) FileError!void {
+pub fn dump_bytes(file: *File, byteslice: []const u8) FileError!void {
     try dump_memory(file, @ptrToInt(byteslice.ptr), byteslice.len);
 }
 
-pub fn dump_raw_object(file: *File, comptime Type: type, value: *Type) FileError!void {
+pub fn dump_raw_object(file: *File, comptime Type: type, value: *const Type) FileError!void {
     const size: usize = @sizeOf(Type);
     const ptr: usize = @ptrToInt(value);
     try format(file, "type: {} at {:a} size: {} data:\n", @typeName(Type), ptr, size);

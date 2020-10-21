@@ -115,13 +115,13 @@ pub fn dump_memory(ptr: usize, size: usize) void {
     }
 }
 
-pub fn dump_bytes(byteslice: []u8) void {
+pub fn dump_bytes(byteslice: []const u8) void {
     if (console_file) |o| {
         fprint.dump_bytes(o, byteslice) catch unreachable;
     }
 }
 
-pub fn dump_raw_object(comptime Type: type, value: *Type) void {
+pub fn dump_raw_object(comptime Type: type, value: *const Type) void {
     if (console_file) |o| {
         fprint.dump_raw_object(o, Type, value) catch unreachable;
     }
@@ -261,13 +261,13 @@ pub fn debug_dump_memory(ptr: usize, size: usize) void {
     }
 }
 
-pub fn debug_dump_bytes(byteslice: []u8) void {
+pub fn debug_dump_bytes(byteslice: []const u8) void {
     if (debug_print) {
         dump_bytes(byteslice);
     }
 }
 
-pub fn debug_dump_raw_object(comptime Type: type, value: *Type) void {
+pub fn debug_dump_raw_object(comptime Type: type, value: *const Type) void {
     if (debug_print) {
         dump_raw_object(Type, value);
     }
