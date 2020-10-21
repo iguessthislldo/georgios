@@ -13,7 +13,6 @@ const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 
 pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
-    const ErrorCode = if (include_error_code) u32 else void;
     return packed struct {
         const has_error_code = include_error_code;
 
@@ -27,7 +26,7 @@ pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
         ecx: u32,
         eax: u32,
         // Pushed By Some Exceptions
-        error_code: ErrorCode,
+        error_code: if (include_error_code) u32 else void,
         // Pushed by CPU
         eip: u32,
         cs: u32,

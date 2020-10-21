@@ -105,9 +105,9 @@ export nakedcc fn kernel_start() linksection(".low_text") noreturn {
 
     // Save location of Multiboot2 Info
     low_multiboot_info.ptr = asm volatile (
-        // Check for the Multiboot2 magic value in eax. If we don't have it,
-        // then is a fatal error, but we can't report it yet so set the pointer
-        // to 0 and we will panic later when we first try to use it.
+        // Check for the Multiboot2 magic value in eax. It is a fatal error if
+        // we don't have it, but we can't report it yet so set the pointer to 0
+        // and we will panic later when we first try to use it.
         //
         \\ cmpl $0x36d76289, %%eax
         \\ je passed_multiboot_check

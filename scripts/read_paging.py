@@ -42,7 +42,7 @@ def common_flags(value):
     what = []
 
     if value & (1 << 1):
-        what.append("Read-Only")
+        what.append("Writable")
 
     if value & (1 << 2):
         what.append("User")
