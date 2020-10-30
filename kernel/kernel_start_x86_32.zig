@@ -42,11 +42,11 @@ const Multiboot2Header = packed struct {
         const InfoRequestTag = packed struct {
             kind: u16 = tag_kind_info_request,
             flags: u16 = tag_flag_must_understand,
-            size: u32 = @sizeOf(@This()) - 8,
+            size: u32 = @sizeOf(@This()),
             tag0: u32 = 7, // VBE
-            padding: u32 = 0,
         };
         info_request_tag: InfoRequestTag = InfoRequestTag{},
+        padding0: u32 = 0,
 
         const FramebufferTag = packed struct {
             kind: u16 = tag_kind_framebuffer,
@@ -57,7 +57,8 @@ const Multiboot2Header = packed struct {
             depth: u32 = 32,
         };
         framebuffer_tag: FramebufferTag = FramebufferTag{},
-    } else packed struct{};
+        padding1: u32 = 0,
+    } else void;
 
     magic: u32 = magic_value,
     architecture: u32 = architecture_value,

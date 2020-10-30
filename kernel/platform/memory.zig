@@ -11,7 +11,7 @@ const platform = @import("platform.zig");
 const to_virtual = platform.kernel_to_virtual;
 
 pub const frame_size = kutil.Ki(4);
-const page_size = frame_size;
+pub const page_size = frame_size;
 const pages_per_table = kutil.Ki(1);
 const table_pages_size = page_size * pages_per_table;
 const tables_per_directory = kutil.Ki(1);

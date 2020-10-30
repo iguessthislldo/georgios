@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 
 const paging = @import("paging.zig");
 const platform = @import("platform.zig");
+const vbe = @import("vbe.zig");
 
 const print = @import("../print.zig");
 const Range = @import("../memory.zig").Range;
@@ -121,4 +122,22 @@ pub fn find_tag(find: TagKind) Error!Range {
         return Range{.start = i, .size = 0};
     }
     return Error.TagNotFound;
+}
+
+const VbeInfo = packed struct {
+    kind: TagKind,
+    size: u32,
+    mode: u16,
+    interface_seg: u16,
+    interface_off: u16,
+    interface_len: u16,
+    control_info: [512]u8,
+    mode_info: [256]u8,
+};
+
+pub fn get_vbe_info() ?*VbeInfo {
+    const range = find_tag(TagKind.Vbe) catch {
+        return null;
+    };
+    return range.to_ptr(*VbeInfo);
 }
