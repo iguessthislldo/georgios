@@ -352,7 +352,6 @@ pub const Memory = struct {
         const dir_index_start = get_directory_index(address);
         const table_index_start = get_table_index(address);
         var dir_index: usize = dir_index_start;
-        var marked: usize = 0;
         var data_left = data;
         while (data_left.len > 0 and dir_index < tables_per_directory) {
             if (!table_is_present(page_directory[dir_index])) {
@@ -389,5 +388,48 @@ pub const Memory = struct {
     pub fn address_space_set(self: *Memory, page_directory: []u32,
             address: usize, byte: u8, len: usize) AllocError!void {
         // TODO
+    }
+
+    // TODO: This page structure iteration code is starting to seem very boiler
+    // plate. Figure out a way to simplify it or else more likely make it
+    // generic.
+
+    // Assumes range address is page aligned.
+    pub fn map_i(self: *Memory, page_directory: []u32, virtual_range: Range,
+            physical_start: usize, user: bool) AllocError!void {
+        const dir_index_start = get_directory_index(virtual_range.start);
+        const table_index_start = get_table_index(virtual_range.start);
+        var dir_index: usize = dir_index_start;
+        var left = virtual_range.size;
+        var physical_address = physical_start;
+        while (left > 0 and dir_index < tables_per_directory) {
+            if (!table_is_present(page_directory[dir_index])) {
+                try self.new_page_table(page_directory, dir_index, user);
+            }
+            self.map_virtual_page(get_table_address(page_directory[dir_index]));
+            const table = @intToPtr([*]u32, self.virtual_page_address);
+            var table_index: usize =
+                if (dir_index == dir_index_start) table_index_start else 0;
+            while (left > 0 and table_index < pages_per_table) {
+                const a = get_address(dir_index, table_index);
+                set_entry(&table[table_index], physical_address, user);
+                if (&page_directory[0] == &active_page_directory[0]) {
+                    invalidate_page(a);
+                }
+                left -= page_size;
+                physical_address += page_size;
+                table_index += 1;
+            }
+            dir_index += 1;
+        }
+
+        if (left > 0) {
+            @panic("map: left > 0 at end!");
+        }
+    }
+
+    pub fn map(self: *Memory, virtual_range: Range, physical_start: usize,
+            user: bool) AllocError!void {
+        try self.map_i(active_page_directory[0..], virtual_range, physical_start, user);
     }
 };
