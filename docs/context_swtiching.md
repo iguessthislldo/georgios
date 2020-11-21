@@ -16,4 +16,6 @@ is for a different ring, then `iret` will also pop new values for the `esp` and
 
 - [JamesM's kernel development tutorials part 10](https://web.archive.org/web/20160326062442/http://jamesmolloy.co.uk/tutorial\_html/10.-User%20Mode.html)
 
-- [Skelix OS tutorial part 4](http://skelix.net/skelixos/tutorial04\_en.html)
+- [Skelix OS tutorial part 4](https://web.archive.org/web/20170103060529/http://skelix.net/skelixos/tutorial04_en.html)
+
+http://ethv.net/workshops/osdev/notes/notes-4.html
