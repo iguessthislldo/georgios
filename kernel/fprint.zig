@@ -79,7 +79,7 @@ fn nibble_char(value: u4) u8 {
         if (value < 10)
             '0' + @intCast(u8, value)
         else
-            'A' + @intCast(u8, value - 10);
+            'a' + @intCast(u8, value - 10);
 }
 
 fn nibble(file: *File, value: u4) FileError!void {
