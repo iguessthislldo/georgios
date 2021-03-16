@@ -39,7 +39,7 @@ const Utf8Iterator = struct {
         if (seqlen < 2 or seqlen > 4) {
             return Error.InvalidUtf8;
         }
-        var rv: u32 = bytes[0] & ((u8(1) << @intCast(u3, 7 - seqlen)) - 1);
+        var rv: u32 = bytes[0] & ((@as(u8, 1) << @intCast(u3, 7 - seqlen)) - 1);
         for (bytes[1..seqlen]) |*ptr, i| {
             ptr.* = try self.next_byte();
             if (ptr.* >> 6 != 0b10) {

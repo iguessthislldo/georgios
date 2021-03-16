@@ -37,7 +37,7 @@ pub const Log = struct {
         _ = fprint.string(file, marker) catch {};
     }
 
-    pub fn log(self: *const Self, comptime fmtstr: []const u8, args: ...) void {
+    pub fn log(self: *const Self, comptime fmtstr: []const u8, args: var) void {
         if (self.file) |file| {
             if (self.is_enabled()) {
                 print_indent(file, self.indent);
@@ -56,33 +56,33 @@ test "Log" {
     {
         buffer_file.reset();
         var log = Log{.file = file};
-        log.log("{}, World!", "Hello");
+        log.log("{}, World!", .{"Hello"});
         buffer_file.expect(" - Hello, World!\n");
     }
 
     {
         buffer_file.reset();
         var log1 = Log{.file = file};
-        log1.log("1");
+        log1.log("1", .{});
         log1.enabled = false;
-        log1.log("SHOULD NOT BE LOGGED");
+        log1.log("SHOULD NOT BE LOGGED", .{});
         log1.enabled = true;
-        log1.log("2");
+        log1.log("2", .{});
         {
             var log2 = log1.child();
-            log2.log("3");
+            log2.log("3", .{});
             {
                 var log3 = log2.child();
-                log3.log("4");
+                log3.log("4", .{});
                 log1.enabled = false;
-                log3.log("SHOULD NOT BE LOGGED");
+                log3.log("SHOULD NOT BE LOGGED", .{});
                 log1.enabled = true;
-                log3.log("5");
+                log3.log("5", .{});
             }
-            log2.log("6");
-            log2.log("7");
+            log2.log("6", .{});
+            log2.log("7", .{});
         }
-        log1.log("8");
+        log1.log("8", .{});
         buffer_file.expect(
             \\ - 1
             \\ - 2

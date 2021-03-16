@@ -91,7 +91,7 @@ pub fn find_tag(find: TagKind) Error!Range {
             \\   - Total Size: {} B ({} KiB)
             \\   - Tags:
             \\
-            , size, size >> 10);
+            , .{size, size >> 10});
     }
     i += 8; // Move to first tag
     while (running) {
@@ -99,11 +99,11 @@ pub fn find_tag(find: TagKind) Error!Range {
         const size = @intToPtr(*u32, i + 4).*;
         const kind_maybe = TagKind.from_u32(kind_raw);
         if (list) {
-            print.debug_format("     - {}\n",
+            print.debug_format("     - {}\n", .{
                 if (kind_maybe) |kind|
                     kind.to_string()
                 else
-                    "Unkown");
+                    "Unkown"});
         }
         if (kind_maybe) |kind| {
             if (kind == .End) {
@@ -118,7 +118,7 @@ pub fn find_tag(find: TagKind) Error!Range {
         tag_count += 1;
     }
     if (list) {
-        print.debug_format("   - That was {} tags\n", tag_count);
+        print.debug_format("   - That was {} tags\n", .{tag_count});
         return Range{.start = i, .size = 0};
     }
     return Error.TagNotFound;

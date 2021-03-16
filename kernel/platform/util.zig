@@ -60,7 +60,7 @@ pub fn rdtsc() u64 {
     // into two registers.
     const low = asm volatile ("rdtsc" : [low] "={eax}" (-> u32));
     const high = asm volatile ("movl %%edx, %[high]" : [high] "=r" (-> u32));
-    return (u64(high) << 32) | u64(low);
+    return (@as(u64, high) << 32) | @as(u64, low);
 }
 
 pub var estimated_ticks_per_second: u64 = 0;
@@ -70,7 +70,7 @@ pub var estimated_ticks_per_nanosecond: u64 = 0;
 
 pub fn estimate_cpu_speed() void {
     // TODO: Explain
-    out8(0x61, (in8(0x61) & ~u8(0x02)) | 0x01);
+    out8(0x61, (in8(0x61) & ~@as(u8, 0x02)) | 0x01);
     out8(0x43, 0xB0);
     out8(0x42, 0xFF);
     out8(0x42, 0xFF);

@@ -17,7 +17,7 @@ jobs:
 
             - uses: goto-bus-stop/setup-zig@v1
               with:
-                version: 0.5.0
+                version: 0.6.0
 
             - name: Install Packages
               run: sudo apt-get install grub-pc-bin

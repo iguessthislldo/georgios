@@ -1,3 +1,6 @@
+const std = @import("std");
+const sliceAsBytes = std.mem.sliceAsBytes;
+
 const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const KernelMemory = kmemory.Memory;
@@ -69,7 +72,7 @@ pub inline fn present_entry(address: u32) u32 {
 
 pub inline fn set_entry(entry: *allowzero u32, address: usize, user: bool) void {
     // TODO: Seperate User and Write
-    entry.* = present_entry(address) | (if (user) u32(0b110) else u32(0));
+    entry.* = present_entry(address) | (if (user) @as(u32, 0b110) else @as(u32, 0));
 }
 // (End of Page Table Operations)
 
@@ -90,10 +93,10 @@ pub fn load_page_directory(new: []const u32, old: ?[]u32) kutil.Error!void {
     const end = get_kernel_space_start_directory_index();
     if (old) |o| {
         _ = try kutil.memory_copy_error(
-            @sliceToBytes(o[0..end]), @sliceToBytes(active_page_directory[0..end]));
+            sliceAsBytes(o[0..end]), sliceAsBytes(active_page_directory[0..end]));
     }
     _ = try kutil.memory_copy_error(
-        @sliceToBytes(active_page_directory[0..end]), @sliceToBytes(new[0..end]));
+        sliceAsBytes(active_page_directory[0..end]), sliceAsBytes(new[0..end]));
     reload_active_page_directory();
 }
 
@@ -305,7 +308,7 @@ pub const Memory = struct {
                 // print.format(" - Page {:x} {:x} {:x}\n",
                 //     dir_index, table_index, table[table_index]);
                 if (page_is_present(table[table_index])) {
-                    print.format("{:x}\n", get_address(dir_index, table_index));
+                    print.format("{:x}\n", .{get_address(dir_index, table_index)});
                     @panic("mark_virtual_memory_present: Page already present!");
                 }
                 // TODO: Go through memory.Memory for pop_frame
@@ -343,7 +346,7 @@ pub const Memory = struct {
         const end = get_kernel_space_start_directory_index();
         const page_directory =
             try self.kernel_memory.big_alloc.alloc_array(u32, tables_per_directory);
-        _ = kutil.memory_set(@sliceToBytes(page_directory[0..]), 0);
+        _ = kutil.memory_set(sliceAsBytes(page_directory[0..]), 0);
         return page_directory;
     }
 

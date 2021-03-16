@@ -16,10 +16,10 @@ pub var panic_message: []const u8 = "";
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     panic_message = msg;
     if (trace) |t| {
-        print.format("index: {}\n", t.index);
+        print.format("index: {}\n", .{t.index});
         for (t.instruction_addresses) |addr| {
             if (addr == 0) break;
-            print.format(" - {:a}\n", addr);
+            print.format(" - {:a}\n", .{addr});
         }
     } else {
         print.string("No Stack Trace\n");
@@ -44,7 +44,7 @@ pub const Kernel = struct {
             try self.filesystem.initialize(
                 self.memory.small_alloc, &self.block_store.block_store);
         } else {
-            print.format("No block store set\n");
+            print.string("No block store set\n");
         }
         self.threading_manager = threading.Manager{.memory_manager = &self.memory};
     }

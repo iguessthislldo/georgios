@@ -103,7 +103,7 @@ pub fn any(value: var) void {
     }
 }
 
-pub fn format(comptime fmtstr: []const u8, args: ...) void {
+pub fn format(comptime fmtstr: []const u8, args: var)void {
     if (console_file) |o| {
         fprint.format(o, fmtstr, args) catch unreachable;
     }
@@ -249,7 +249,7 @@ pub fn debug_any(value: var) void {
     }
 }
 
-pub fn debug_format(comptime fmtstr: []const u8, args: ...) void {
+pub fn debug_format(comptime fmtstr: []const u8, args: var)void {
     if (debug_print) {
         format(fmtstr, args);
     }

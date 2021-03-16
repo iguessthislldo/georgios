@@ -101,8 +101,8 @@ fn set_entry(
     names[index] = name;
     print.debug_format(
         "   - [{}]: \"{}\"\n" ++
-        "     - selector: {:x} address: {:a} flags: {:x}\n",
-        index, name, selector, offset,  flags);
+        "     - selector: {:x} address: {:a} flags: {:x}\n", .{
+        index, name, selector, offset,  flags});
     // TODO: Print flag and selector meanings
     table[index].offset_0_15 = @intCast(u16, offset & 0xffff);
     table[index].offset_16_31= @intCast(u16, (offset & 0xffff0000) >> 16);
@@ -130,9 +130,9 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                 \\The system has encountered an unrecoverable error:
                 \\  Interrupt Number: {}
                 \\
-                , interrupt_number);
+                , .{interrupt_number});
             if (has_ec) {
-                print.format("  Error Code: {}\n", ec);
+                print.format("  Error Code: {}\n", .{ec});
             }
             print.string("  Message: ");
             if (!is_exception(interrupt_number)) {
@@ -143,33 +143,58 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                     // Explain General Protection Fault Cause
                     const which_table = @intCast(u2, (ec >> 1) & 3);
                     const table_index = (ec >> 3) & 8191;
-                    print.format("{} Caused By {}[{}]",
-                        if ((ec & 1) == 1) " Externally" else "",
-                        switch (which_table) {
+                    print.format("{} Caused By {}[{}]", .{
+                        if ((ec & 1) == 1)
+                            @as([]const u8, " Externally") else @as([]const u8, ""),
+                        @as([]const u8, switch (which_table) {
                             0 => "GDT",
                             1 => "IDT",
                             2 => "LDT",
                             3 => "IDT",
-                        }, table_index);
+                        }), table_index});
                     if (which_table == 0) {
                         // Print Selector if GDT
-                        print.format(" ({})", segments.get_name(table_index));
+                        print.format(" ({})", .{segments.get_name(table_index)});
                     } else if ((which_table & 1) == 1) {
                         // Print Interrupt if IDT
-                        print.format(" ({})", get_name(table_index));
+                        print.format(" ({})", .{get_name(table_index)});
                     }
 
                 } else if (has_ec and interrupt_number == 14) {
                     // Explain Page Fault Cause
-                    print.format("\n    {}{} While {} {:a} while in {} Ring",
-                        if ((ec & 1) > 0) "Page Protection Violation" else "Missing Page",
-                        if ((ec & 8) > 0) " (Reserved bits set in directory entry)" else "",
+                    const what = if ((ec & 1) > 0)
+                        @as([]const u8, "Page Protection Violation") else
+                        @as([]const u8, "Missing Page");
+                    const reserved = if ((ec & 8) > 0)
+                        @as([]const u8, " (Reserved bits set in directory entry)") else
+                        @as([]const u8, "");
+                    const when =
                         if ((ec & 16) > 0)
-                            "Fetching an Instruction From"
+                            @as([]const u8, "Fetching an Instruction From")
                         else
-                            (if ((ec & 2) > 0) "Writing to" else "Reading From"),
-                        putil.cr2(),
-                        if ((ec & 4) > 0) "User" else "Non-User");
+                            (if ((ec & 2) > 0) @as([]const u8, "Writing to") else
+                            @as([]const u8, "Reading From"));
+                    const user =
+                        if ((ec & 4) > 0) @as([]const u8, "User") else
+                            @as([]const u8, "Non-User");
+                    print.format("\n    {}{} While {} {:a} while in {} Ring", .{
+                        what, reserved, when, putil.cr2(), user});
+                    // TODO: Zig Compiler Assertion
+                    // print.format("\n    {}{} While {} {:a} while in {} Ring", .{
+                    //     if ((ec & 1) > 0)
+                    //         @as([]const u8, "Page Protection Violation") else
+                    //         @as([]const u8, "Missing Page"),
+                    //     if ((ec & 8) > 0)
+                    //         @as([]const u8, " (Reserved bits set in directory entry)") else
+                    //         @as([]const u8, ""),
+                    //     if ((ec & 16) > 0)
+                    //         @as([]const u8, "Fetching an Instruction From")
+                    //     else
+                    //         (if ((ec & 2) > 0) @as([]const u8, "Writing to") else
+                    //         @as([]const u8, "Reading From")),
+                    //     putil.cr2(),
+                    //     if ((ec & 4) > 0) @as([]const u8, "User") else
+                    //         @as([]const u8, "Non-User")});
                 }
             }
 
@@ -188,7 +213,7 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                 \\    ESI: {:x}
                 \\    EDI: {:x}
                 \\    CS: {:x} ({})
-                ,
+                , .{
                 interrupt_stack.eip,
                 interrupt_stack.eflags,
                 interrupt_stack.eax,
@@ -201,7 +226,7 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                 interrupt_stack.edi,
                 interrupt_stack.cs,
                 segments.get_name(interrupt_stack.cs / 8),
-            );
+            });
 
             putil.halt();
         }
@@ -216,15 +241,15 @@ fn BaseInterruptHandler(
 
         fn inner_handler(interrupt_stack: *const InterruptStackType) void {
             if (irq) {
-                const irq_number = u32(i - pic.irq_0_7_interrupt_offset);
+                const irq_number = @as(u32, i - pic.irq_0_7_interrupt_offset);
                 pic.silence_irq(irq_number);
                 impl(irq_number, interrupt_stack);
             } else {
-                impl(u32(i), interrupt_stack);
+                impl(@as(u32, i), interrupt_stack);
             }
         }
 
-        pub nakedcc fn handler() noreturn {
+        pub fn handler() callconv(.Naked) noreturn {
             asm volatile ("cli");
             // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
             asm volatile ("pushal");
@@ -335,7 +360,7 @@ pub const pic = struct {
             offset -= 8;
             port = irq_8_15_data_port;
         }
-        putil.out8(port, putil.in8(port) & ~(u8(1) << @intCast(u3, offset)));
+        putil.out8(port, putil.in8(port) & ~(@as(u8, 1) << @intCast(u3, offset)));
         busywork();
     }
 

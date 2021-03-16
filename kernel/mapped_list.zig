@@ -126,29 +126,29 @@ test "MappedList" {
     const nil: ?usize = null;
 
     // Empty
-    equal(usize(0), ml.len());
+    equal(@as(usize, 0), ml.len());
     equal(nil, ml.find(100));
 
     // Push and Pop from Front
     try ml.push_front(1, 2);
-    equal(usize(1), ml.len());
-    equal(usize(2), ml.find(1).?);
-    equal(usize(2), (try ml.pop_front()).?);
-    equal(usize(0), ml.len());
+    equal(@as(usize, 1), ml.len());
+    equal(@as(usize, 2), ml.find(1).?);
+    equal(@as(usize, 2), (try ml.pop_front()).?);
+    equal(@as(usize, 0), ml.len());
 
     // Empty
-    equal(usize(0), ml.len());
+    equal(@as(usize, 0), ml.len());
     equal(nil, ml.find(1));
 
     // Push and Pop from Back
     try ml.push_back(5, 7);
-    equal(usize(1), ml.len());
-    equal(usize(7), ml.find(5).?);
-    equal(usize(7), (try ml.pop_back()).?);
-    equal(usize(0), ml.len());
+    equal(@as(usize, 1), ml.len());
+    equal(@as(usize, 7), ml.find(5).?);
+    equal(@as(usize, 7), (try ml.pop_back()).?);
+    equal(@as(usize, 0), ml.len());
 
     // Empty
-    equal(usize(0), ml.len());
+    equal(@as(usize, 0), ml.len());
     equal(nil, ml.find(5));
 
     // Push and Pop Several Times From Both Directions
@@ -158,37 +158,37 @@ test "MappedList" {
     try ml.push_front(44, 4);
     try ml.push_back(55, 5);
     // 44: 4, 22: 2, 11: 1, 33: 3, 55: 5
-    equal(usize(5), ml.len());
-    equal(usize(1), ml.find(11).?);
-    equal(usize(2), ml.find(22).?);
-    equal(usize(3), ml.find(33).?);
-    equal(usize(4), ml.find(44).?);
-    equal(usize(5), ml.find(55).?);
+    equal(@as(usize, 5), ml.len());
+    equal(@as(usize, 1), ml.find(11).?);
+    equal(@as(usize, 2), ml.find(22).?);
+    equal(@as(usize, 3), ml.find(33).?);
+    equal(@as(usize, 4), ml.find(44).?);
+    equal(@as(usize, 5), ml.find(55).?);
     equal(nil, ml.find(5));
-    equal(usize(4), ml.find_bump_to_front(44).?);
-    equal(usize(5), ml.find_bump_to_back(55).?);
-    equal(usize(4), (try ml.pop_front()).?);
+    equal(@as(usize, 4), ml.find_bump_to_front(44).?);
+    equal(@as(usize, 5), ml.find_bump_to_back(55).?);
+    equal(@as(usize, 4), (try ml.pop_front()).?);
     // 22: 2, 11: 1, 33: 3, 55: 5
-    equal(usize(5), (try ml.pop_back()).?);
+    equal(@as(usize, 5), (try ml.pop_back()).?);
     // 22: 2, 11: 1, 33: 3
-    equal(usize(2), ml.find_bump_to_back(22).?);
+    equal(@as(usize, 2), ml.find_bump_to_back(22).?);
     // 11: 1, 33: 3, 22: 2
     try ml.push_back(66, 6);
     // 11: 1, 33: 3, 22: 2, 66: 6
-    equal(usize(3), ml.find_bump_to_front(33).?);
+    equal(@as(usize, 3), ml.find_bump_to_front(33).?);
     // 33: 3, 11: 1, 22: 2, 66: 6
-    equal(usize(3), ml.find(33).?);
-    equal(usize(4), ml.len());
-    equal(usize(6), (try ml.pop_back()).?);
+    equal(@as(usize, 3), ml.find(33).?);
+    equal(@as(usize, 4), ml.len());
+    equal(@as(usize, 6), (try ml.pop_back()).?);
     // 33: 3, 11: 1, 22: 2
-    equal(usize(2), (try ml.pop_back()).?);
+    equal(@as(usize, 2), (try ml.pop_back()).?);
     // 33: 3, 11: 1
-    equal(usize(1), (try ml.pop_back()).?);
+    equal(@as(usize, 1), (try ml.pop_back()).?);
     // 33: 3
-    equal(usize(3), (try ml.pop_back()).?);
+    equal(@as(usize, 3), (try ml.pop_back()).?);
 
     // Empty
-    equal(usize(0), ml.len());
+    equal(@as(usize, 0), ml.len());
     equal(nil, ml.find(5));
     equal(nil, ml.find(55));
     equal(nil, try ml.pop_back());

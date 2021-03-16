@@ -15,7 +15,7 @@ pub const pmemory = @import("memory.zig");
 pub const util = @import("util.zig");
 pub const pci = @import("pci.zig");
 pub const ata = @import("ata.zig");
-pub const acpi = @import("acpi.zig");
+// pub const acpi = @import("acpi.zig");
 pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
@@ -105,6 +105,9 @@ pub fn initialize(kernel: *Kernel) !void {
     kernel.console.write_impl = console_write;
     kernel.console.read_impl = console_read;
 
+    print.string("1\n");
+    print.string("2\n");
+
     // Setup Basic CPU Utilities
     segments.initialize();
     interrupts.initialize();
@@ -127,7 +130,7 @@ pub fn initialize(kernel: *Kernel) !void {
     ps2.initialize();
     vbe.init(&kernel.memory);
 
-    acpi.initialize();
+    // acpi.initialize();
 
     interrupts.pic.start_ticking(100);
 }

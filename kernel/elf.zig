@@ -123,7 +123,7 @@ const Header = packed struct {
 
     pub fn verify_elf(self: *const Header) Error!void {
         const invalid =
-            !util.memory_compare(self.magic, expected_magic) or
+            !util.memory_compare(self.magic[0..], expected_magic[0..]) or
             !util.valid_enum(Class, self.class) or
             self.class == .Invalid or
             !util.valid_enum(Data, self.data) or
@@ -166,13 +166,14 @@ pub const Object = struct {
 
         // Read Header
         _ = try file.read(util.to_bytes(&object.header));
-        print.format("Header Size: {}\n", usize(@sizeOf(Header)));
+        print.format("Header Size: {}\n", .{@as(usize, @sizeOf(Header))});
         try object.header.verify_executable();
 
-        print.format("Entry: {:a}\n", usize(@sizeOf(Header)));
+        print.format("Entry: {:a}\n", .{@as(usize, @sizeOf(Header))});
 
         // Read Section Headers
-        print.format("Section Header Count: {}\n", object.header.section_header_entry_count);
+        print.format("Section Header Count: {}\n",
+            .{object.header.section_header_entry_count});
         {
             _ = try file.seek(
                 @intCast(isize, object.header.section_header_offset), .FromStart);
@@ -186,14 +187,15 @@ pub const Object = struct {
             }
         }
         for (object.section_headers) |*section_header| {
-            print.format("section: kind: {} offset: {:x} size: {:x}\n",
+            print.format("section: kind: {} offset: {:x} size: {:x}\n", .{
                 section_header.kind,
                 @bitCast(usize, section_header.offset),
-                section_header.size);
+                section_header.size});
         }
 
         // Read Program Headers
-        print.format("Program Header Count: {}\n", object.header.program_header_entry_count);
+        print.format("Program Header Count: {}\n",
+            .{object.header.program_header_entry_count});
         {
             _ = try file.seek(@
                 intCast(isize, object.header.program_header_offset), .FromStart);
@@ -209,11 +211,11 @@ pub const Object = struct {
         var got_load = false;
         for (object.program_headers) |*program_header| {
             print.format("program: kind: {} offset: {:x} " ++
-                "size in file: {:x} size in memory: {:x}\n",
+                "size in file: {:x} size in memory: {:x}\n", .{
                 program_header.kind,
                 @bitCast(usize, program_header.offset),
                 program_header.size_in_file,
-                program_header.size_in_memory);
+                program_header.size_in_memory});
             // Read the Program
             // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {

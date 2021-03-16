@@ -114,28 +114,28 @@ pub fn get_name(index: u32) []const u8 {
 fn set(name: []const u8, index: u8, base: u32, limit: u32,
         access: Access, flags: Flags) u16 {
     names[index] = name;
-    print.debug_format("   - [{}]: \"{}\" ", index, name);
+    print.debug_format("   - [{}]: \"{}\" ", .{index, name});
     if (access.valid) {
-        print.debug_format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ",
+        print.debug_format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ", .{
             base, limit,
-            if (flags.granularity) "b" else "pages",
-            if (flags.pm) "32b" else "16b",
-            @intCast(usize, access.ring_level));
+            if (flags.granularity) @as([]const u8, "b") else @as([]const u8, "pages"),
+            if (flags.pm) @as([]const u8, "32b") else @as([]const u8, "16b"),
+            @intCast(usize, access.ring_level)});
         if (access.no_system_segment) {
             if (access.executable) {
                 print.debug_format(
                     "Code Segment\n" ++
                     "     - Can{} be read by lower rings.\n" ++
-                    "     - Can{} be executed by lower rings\n",
-                    if (access.rw) "" else " NOT",
-                    if (access.dc) "" else " NOT");
+                    "     - Can{} be executed by lower rings\n", .{
+                    if (access.rw) @as([]const u8, "") else @as([]const u8, " NOT"),
+                    if (access.dc) @as([]const u8, "") else @as([]const u8, " NOT")});
             } else {
                 print.debug_format(
                     "Data Segment\n" ++
                     "     - Can{} be written to by lower rings.\n" ++
-                    "     - Grows {}.\n",
-                    if (access.rw) "" else " NOT",
-                    if (access.dc) "down" else "up");
+                    "     - Grows {}.\n", .{
+                    if (access.rw) @as([]const u8, "") else @as([]const u8, " NOT"),
+                    if (access.dc) @as([]const u8, "down") else @as([]const u8, "up")});
             }
         } else {
             print.debug_string("System Segment\n");
@@ -213,11 +213,11 @@ pub fn initialize() void {
     tss_selector = set("Task State", 5, @ptrToInt(&task_state_segment),
         @sizeOf(TaskStateSegment) - 1,
         // TODO: Make This Explicit
-        @bitCast(Access, u8(0xe9)),
-        @bitCast(Flags, u4(0)));
+        @bitCast(Access, @as(u8, 0xe9)),
+        @bitCast(Flags, @as(u4, 0)));
 
     const pointer = Pointer {
-        .limit = @intCast(u16, @sizeOf(@typeOf(table)) - 1),
+        .limit = @intCast(u16, @sizeOf(@TypeOf(table)) - 1),
         .base = @intCast(u32, @ptrToInt(&table)),
     };
     gdt_load(&pointer);

@@ -3,6 +3,8 @@
 // https://en.wikipedia.org/wiki/VESA_BIOS_Extensions
 // https://wiki.osdev.org/VESA_Video_Modes
 
+const std = @import("std");
+
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
@@ -10,6 +12,7 @@ const putil = @import("util.zig");
 const kutil = @import("../util.zig");
 const print = @import("../print.zig");
 const kmemory = @import("../memory.zig");
+const Range = kmemory.Range;
 const font = @import("../font.zig");
 
 const Info = packed struct {
@@ -193,7 +196,7 @@ fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
 fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
     var xi: u32 = 0;
     var yi: u32 = 0;
-    const pixels = @bytesToSlice(u32, data[0..]);
+    const pixels = std.mem.bytesAsSlice(u32, data);
     for (pixels) |px| {
         draw_pixel_bgr(x + xi, y + yi, px);
         xi += 1;
@@ -210,8 +213,8 @@ var video_memory: []u8 = undefined;
 var bytes_per_pixel: u32 = undefined;
 
 fn fill_buffer(color: u32) void {
-    const color64 = (u64(color) << 32) + color;
-    const b = @bytesToSlice(u64, buffer);
+    const color64 = (@as(u64, color) << 32) + color;
+    const b = Range.from_bytes(buffer).to_slice(u64);
     for (b) |*p| {
         p.* = color64;
     }
@@ -222,8 +225,8 @@ fn fill_buffer(color: u32) void {
 // some or CPU features like SSE.
 pub fn flush_buffer() void {
     if (buffer_clean) return;
-    const b = @bytesToSlice(u64, buffer);
-    const vm = @bytesToSlice(u64, video_memory);
+    const b = Range.from_bytes(buffer).to_slice(u64);
+    const vm  = Range.from_bytes(video_memory).to_slice(u64);
     while ((putil.in8(0x03da) & 0x8) != 0) {}
     while ((putil.in8(0x03da) & 0x8) == 0) {}
     for (vm) |*p, i| {
@@ -238,11 +241,11 @@ pub fn init(memory: *kmemory.Memory) void {
 
         info = @ptrCast(*Info, &vbe.control_info[0]);
         if (info.get_version()) |version| {
-            print.format("{}\n", version);
+            print.format("{}\n", .{version});
         }
-        print.format("{}\n", info.*);
+        print.format("{}\n", .{info.*});
         mode = @ptrCast(*Mode, &vbe.mode_info[0]);
-        print.format("{}\n", mode.*);
+        print.format("{}\n", .{mode.*});
 
         if (mode.bpp != 32) {
             @panic("bpp is not 32bit");
@@ -250,11 +253,11 @@ pub fn init(memory: *kmemory.Memory) void {
         bytes_per_pixel = mode.bpp / 8;
 
         const video_memory_size =
-            @intCast(usize, u64(mode.width) * u64(mode.height) * bytes_per_pixel);
+            @intCast(usize, @as(u64, mode.width) * @as(u64, mode.height) * bytes_per_pixel);
 
         // TODO: Zig Bug? If catch is taken away Zig 0.5 fails to reject not
         // handling the error return. LLVM catches the mistake instead.
-        print.format("vms: {}\n", video_memory_size);
+        print.format("vms: {}\n", .{video_memory_size});
         buffer = mem.big_alloc.alloc_array(u8, video_memory_size) catch {
             @panic("Couldn't alloc VBE Buffer");
         };
@@ -273,7 +276,8 @@ pub fn init(memory: *kmemory.Memory) void {
             const h = 170;
             const x = mode.width - w - 10;
             const y = mode.height - h - 10;
-            draw_raw_image(@embedFile("../../misc/dragon.img"), w, x, y);
+            const image align(@alignOf(u64)) = @embedFile("../../misc/dragon.img");
+            draw_raw_image(image, w, x, y);
             _ = draw_string(x, y, " Georgios ", 0x181a1b);
             flush_buffer();
         }

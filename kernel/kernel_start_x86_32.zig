@@ -101,7 +101,7 @@ pub export var temp_stack: [util.Ki(4)]u8
 export var stack: [util.Ki(16)]u8 align(16) linksection(".bss") = undefined;
 
 /// Entry Point
-export nakedcc fn kernel_start() linksection(".low_text") noreturn {
+export fn kernel_start() linksection(".low_text") callconv(.Naked) noreturn {
     @setRuntimeSafety(false);
 
     // Save location of Multiboot2 Info
@@ -196,7 +196,7 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     // Set the start of what the memory system can work with.
     low_kernel_range_start_available = low_page_tables_end;
 
-    // Get Slice for the Intitial Page Tables
+    // Get Slice for the Initial Page Tables
     low_kernel_page_tables.ptr =
         @intToPtr([*]u32, @intCast(usize, page_tables_start));
     low_kernel_page_tables.len = pages_per_table * low_kernel_page_table_count;
@@ -235,6 +235,24 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
         \\ mov %%cr0, %%eax
         \\ or $0x80000001, %%eax
         \\ mov %%eax, %%cr0
+    :::
+        "eax"
+    );
+
+    // Zig 0.6 will try to use SSE in normal generated code, at least while
+    // setting an array to undefined in debug mode. Enable SSE to allow that to
+    // work.
+    // This also allows us to explicitly take advantage of it.
+    // Based on the initialization code in https://wiki.osdev.org/SSE
+    asm volatile (
+        \\ mov %%cr0, %%eax
+        \\ and $0xFFFB, %%ax
+        \\ or $0x0002, %%ax
+        \\ mov %%eax, %%cr0
+
+        \\ mov %%cr4, %%eax
+        \\ or $0x0600, %%ax
+        \\ mov %%eax, %%cr4
     :::
         "eax"
     );

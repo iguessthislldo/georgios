@@ -214,37 +214,37 @@ pub const Header = packed struct {
             \\       - prog_if: {:x}
             \\       - subclass: {:x}
             \\       - class:
-            ,
+            , .{
             self.vendor_id,
             self.device_id,
             self.command,
             self.status,
             self.revision_id,
             self.prog_if,
-            self.subclass);
+            self.subclass});
         if (self.get_class()) |class| {
-            try fprint.format(file, " {}", class.to_string());
+            try fprint.format(file, " {}", .{class.to_string()});
         } else {
-            try fprint.format(file, " Unknown Class {:x}", self.class);
+            try fprint.format(file, " Unknown Class {:x}", .{self.class});
         }
         try fprint.format(file,
             \\
             \\       - cache_line_size: {:x}
             \\       - latency_timer: {:x}
             \\       - header_type:
-            ,
+            , .{
             self.cache_line_size,
-            self.latency_timer);
+            self.latency_timer});
         if (self.get_header_type()) |header_type| {
-            try fprint.format(file, " {}", header_type.to_string());
+            try fprint.format(file, " {}", .{header_type.to_string()});
         } else {
-            try fprint.format(file, " Unknown Value {:x}", self.header_type);
+            try fprint.format(file, " Unknown Value {:x}", .{self.header_type});
         }
         try fprint.format(file,
             \\
             \\       - bist: {:x}
             \\
-            , self.bist);
+            , .{self.bist});
     }
 
     pub fn get(location: Location) Header {
@@ -269,13 +269,13 @@ pub const NormalHeader = packed struct {
             \\     - bar4: {:x}
             \\     - bar5: {:x}
             \\
-            ,
+            , .{
             self.bars[0],
             self.bars[1],
             self.bars[2],
             self.bars[3],
             self.bars[4],
-            self.bars[5]);
+            self.bars[5]});
     }
 
     pub fn get(location: Location) NormalHeader {
@@ -291,7 +291,7 @@ pub const NormalHeader = packed struct {
 fn check_function(kernel: *Kernel, location: Location, header: *const Header) void {
     if (header.is_invalid()) return;
     print.format("   - Bus {}, Device {}, Function {}\n",
-        location.bus, location.device, location.function);
+        .{location.bus, location.device, location.function});
     _ = header.print(print.get_console_file().?) catch {};
     if (header.get_class()) |class| {
         if (class == .BridgeDevice and header.subclass == 0x04) {

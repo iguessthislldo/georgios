@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const std = @import("std");
 
 pub const Error = error {
     OutOfBounds,
@@ -36,16 +37,15 @@ pub inline fn padding(value: usize, align_by: usize) usize {
 }
 
 pub inline fn div_round_up(comptime Type: type, n: Type, d: Type) Type {
-    return n / d + (if (n % d != 0) Type(1) else Type(0));
+    return n / d + (if (n % d != 0) @as(Type, 1) else @as(Type, 0));
 }
 
 test "div_round_up" {
-    const std = @import("std");
-    std.testing.expectEqual(u8(0), div_round_up(u8, 0, 2));
-    std.testing.expectEqual(u8(1), div_round_up(u8, 1, 2));
-    std.testing.expectEqual(u8(1), div_round_up(u8, 2, 2));
-    std.testing.expectEqual(u8(2), div_round_up(u8, 3, 2));
-    std.testing.expectEqual(u8(2), div_round_up(u8, 4, 2));
+    std.testing.expectEqual(@as(u8, 0), div_round_up(u8, 0, 2));
+    std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 1, 2));
+    std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 2, 2));
+    std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 3, 2));
+    std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 4, 2));
 }
 
 pub fn isspace(c: u8) bool {
@@ -80,7 +80,7 @@ pub fn zero_init(comptime Type: type) Type {
             }
             return struct_var;
         },
-        else => CastThrough = @IntType(false, @sizeOf(Type) * 8),
+        else => CastThrough = std.meta.IntType(false, @sizeOf(Type) * 8),
     }
     return @bitCast(Type, @intCast(CastThrough, 0));
 }
@@ -131,7 +131,6 @@ pub fn valid_enum(comptime EnumType: type, value: EnumType) bool {
 }
 
 test "int_to_enum" {
-    const std = @import("std");
     const assert = std.debug.assert;
 
     const Abc = enum(u8) {
@@ -156,12 +155,12 @@ test "int_to_enum" {
     assert(int_to_enum(Abc, x) == null);
 
     // valid_enum
-    assert(valid_enum(Abc, @intToEnum(Abc, u8(0))));
+    assert(valid_enum(Abc, @intToEnum(Abc, @as(u8, 0))));
     // TODO: This is a workaround bitcast of a const Enum causing a compiler assert
     // Looks like it's related to https://github.com/ziglang/zig/issues/1036
     var invalid_enum_value: u8 = 4;
     assert(!valid_enum(Abc, @ptrCast(*const Abc, &invalid_enum_value).*));
-    // assert(valid_enum(Abc, @bitCast(Abc, u8(4))));
+    // assert(valid_enum(Abc, @bitCast(Abc, @as(u8, 4))));
 }
 
 pub fn enum_name(comptime EnumType: type, value: EnumType) ?[]const u8 {
@@ -226,11 +225,10 @@ pub fn max_of_int(comptime T: type) T {
     return if (Traits.Int.is_signed)
         (1 << (Traits.Int.bits - 1)) - 1
     else
-        T(0) -% 1;
+        @as(T, 0) -% 1;
 }
 
 test "max_of_int" {
-    const std = @import("std");
     std.testing.expect(max_of_int(u16) == 0xffff);
     std.testing.expect(max_of_int(i16) == 0x7fff);
 }
@@ -253,7 +251,6 @@ pub inline fn add_isize_to_usize(a: usize, b: isize) ?usize {
 }
 
 test "add_signed_to_unsigned" {
-    const std = @import("std");
     std.testing.expect(add_isize_to_usize(0, 0).? == 0);
     std.testing.expect(add_isize_to_usize(0, 10).? == 10);
     std.testing.expect(add_isize_to_usize(0, -10) == null);
@@ -277,7 +274,6 @@ pub fn int_log2(comptime Type: type, value: Type) Type {
 }
 
 fn test_int_log2(value: usize, expected: usize) void {
-    const std = @import("std");
     std.testing.expectEqual(expected, int_log2(usize, value));
 }
 
@@ -292,23 +288,22 @@ test "int_log2" {
     test_int_log2(128, 7);
 }
 
-pub fn int_bit_size(comptime IntType: type) usize {
-    return @typeInfo(IntType).Int.bits;
+pub fn int_bit_size(comptime Type: type) usize {
+    return @typeInfo(Type).Int.bits;
 }
 
-pub fn IntLog2Type(comptime IntType: type) type {
+pub fn IntLog2Type(comptime Type: type) type {
     return @Type(builtin.TypeInfo{.Int = builtin.TypeInfo.Int{
         .is_signed = false,
-        .bits = int_log2(usize, int_bit_size(IntType)),
+        .bits = int_log2(usize, int_bit_size(Type)),
     }});
 }
 
-fn test_IntLog2Type(comptime IntType: type, expected: usize) void {
-    const std = @import("std");
-    std.testing.expectEqual(expected, int_bit_size(IntLog2Type(IntType)));
+fn test_IntLog2Type(comptime Type: type, expected: usize) void {
+    std.testing.expectEqual(expected, int_bit_size(IntLog2Type(Type)));
 }
 
-test "Log2IntType" {
+test "Log2Int" {
     test_IntLog2Type(u2, 1);
     test_IntLog2Type(u32, 5);
     test_IntLog2Type(u64, 6);
@@ -316,15 +311,14 @@ test "Log2IntType" {
 
 pub const UsizeLog2Type = IntLog2Type(usize);
 
-pub fn select_nibble(comptime IntType: type, value: IntType, which: usize) u4 {
+pub fn select_nibble(comptime Type: type, value: Type, which: usize) u4 {
     return @intCast(u4,
-        (value >> (@intCast(IntLog2Type(IntType), which) * 4)) & 0xf);
+        (value >> (@intCast(IntLog2Type(Type), which) * 4)) & 0xf);
 }
 
-fn test_select_nibble(comptime IntType: type,
-        value: IntType, which: usize, expected: u4) void {
-    const std = @import("std");
-    std.testing.expectEqual(expected, select_nibble(IntType, value, which));
+fn test_select_nibble(comptime Type: type,
+        value: Type, which: usize, expected: u4) void {
+    std.testing.expectEqual(expected, select_nibble(Type, value, which));
 }
 
 test "select_nibble" {
@@ -343,6 +337,10 @@ pub fn PackedArray(comptime T: type, count: usize) type {
         builtin.TypeId.Bool => u1,
         builtin.TypeId.Enum => |enum_type| enum_type.tag_type,
         else => @compileError("Invalid Type"),
+    };
+    comptime const is_enum = switch (Traits) {
+        builtin.TypeId.Enum => true,
+        else => false,
     };
 
     return struct {
@@ -369,8 +367,13 @@ pub fn PackedArray(comptime T: type, count: usize) type {
             const array_index = index / values_per_word;
             const shift = @intCast(WordShiftType,
                 (index % values_per_word) * type_bit_size);
-            return @bitCast(Type, @intCast(InnerType,
-                (self.contents[array_index] >> shift) & mask));
+            const inner_value = @intCast(InnerType,
+                (self.contents[array_index] >> shift) & mask);
+            if (is_enum) {
+                return @intToEnum(Type, inner_value);
+            } else {
+                return @bitCast(Type, inner_value);
+            }
         }
 
         fn set(self: *Self, index: usize, value: Type) Error!void {
@@ -394,8 +397,6 @@ pub fn PackedArray(comptime T: type, count: usize) type {
 }
 
 fn test_PackedBoolArray(comptime size: usize) !void {
-    const std = @import("std");
-
     var pa: PackedArray(bool, size) = undefined;
     pa.reset();
 
@@ -428,8 +429,6 @@ fn test_PackedBoolArray(comptime size: usize) !void {
 }
 
 test "PackedArray" {
-    const std = @import("std");
-
     try test_PackedBoolArray(5);
     try test_PackedBoolArray(8);
     try test_PackedBoolArray(13);
@@ -440,12 +439,12 @@ test "PackedArray" {
         var pa: PackedArray(u7, 9) = undefined;
         pa.reset();
         try pa.set(0, 13);
-        std.testing.expectEqual(u7(13), try pa.get(0));
+        std.testing.expectEqual(@as(u7, 13), try pa.get(0));
         try pa.set(1, 12);
-        std.testing.expectEqual(u7(12), try pa.get(1));
-        std.testing.expectEqual(u7(13), try pa.get(0));
+        std.testing.expectEqual(@as(u7, 12), try pa.get(1));
+        std.testing.expectEqual(@as(u7, 13), try pa.get(0));
         try pa.set(8, 47);
-        std.testing.expectEqual(u7(47), try pa.get(8));
+        std.testing.expectEqual(@as(u7, 47), try pa.get(8));
     }
 
     // Enum Type
@@ -478,19 +477,18 @@ pub fn pow2_round_up(comptime Type: type, value: Type) Type {
 }
 
 test "pow2_round_up" {
-    const std = @import("std");
-    std.testing.expectEqual(u8(0), pow2_round_up(u8, 0));
-    std.testing.expectEqual(u8(1), pow2_round_up(u8, 1));
-    std.testing.expectEqual(u8(2), pow2_round_up(u8, 2));
-    std.testing.expectEqual(u8(4), pow2_round_up(u8, 3));
-    std.testing.expectEqual(u8(4), pow2_round_up(u8, 4));
-    std.testing.expectEqual(u8(8), pow2_round_up(u8, 5));
-    std.testing.expectEqual(u8(8), pow2_round_up(u8, 6));
-    std.testing.expectEqual(u8(8), pow2_round_up(u8, 7));
-    std.testing.expectEqual(u8(8), pow2_round_up(u8, 8));
-    std.testing.expectEqual(u8(16), pow2_round_up(u8, 9));
-    std.testing.expectEqual(u8(16), pow2_round_up(u8, 16));
-    std.testing.expectEqual(u8(32), pow2_round_up(u8, 17));
+    std.testing.expectEqual(@as(u8, 0), pow2_round_up(u8, 0));
+    std.testing.expectEqual(@as(u8, 1), pow2_round_up(u8, 1));
+    std.testing.expectEqual(@as(u8, 2), pow2_round_up(u8, 2));
+    std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 3));
+    std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 4));
+    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 5));
+    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 6));
+    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 7));
+    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 8));
+    std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 9));
+    std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 16));
+    std.testing.expectEqual(@as(u8, 32), pow2_round_up(u8, 17));
 }
 
 pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
@@ -501,7 +499,7 @@ pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
 }
 
 pub inline fn to_bytes(value: var) []u8 {
-    comptime const Type = @typeOf(value);
+    comptime const Type = @TypeOf(value);
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
@@ -546,28 +544,27 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
 }
 
 test "CircularBuffer" {
-    const std = @import("std");
     var buffer = CircularBuffer(usize, 4){};
     const nil: ?usize = null;
 
     // Empty
-    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
 
     // Push Some Values
     buffer.push(1);
-    std.testing.expectEqual(usize(1), buffer.len);
+    std.testing.expectEqual(@as(usize, 1), buffer.len);
     buffer.push(2);
     buffer.push(3);
-    std.testing.expectEqual(usize(3), buffer.len);
+    std.testing.expectEqual(@as(usize, 3), buffer.len);
 
     // Pop The Values
-    std.testing.expectEqual(usize(1), buffer.pop().?);
-    std.testing.expectEqual(usize(2), buffer.pop().?);
-    std.testing.expectEqual(usize(3), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
 
     // It's empty again
-    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
 
     // Fill It
@@ -576,15 +573,15 @@ test "CircularBuffer" {
     buffer.push(3);
     buffer.push(2);
     buffer.push(1);
-    std.testing.expectEqual(usize(4), buffer.len);
+    std.testing.expectEqual(@as(usize, 4), buffer.len);
 
     // Pop The Values
-    std.testing.expectEqual(usize(5), buffer.pop().?);
-    std.testing.expectEqual(usize(4), buffer.pop().?);
-    std.testing.expectEqual(usize(3), buffer.pop().?);
-    std.testing.expectEqual(usize(2), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 4), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
 
     // It's empty yet again
-    std.testing.expectEqual(usize(0), buffer.len);
+    std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
 }

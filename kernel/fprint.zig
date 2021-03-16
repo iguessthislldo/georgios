@@ -7,8 +7,7 @@ const FileError = io.FileError;
 
 /// Print a char
 pub fn char(file: *File, ch: u8) FileError!void {
-    const str = [_]u8{ch};
-    _ = try file.write(str);
+    _ = try file.write(([_]u8{ch})[0..]);
 }
 
 /// Print a string.
@@ -119,7 +118,7 @@ pub fn address(file: *File, value: usize) FileError!void {
         ptr.* = nibble_char(util.select_nibble(usize, value, nibble_index));
     }
 
-    try string(file, buffer);
+    try string(file, buffer[0..]);
 }
 
 test "address" {
@@ -136,9 +135,9 @@ test "address" {
     const length = util.string_length(file_buffer[0..]);
 
     const expected = if (@sizeOf(usize) == 4)
-        "@7BC75E39"
+        "@7bc75e39"
     else if (@sizeOf(usize) == 8)
-        "@000000007BC75E39"
+        "@000000007bc75e39"
     else
         @compileError("usize size missing in this test");
     std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
@@ -164,7 +163,7 @@ pub fn boolean(file: *File, value: bool) FileError!void {
 
 /// Try to guess how to print a value based on its type.
 pub fn any(file: *File, value: var) FileError!void {
-    const Type = @typeOf(value);
+    const Type = @TypeOf(value);
     const Traits = @typeInfo(Type);
     var invalid: bool = false;
     switch (Traits) {
@@ -183,11 +182,11 @@ pub fn any(file: *File, value: var) FileError!void {
         builtin.TypeId.Array => |array_type| {
             const t = array_type.child;
             if (t == u8) {
-                try string(file, value);
+                try string(file, value[0..]);
             } else {
                 comptime var i: usize = 0;
                 inline while (i < array_type.len) {
-                    try format(file, "[{}] = {},", i, value[i]);
+                    try format(file, "[{}] = {},", .{i, value[i]});
                     i += 1;
                 }
             }
@@ -201,7 +200,8 @@ pub fn any(file: *File, value: var) FileError!void {
                     try cstring(file, value);
                 }
             } else {
-                @compileError("Can't Print Pointer to " ++ @typeName(t));
+                try any(file, value.*);
+                // @compileError("Can't Print Pointer to " ++ @typeName(t));
             }
         },
         builtin.TypeId.Struct => |struct_type| {
@@ -243,7 +243,7 @@ pub fn any(file: *File, value: var) FileError!void {
 ///
 /// Escapes:
 ///     `{{` is replaced with `{` and `}}` is replaced by `}`.
-pub fn format(file: *File, comptime fmtstr: []const u8, args: ...) FileError!void {
+pub fn format(file: *File, comptime fmtstr: []const u8, args: var) FileError!void {
     const State = enum {
         NoFormat, // Outside Braces
         Format, // Inside Braces

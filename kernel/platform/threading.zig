@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const kthreading = @import("../threading.zig");
 const Thread = kthreading.Thread;
 const Process = kthreading.Process;
@@ -26,17 +28,23 @@ pub const ThreadImpl = struct {
     }
 
     fn push_to_context(self: *ThreadImpl, value: var) void {
-        const Type = @typeOf(value);
-        self.context -= @sizeOf(Type);
-        @intToPtr(*Type, self.context).* = value;
+        const Type = @TypeOf(value);
+        const size = @sizeOf(Type);
+        self.context -= size;
+        _ = kutil.memory_copy_truncate(
+            @intToPtr([*]u8, self.context)[0..size], std.mem.asBytes(&value));
     }
 
     fn pop_from_context(self: *ThreadImpl, comptime Type: type) Type {
-        defer self.context += @sizeOf(Type);
-        return @intToPtr(*Type, self.context).*;
+        const size = @sizeOf(Type);
+        var value: Type = undefined;
+        _ = kutil.memory_copy_truncate(
+            std.mem.asBytes(&value), @intToPtr([*]const u8, self.context)[0..size]);
+        self.context += size;
+        return value;
     }
 
-    nakedcc fn return_to() noreturn {
+    fn return_to() callconv(.Naked) noreturn {
         asm volatile (
             \\popal
             \\iret

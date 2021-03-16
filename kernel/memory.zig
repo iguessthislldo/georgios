@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const util = @import("util.zig");
 const print = @import("print.zig");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
@@ -16,6 +18,10 @@ pub const MemoryError = AllocError || FreeError;
 pub const Range = struct {
     start: usize = 0,
     size: usize = 0,
+
+    pub fn from_bytes(bytes: []const u8) Range {
+        return .{.start = @ptrToInt(bytes.ptr), .size = bytes.len};
+    }
 
     pub fn end(self: *const Range) usize {
         return self.start + self.size;
@@ -79,52 +85,52 @@ pub const Allocator = struct {
     free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
-        if (alloc_debug) print.format(
+        if (alloc_debug) print.string(
             "Allocator.alloc: " ++ @typeName(Type) ++ "\n");
         const rv = @ptrCast(*Type, @alignCast(
             @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type))).ptr));
         if (alloc_debug) print.format(
-            "Allocator.alloc: " ++ @typeName(Type) ++ ": {:a}\n", @ptrToInt(rv));
+            "Allocator.alloc: " ++ @typeName(Type) ++ ": {:a}\n", .{@ptrToInt(rv)});
         return rv;
     }
 
     pub fn free(self: *Allocator, value: var) FreeError!void {
         const bytes = util.to_bytes(value);
-        if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@typeOf(value)) ++
-            ": {:a}\n", @ptrToInt(bytes.ptr));
+        if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@TypeOf(value)) ++
+            ": {:a}\n", .{@ptrToInt(bytes.ptr)});
         try self.free_impl(self, bytes);
     }
 
     pub fn alloc_array(
             self: *Allocator, comptime Type: type, count: usize) AllocError![]Type {
         if (alloc_debug) print.format(
-            "Allocator.alloc_array: [{}]" ++ @typeName(Type) ++ "\n", count);
+            "Allocator.alloc_array: [{}]" ++ @typeName(Type) ++ "\n", .{count});
         const rv = @ptrCast([*]Type, @alignCast(@alignOf(Type),
             (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
         if (alloc_debug) print.format("Allocator.alloc_array: [{}]" ++ @typeName(Type) ++
-            ": {:a}\n", count, @ptrToInt(rv.ptr));
+            ": {:a}\n", .{count, @ptrToInt(rv.ptr)});
         return rv;
     }
 
     pub fn free_array(self: *Allocator, array: var) FreeError!void {
-        const traits = @typeInfo(@typeOf(array)).Pointer;
+        const traits = @typeInfo(@TypeOf(array)).Pointer;
         if (alloc_debug) print.format(
             "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
-            array.len, @ptrToInt(array.ptr));
-        try self.free_impl(self, @sliceToBytes(array));
+            .{array.len, @ptrToInt(array.ptr)});
+        try self.free_impl(self, std.mem.sliceAsBytes(array));
     }
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
-        if (alloc_debug) print.format("Allocator.alloc_range: {}\n", size);
+        if (alloc_debug) print.format("Allocator.alloc_range: {}\n", .{size});
         const rv = Range{
             .start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
-        if (alloc_debug) print.format("Allocator.alloc_range: {}: {:a}\n", size, rv.start);
+        if (alloc_debug) print.format("Allocator.alloc_range: {}: {:a}\n", .{size, rv.start});
         return rv;
     }
 
     pub fn free_range(self: *Allocator, range: Range) FreeError!void {
         if (alloc_debug) print.format(
-            "Allocator.free_range: {}: {:a}\n", range.size, range.start);
+            "Allocator.free_range: {}: {:a}\n", .{range.size, range.start});
         try self.free_impl(self, range.to_slice(u8));
     }
 };
@@ -132,7 +138,6 @@ pub const Allocator = struct {
 pub const UnitTestAllocator = struct {
     const Self = @This();
 
-    const std = @import("std");
     const Impl = std.heap.ArenaAllocator;
 
     allocator: Allocator = undefined,
@@ -140,14 +145,14 @@ pub const UnitTestAllocator = struct {
     allocated: usize = undefined,
 
     pub fn initialize(self: *Self) void {
-        self.impl = Impl.init(std.heap.direct_allocator);
+        self.impl = Impl.init(std.heap.page_allocator);
         self.allocator.alloc_impl = Self.alloc;
         self.allocator.free_impl = Self.free;
         self.allocated = 0;
     }
 
     pub fn done(self: *Self) void {
-        std.testing.expectEqual(usize(0), self.allocated);
+        std.testing.expectEqual(@as(usize, 0), self.allocated);
         self.impl.deinit();
     }
 
@@ -191,7 +196,7 @@ pub const Memory = struct {
             \\   - Size of kernel is {} B ({} KiB)
             \\   - Frame Size: {} B ({} KiB)
             \\
-            ,
+            , .{
             platform.kernel_real_start(),
             platform.kernel_virtual_start(),
             platform.kernel_real_end(),
@@ -199,7 +204,7 @@ pub const Memory = struct {
             platform.kernel_size(),
             platform.kernel_size() >> 10,
             platform.frame_size,
-            platform.frame_size >> 10);
+            platform.frame_size >> 10});
 
         // Process RealMemoryMap
         if (map.invalid()) {
@@ -208,7 +213,7 @@ pub const Memory = struct {
         print.debug_string("   - Frame Groups:\n");
         for (map.frame_groups[0..map.frame_group_count]) |*i| {
             print.debug_format("     - {} Frames starting at {:a} \n",
-                i.frame_count, i.start);
+                .{i.frame_count, i.start});
         }
 
         // Initialize Platform Implementation
@@ -217,13 +222,14 @@ pub const Memory = struct {
 
         // List Memory
         const total_memory: usize = map.total_frame_count * platform.frame_size;
+        const indent = if (print.debug_print) "   - " else "";
         print.format(
-            "{}Total Available Memory: {} B ({} KiB/{} MiB/{} GiB)\n",
-            if (print.debug_print) "   - " else "",
+            "{}Total Available Memory: {} B ({} KiB/{} MiB/{} GiB)\n", .{
+            indent,
             total_memory,
             total_memory >> 10,
             total_memory >> 20,
-            total_memory >> 30);
+            total_memory >> 30});
 
         self.small_alloc_impl = try self.big_alloc.alloc(SmallAllocImplType);
         self.small_alloc_impl.initialize(@ptrToInt(try self.big_alloc.alloc([small_alloc_size]u8)));

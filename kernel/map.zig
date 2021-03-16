@@ -232,31 +232,31 @@ test "Map" {
     const niln: ?*UsizeUsizeMap.Node = null;
 
     // Empty
-    equal(usize(0), map.len);
+    equal(@as(usize, 0), map.len);
     equal(nil, map.find(45));
 
     // Insert Some Values
     _ = try map.insert(4, 65);
-    equal(usize(1), map.len);
+    equal(@as(usize, 1), map.len);
     _ = try map.insert(1, 44);
     _ = try map.insert(10, 12345);
     _ = try map.insert(23, 5678);
     _ = try map.insert(7, 53);
-    equal(usize(5), map.len);
+    equal(@as(usize, 5), map.len);
 
     // Find Them
-    equal(usize(12345), map.find(10).?);
-    equal(usize(44), map.find(1).?);
-    equal(usize(5678), map.find(23).?);
-    equal(usize(65), map.find(4).?);
-    equal(usize(53), map.find(7).?);
+    equal(@as(usize, 12345), map.find(10).?);
+    equal(@as(usize, 44), map.find(1).?);
+    equal(@as(usize, 5678), map.find(23).?);
+    equal(@as(usize, 65), map.find(4).?);
+    equal(@as(usize, 53), map.find(7).?);
 
     var it = map.iterate();
-    equal(usize(1), it.next().?.key);
-    equal(usize(4), it.next().?.key);
-    equal(usize(7), it.next().?.key);
-    equal(usize(10), it.next().?.key);
-    equal(usize(23), it.next().?.key);
+    equal(@as(usize, 1), it.next().?.key);
+    equal(@as(usize, 4), it.next().?.key);
+    equal(@as(usize, 7), it.next().?.key);
+    equal(@as(usize, 10), it.next().?.key);
+    equal(@as(usize, 23), it.next().?.key);
     equal(niln, it.next());
 
     // Try to Find Non-Existent Key
@@ -265,15 +265,15 @@ test "Map" {
 
     // Remove Node with Two Children
     equal(true, try map.remove(10));
-    equal(usize(4), map.len);
-    equal(usize(4), map.find_node(7).?.parent.?.key);
+    equal(@as(usize, 4), map.len);
+    equal(@as(usize, 4), map.find_node(7).?.parent.?.key);
 
     // Remove the Rest
     equal(true, try map.remove(1));
     equal(true, try map.remove(23));
     equal(true, try map.remove(4));
     equal(true, try map.remove(7));
-    equal(usize(0), map.len);
+    equal(@as(usize, 0), map.len);
 
     // Try to Find Keys That Once Existed
     equal(nil, map.find(1));

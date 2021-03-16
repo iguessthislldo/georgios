@@ -126,7 +126,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         fn level_block_count(level: usize) usize {
-            return (usize(1) << @truncate(util.UsizeLog2Type, level)) - 1;
+            return (@as(usize, 1) << @truncate(util.UsizeLog2Type, level)) - 1;
         }
 
         fn level_to_block_size(level: usize) usize {
@@ -283,7 +283,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                     print.format(
                         "Error: BuddyAllocator.free will return InvalidFree for {:a} " ++
                         "size {} because its block at level {} index {} has status {}\n",
-                        address, value.len, level, index, status);
+                        .{address, value.len, level, index, status});
                 }
             }
 
@@ -345,8 +345,8 @@ test "BuddyAllocator" {
 
     const ptr_size = util.int_bit_size(usize);
     const free_pointer_size: usize = switch (ptr_size) {
-        32 => usize(8),
-        64 => usize(16),
+        32 => @as(usize, 8),
+        64 => @as(usize, 16),
         else => unreachable,
     };
     std.testing.expectEqual(free_pointer_size, @sizeOf(?FreeBlock.Ptr));
@@ -355,8 +355,8 @@ test "BuddyAllocator" {
     const size: usize = 128;
     const ABuddyAllocator = BuddyAllocator(size);
     const expected_level_count: usize = switch (ptr_size) {
-        32 => usize(4),
-        64 => usize(3),
+        32 => @as(usize, 4),
+        64 => @as(usize, 3),
         else => unreachable,
     };
     std.testing.expectEqual(
@@ -372,9 +372,9 @@ test "BuddyAllocator" {
     defer al_alloc.done();
     var al = AllocList{.alloc = &al_alloc.allocator};
 
-    try test_helper(a, &al, usize(32), u8(0x01));
-    try test_helper(a, &al, usize(32), u8(0x04));
-    try test_helper(a, &al, usize(64), u8(0xff));
+    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x01));
+    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x04));
+    try test_helper(a, &al, @as(usize, 64), @as(u8, 0xff));
     std.testing.expectEqualSlices(u8,
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
@@ -386,8 +386,8 @@ test "BuddyAllocator" {
         "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         m[0..]);
     try a.free_array((try al.pop_front()).?);
-    try test_helper(a, &al, usize(32), u8(0x88));
-    try test_helper(a, &al, usize(32), u8(0x77));
+    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x88));
+    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x77));
     std.testing.expectEqualSlices(u8,
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++

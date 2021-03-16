@@ -12,7 +12,7 @@ const s_sources = [_][]const u8 {
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
-    var arena_alloc = std.heap.ArenaAllocator.init(std.heap.direct_allocator);
+    var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const alloc = &arena_alloc.allocator;
 
     const build_mode = b.standardReleaseOptions();
@@ -26,19 +26,17 @@ pub fn build(b: *std.build.Builder) void {
     // TODO: Make Controllable
     const zig_arch = builtin.Arch.i386;
     const georgios_arch = "x86_32";
-    const target = std.build.Target {
-        .Cross = std.build.CrossTarget{
-            .arch = .i386,
-            .os = .freestanding,
-            .abi = .gnu,
-        },
+    const target = std.zig.CrossTarget{
+        .cpu_arch = .i386,
+        .os_tag = .freestanding,
+        .abi = .gnu,
     };
 
     // Kernel
     const kernel = b.addExecutable("kernel.elf",
         k_path ++ "kernel_start_" ++ georgios_arch ++ ".zig");
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
-    kernel.setTheTarget(target);
+    kernel.setTarget(target);
     kernel.setBuildMode(build_mode);
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
@@ -47,9 +45,9 @@ pub fn build(b: *std.build.Builder) void {
         kernel.addAssemblyFile(s_source);
     }
     // ACPICA
-    {
+    if (false) { // TODO: Disabled for now
         var acpica = b.addObject("acpica", null);
-        acpica.setTheTarget(target);
+        acpica.setTarget(target);
         const components = [_][]const u8 {
             "dispatcher",
             "events",
@@ -65,7 +63,7 @@ pub fn build(b: *std.build.Builder) void {
         const source_path = acpica_path ++ "acpica/source/";
 
         // Configure Source
-        var configure_step = b.addSystemCommand([_][]const u8{
+        var configure_step = b.addSystemCommand(&[_][]const u8{
             acpica_path ++ "prepare_source.py", acpica_path});
         acpica.step.dependOn(&configure_step.step);
 
@@ -79,15 +77,15 @@ pub fn build(b: *std.build.Builder) void {
         // Add Sources
         for (components) |component| {
             const component_path = std.fs.path.join(alloc,
-                [_][]const u8{source_path, "components", component}) catch unreachable;
+                &[_][]const u8{source_path, "components", component}) catch unreachable;
             var walker = std.fs.walkPath(alloc, component_path) catch unreachable;
             var i = walker.next() catch unreachable;
             while (i != null) {
                 const path = i.?.path;
                 if (std.mem.endsWith(u8, path, ".c") and
                         !std.mem.endsWith(u8, path, "dump.c")) {
-                    // std.debug.warn("{}\n", path);
-                    acpica.addCSourceFile(path, [_][]const u8{});
+                    std.debug.warn("{}\n", .{path});
+                    acpica.addCSourceFile(path, &[_][]const u8{});
                 }
                 i = walker.next() catch unreachable;
             }
@@ -98,12 +96,12 @@ pub fn build(b: *std.build.Builder) void {
 
     // libcommon
     const libcommon = b.addStaticLibrary("common", "programs/common/common.zig");
-    libcommon.setTheTarget(target);
+    libcommon.setTarget(target);
 
     // programs/echoer
     const echoer = b.addExecutable("echoer.elf", "programs/echoer/echoer.zig");
     echoer.setLinkerScriptPath("programs/common/linking.ld");
-    echoer.setTheTarget(target);
+    echoer.setTarget(target);
     echoer.linkLibraryOrObject(libcommon);
     echoer.addPackagePath("system_calls", "programs/common/system_calls.zig");
     echoer.install();
@@ -111,7 +109,7 @@ pub fn build(b: *std.build.Builder) void {
     // programs/a
     const a_prog = b.addExecutable("a.elf", "programs/a/a.zig");
     a_prog.setLinkerScriptPath("programs/common/linking.ld");
-    a_prog.setTheTarget(target);
+    a_prog.setTarget(target);
     a_prog.linkLibraryOrObject(libcommon);
     a_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
     a_prog.install();
@@ -119,7 +117,7 @@ pub fn build(b: *std.build.Builder) void {
     // programs/b
     const b_prog = b.addExecutable("b.elf", "programs/b/b.zig");
     b_prog.setLinkerScriptPath("programs/common/linking.ld");
-    b_prog.setTheTarget(target);
+    b_prog.setTarget(target);
     b_prog.linkLibraryOrObject(libcommon);
     b_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
     b_prog.install();

@@ -68,7 +68,7 @@ const Superblock = packed struct {
 
     pub fn block_size(self: *const Superblock) usize {
         // TODO: Zig Bug? Can't inline util.Ki(1)
-        return usize(1024) << @truncate(util.UsizeLog2Type, self.log_block_size);
+        return @as(usize, 1024) << @truncate(util.UsizeLog2Type, self.log_block_size);
     }
 
     pub fn block_group_count(self: *const Superblock) usize {
@@ -200,7 +200,7 @@ pub const DataBlockIterator = struct {
             const index = self.inode.blocks[self.first_level_pos];
             self.first_level_pos += 1;
             if (index == 0) {
-                return DataBlockInfo(.FillInZeros);
+                return DataBlockInfo.FillInZeros;
             }
             return DataBlockInfo{.Index = index};
         }
@@ -218,14 +218,14 @@ pub const DataBlockIterator = struct {
         if (self.new_pos) self.new_pos = false;
 
         // Check for end of blocks
-        if (self.first_level_pos > fourth_level_index) return DataBlockInfo(.EndOfFile);
+        if (self.first_level_pos > fourth_level_index) return DataBlockInfo.EndOfFile;
 
         // Get New Levels if Needed
         if (get_second_level) {
             const index = self.inode.blocks[self.first_level_pos];
             if (index == 0) {
                 self.second_level_pos += 1;
-                return DataBlockInfo(.FillInZeros);
+                return DataBlockInfo.FillInZeros;
             }
             try self.get_level(&self.second_level, index);
         }
@@ -233,7 +233,7 @@ pub const DataBlockIterator = struct {
             const index = self.second_level.?[self.second_level_pos];
             if (index == 0) {
                 self.third_level_pos += 1;
-                return DataBlockInfo(.FillInZeros);
+                return DataBlockInfo.FillInZeros;
             }
             try self.get_level(&self.third_level, index);
         }
@@ -241,7 +241,7 @@ pub const DataBlockIterator = struct {
             const index = self.third_level.?[self.third_level_pos];
             if (index == 0) {
                 self.fourth_level_pos += 1;
-                return DataBlockInfo(.FillInZeros);
+                return DataBlockInfo.FillInZeros;
             }
             try self.get_level(&self.fourth_level, index);
         }
@@ -252,7 +252,7 @@ pub const DataBlockIterator = struct {
                 const index = self.second_level.?[self.second_level_pos];
                 if (index == 0) {
                     self.second_level_pos += 1;
-                    return DataBlockInfo(.FillInZeros);
+                    return DataBlockInfo.FillInZeros;
                 }
                 return DataBlockInfo{.Index = index};
             },
@@ -260,7 +260,7 @@ pub const DataBlockIterator = struct {
                 const index = self.third_level.?[self.third_level_pos];
                 if (index == 0) {
                     self.third_level_pos += 1;
-                    return DataBlockInfo(.FillInZeros);
+                    return DataBlockInfo.FillInZeros;
                 }
                 return DataBlockInfo{.Index = index};
             },
@@ -268,7 +268,7 @@ pub const DataBlockIterator = struct {
                 const index = self.fourth_level.?[self.fourth_level_pos];
                 if (index == 0) {
                     self.fourth_level_pos += 1;
-                    return DataBlockInfo(.FillInZeros);
+                    return DataBlockInfo.FillInZeros;
                 }
                 return DataBlockInfo{.Index = index};
             },
@@ -423,7 +423,7 @@ pub const File = struct {
 };
 
 pub const Ext2 = struct {
-    const root_inode_number = usize(2);
+    const root_inode_number = @as(usize, 2);
     const second_level_start = 12;
 
     initialized: bool = false,
@@ -448,7 +448,7 @@ pub const Ext2 = struct {
         const nm1 = n - 1;
         try self.get_block_group_descriptor(
             nm1 / self.superblock.inodes_per_group, &block_group);
-        const address = u64(block_group.inode_table) * self.block_size +
+        const address = @as(u64, block_group.inode_table) * self.block_size +
             (nm1 % self.superblock.inodes_per_group) * @sizeOf(Inode);
         try self.block_store.read(address, util.to_bytes(inode));
         // print.format("inode {}\n{}\n", n, inode.*);
@@ -489,7 +489,7 @@ pub const Ext2 = struct {
         var root_inode: Inode = undefined;
         try self.get_inode(root_inode_number, &root_inode);
         var dir_iter = try DirectoryIterator.new(self, &root_inode);
-        defer dir_iter.done() catch |e| @panic(@typeName(@typeOf(e)));
+        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
         while (try dir_iter.next()) {
             // print.format("entry: {}\n", dir_iter.value);
             if (dir_iter.value.inode.is_file() and

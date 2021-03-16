@@ -133,7 +133,7 @@ test "List" {
     const niln: ?*UsizeList.Node = null;
 
     // Empty
-    equal(usize(0), list.len);
+    equal(@as(usize, 0), list.len);
     equal(nilv, try list.pop_back());
     equal(nilv, try list.pop_front());
     equal(niln, list.head);
@@ -141,21 +141,21 @@ test "List" {
 
     // Push Some Values
     try list.push_back(1);
-    equal(usize(1), list.len);
+    equal(@as(usize, 1), list.len);
     try list.push_back(2);
-    equal(usize(2), list.len);
+    equal(@as(usize, 2), list.len);
     try list.push_back(3);
-    equal(usize(3), list.len);
+    equal(@as(usize, 3), list.len);
 
     // pop_back The Values
-    equal(usize(3), (try list.pop_back()).?);
-    equal(usize(2), list.len);
-    equal(usize(2), (try list.pop_back()).?);
-    equal(usize(1), list.len);
-    equal(usize(1), (try list.pop_back()).?);
+    equal(@as(usize, 3), (try list.pop_back()).?);
+    equal(@as(usize, 2), list.len);
+    equal(@as(usize, 2), (try list.pop_back()).?);
+    equal(@as(usize, 1), list.len);
+    equal(@as(usize, 1), (try list.pop_back()).?);
 
     // It's empty again
-    equal(usize(0), list.len);
+    equal(@as(usize, 0), list.len);
     equal(nilv, try list.pop_back());
     equal(nilv, try list.pop_front());
     equal(niln, list.head);
@@ -163,20 +163,20 @@ test "List" {
 
     // Push Some Values
     try list.push_front(1);
-    equal(usize(1), list.len);
+    equal(@as(usize, 1), list.len);
     try list.push_back(2);
     try list.push_front(3);
     try list.push_front(10);
-    equal(usize(4), list.len);
+    equal(@as(usize, 4), list.len);
 
     // pop_back The Values
-    equal(usize(10), (try list.pop_front()).?);
-    equal(usize(3), (try list.pop_front()).?);
-    equal(usize(1), (try list.pop_front()).?);
-    equal(usize(2), (try list.pop_front()).?);
+    equal(@as(usize, 10), (try list.pop_front()).?);
+    equal(@as(usize, 3), (try list.pop_front()).?);
+    equal(@as(usize, 1), (try list.pop_front()).?);
+    equal(@as(usize, 2), (try list.pop_front()).?);
 
     // It's empty yet again
-    equal(usize(0), list.len);
+    equal(@as(usize, 0), list.len);
     equal(nilv, try list.pop_back());
     equal(nilv, try list.pop_front());
     equal(niln, list.head);

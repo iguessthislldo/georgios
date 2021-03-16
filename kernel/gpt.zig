@@ -218,7 +218,7 @@ const Guid = struct {
 //     const guid = try Guid.new_from_ms("\x28\x73\x2a\xc1\x1f\xf8\xd2\x11\xba\x4b\x00\xa0\xc9\x3e\xc9\x3b");
 //     var guid_string: [Guid.string_size]u8 = undefined;
 //     try guid.to_string(guid_string[0..]);
-    
+
 //     print("{}\n", guid_string);
 //     print("C12A7328-F81F-11D2-BA4B-00A0C93EC93B\n");
 // }

@@ -235,7 +235,8 @@ const Controller = struct {
             while (!try channel.read_control_status().drive_is_ready()) {
                 milliseconds_left -= 1;
                 if (milliseconds_left == 0) {
-                    print.format("wait_for_drive Timeout {}\n", channel.read_control_status());
+                    print.format("wait_for_drive Timeout {}\n", .{
+                        channel.read_control_status()});
                     return Error.Timeout;
                 }
                 putil.wait_milliseconds(1);
@@ -282,15 +283,16 @@ const Controller = struct {
             const sector_number = channel.read_sector_number();
             if (sector_count != 1 and sector_number != 1) {
                 print.format(log_indent ++ "    - reset: expected 1, 1 for sector count "
-                    ++ "and number, but got {}, {}\n", sector_count, sector_number);
+                    ++ "and number, but got {}, {}\n", .{sector_count, sector_number});
                 return Error.UnexpectedValues;
             }
-            print.format(log_indent ++ "    - type: {:x}\n", channel.read_cylinder());
+            print.format(log_indent ++ "    - type: {:x}\n", .{channel.read_cylinder()});
         }
 
         pub fn initialize(self: *Device, temp_sector: *Sector, alloc: *memory.Allocator) Error!void {
-            print.format(log_indent ++ "  - {}\n",
-                if (self.id == .Master) "Master" else "Slave");
+            print.format(log_indent ++ "  - {}\n", .{
+                if (self.id == .Master)
+                    @as([]const u8, "Master") else @as([]const u8, "Slave")});
             const channel = self.get_channel();
             self.alloc = alloc;
             try self.reset();
@@ -302,13 +304,13 @@ const Controller = struct {
             channel.read_sector(temp_sector);
             const identity = try IndentifyResults.from_sector(temp_sector);
             print.format(
-                log_indent ++ "    - Drive Model: \"{}\"\n", identity.model);
+                log_indent ++ "    - Drive Model: \"{}\"\n", .{identity.model});
             print.format(
-                log_indent ++ "    - Address Type: {}\n",
-                identity.address_type.to_string());
+                log_indent ++ "    - Address Type: {}\n", .{
+                    identity.address_type.to_string()});
             print.format(
-                log_indent ++ "    - Sector Count: {}\n",
-                @intCast(usize, identity.sector_count));
+                log_indent ++ "    - Sector Count: {}\n", .{
+                    @intCast(usize, identity.sector_count)});
             self.present = true;
             self.block_store_interface.block_size = Sector.size;
             self.block_store_interface.read_block_impl = Device.read_block;
@@ -326,7 +328,7 @@ const Controller = struct {
             const error_reg = channel.read_error();
             const status_reg = channel.read_command_status();
             if (((error_reg & 0x80) != 0) or status_reg.in_error or status_reg.fault) {
-                print.format("ATA Read Error\n");
+                print.string("ATA Read Error\n");
                 return Error.OperationError;
             }
             try self.wait_for_data();
@@ -464,13 +466,13 @@ const Controller = struct {
         }
 
         pub fn initialize(self: *Channel) void {
-            print.format(log_indent ++ "- {}\n",
-                if (self.id == .Primary) "Primary" else "Secondary");
+            print.format(log_indent ++ "- {}\n", .{
+                if (self.id == .Primary) "Primary" else "Secondary"});
             self.master.initialize() catch {
-                print.format(log_indent ++ "  - Master Failed\n");
+                print.string(log_indent ++ "  - Master Failed\n");
             };
             self.slave.initialize() catch {
-                print.format(log_indent ++ "  - Slave Failed\n");
+                print.string(log_indent ++ "  - Slave Failed\n");
             };
         }
     };
