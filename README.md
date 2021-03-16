@@ -17,7 +17,7 @@ I'm also planning on developing called [PiasaFS](docs/piasafs.md).
 
 Building Georgios requires a Unix-like environment with:
 - [Zig](https://ziglang.org/)
-  - Currently using 0.6.0
+  - Currently using 0.7.1
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 

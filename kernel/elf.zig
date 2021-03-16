@@ -12,6 +12,7 @@ const io = @import("io.zig");
 const util = @import("util.zig");
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
+const List = @import("list.zig").List;
 
 pub const Error = error {
     InvalidElfFile,
@@ -154,15 +155,21 @@ const Header = packed struct {
 };
 
 pub const Object = struct {
+    pub const Segment = struct {
+        data: []u8,
+        address: usize,
+    };
+    pub const Segments = List(Segment);
+
     alloc: *Allocator,
     header: Header = undefined,
     section_headers: []SectionHeader = undefined,
     program_headers: []ProgramHeader = undefined,
-    program: []u8 = undefined,
-    program_address: usize = undefined,
+    segments: Segments = undefined,
 
     pub fn from_file(alloc: *Allocator, file: *io.File) !Object {
         var object = Object{.alloc = alloc};
+        object.segments = Segments{.alloc = alloc};
 
         // Read Header
         _ = try file.read(util.to_bytes(&object.header));
@@ -208,7 +215,6 @@ pub const Object = struct {
                 _ = try file.seek(skip, .FromHere);
             }
         }
-        var got_load = false;
         for (object.program_headers) |*program_header| {
             print.format("program: kind: {} offset: {:x} " ++
                 "size in file: {:x} size in memory: {:x}\n", .{
@@ -219,16 +225,18 @@ pub const Object = struct {
             // Read the Program
             // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {
-                if (got_load) @panic("Multiple LOADs in ELF!");
-                got_load = true;
+                print.format("segment at {}\n", .{program_header.virtual_address});
+                var segment = Segment{
+                    .data = try alloc.alloc_array(u8, program_header.size_in_file),
+                    .address = program_header.virtual_address,
+                };
                 _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
-                object.program = try alloc.alloc_array(u8, program_header.size_in_file);
-                _ = try file.read_or_error(object.program);
-                print.dump_bytes(object.program);
-                object.program_address = program_header.virtual_address;
+                _ = try file.read_or_error(segment.data);
+                print.dump_bytes(segment.data);
+                try object.segments.push_back(segment);
             }
         }
-        if (!got_load) @panic("No LOADs in ELF!");
+        if (object.segments.len == 0) @panic("No LOADs in ELF!");
 
         return object;
     }

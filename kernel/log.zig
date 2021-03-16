@@ -37,7 +37,7 @@ pub const Log = struct {
         _ = fprint.string(file, marker) catch {};
     }
 
-    pub fn log(self: *const Self, comptime fmtstr: []const u8, args: var) void {
+    pub fn log(self: *const Self, comptime fmtstr: []const u8, args: anytype) void {
         if (self.file) |file| {
             if (self.is_enabled()) {
                 print_indent(file, self.indent);

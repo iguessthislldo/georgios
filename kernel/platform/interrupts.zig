@@ -95,7 +95,7 @@ pub fn load() void {
 }
 
 fn set_entry(
-        name: []const u8, index: u8, handler: extern fn() void,
+        name: []const u8, index: u8, handler: fn() void,
         selector: u16, flags: u8) void {
     const offset: u32 = @ptrToInt(handler);
     names[index] = name;
@@ -265,12 +265,12 @@ fn BaseInterruptHandler(
             unreachable;
         }
 
-        pub fn get() extern fn() void {
-            return @ptrCast(extern fn() void, handler);
+        pub fn get() fn() void {
+            return @ptrCast(fn() void, handler);
         }
 
         pub fn set(name: []const u8, selector: u16, flags: u8) void {
-            set_entry(name, index, @ptrCast(extern fn() void, handler), selector, flags);
+            set_entry(name, index, @ptrCast(fn() void, handler), selector, flags);
         }
     };
 }
@@ -459,12 +459,12 @@ pub fn initialize() void {
     pic.initialize();
 }
 
-pub fn set_kernel_handler(index: u8, handler: extern fn() void) void {
+pub fn set_kernel_handler(index: u8, handler: fn() void) void {
     set(index, handler, @import("segments.zig").kernel_code_selector, kernel_flags);
     load();
 }
 
-pub fn set_user_handler(index: u8, handler: extern fn() void) void {
+pub fn set_user_handler(index: u8, handler: fn() void) void {
     set(index, handler, @import("segments.zig").user_code_selector, user_flags);
     load();
 }

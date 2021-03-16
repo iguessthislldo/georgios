@@ -162,7 +162,7 @@ pub fn boolean(file: *File, value: bool) FileError!void {
 }
 
 /// Try to guess how to print a value based on its type.
-pub fn any(file: *File, value: var) FileError!void {
+pub fn any(file: *File, value: anytype) FileError!void {
     const Type = @TypeOf(value);
     const Traits = @typeInfo(Type);
     var invalid: bool = false;
@@ -243,7 +243,7 @@ pub fn any(file: *File, value: var) FileError!void {
 ///
 /// Escapes:
 ///     `{{` is replaced with `{` and `}}` is replaced by `}`.
-pub fn format(file: *File, comptime fmtstr: []const u8, args: var) FileError!void {
+pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError!void {
     const State = enum {
         NoFormat, // Outside Braces
         Format, // Inside Braces

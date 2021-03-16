@@ -18,11 +18,6 @@ pub const FileError = error {
 pub const File = struct {
     pub const StdOutStream = std.io.OutStream(*File, FileError, write);
 
-    valid: bool = false,
-    index: usize = 0,
-    set_up_std_out_stream: bool = false,
-    _std_out_stream: StdOutStream = undefined,
-
     /// Used for seek()
     pub const SeekType = enum {
         FromStart,
@@ -67,6 +62,10 @@ pub const File = struct {
         }
     };
 
+    valid: bool = false,
+    index: usize = 0,
+    set_up_std_out_stream: bool = false,
+    _std_out_stream: StdOutStream = undefined,
     read_impl: fn(*File, []u8) anyerror!usize = unsupported.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = unsupported.write_impl,
     seek_impl: fn(*File, isize, SeekType) FileError!usize = unsupported.seek_impl,

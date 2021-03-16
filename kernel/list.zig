@@ -116,6 +116,23 @@ pub fn List(comptime Type: type) type {
             self.remove_node(node);
             self.push_back_node(node);
         }
+
+        pub const Iterator = struct {
+            list: *Self,
+            node: ?*Node,
+
+            pub fn next(self: *Iterator) ?Type {
+                if (self.node) |n| {
+                    self.node = n.next;
+                    return n.value;
+                }
+                return null;
+            }
+        };
+
+        pub fn iterator(self: *Self) Iterator {
+            return Iterator{.list = self, .node = self.head};
+        }
     };
 }
 
@@ -146,6 +163,15 @@ test "List" {
     equal(@as(usize, 2), list.len);
     try list.push_back(3);
     equal(@as(usize, 3), list.len);
+
+    // Test Iterator
+    var i: usize = 0;
+    const expected = [_]usize{1, 2, 3};
+    var it = list.iterator();
+    while (it.next()) |actual| {
+        equal(expected[i], actual);
+        i += 1;
+    }
 
     // pop_back The Values
     equal(@as(usize, 3), (try list.pop_back()).?);

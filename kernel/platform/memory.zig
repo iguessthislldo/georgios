@@ -215,7 +215,7 @@ pub const Memory = struct {
         return AllocError.OutOfMemory;
     }
 
-    fn get_unused_kernel_space(self: *Memory, requested_size: usize) AllocError!Range {
+    pub fn get_unused_kernel_space(self: *Memory, requested_size: usize) AllocError!Range {
         // print.format("get_unused_kernel_space {:x}\n", requested_size);
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
@@ -284,7 +284,7 @@ pub const Memory = struct {
     }
 
     // TODO: Read/Write and Any Other Options
-    fn mark_virtual_memory_present(
+    pub fn mark_virtual_memory_present(
             self: *Memory, page_directory: []u32, range: Range, user: bool) AllocError!void {
         // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);

@@ -56,7 +56,10 @@ pub const Kernel = struct {
         var ext2_file = try self.filesystem.open("a.elf");
         var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
         // TODO: Function to set up a Process from an elf.Object
-        try a.address_space_copy(elf_object.program_address, elf_object.program);
+        var segments = elf_object.segments.iterator();
+        while (segments.next()) |segment| {
+            try a.address_space_copy(segment.address, segment.data);
+        }
         a.entry = elf_object.header.entry;
         try self.threading_manager.start_process(a);
     }

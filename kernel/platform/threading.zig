@@ -27,7 +27,7 @@ pub const ThreadImpl = struct {
         self.thread = thread;
     }
 
-    fn push_to_context(self: *ThreadImpl, value: var) void {
+    fn push_to_context(self: *ThreadImpl, value: anytype) void {
         const Type = @TypeOf(value);
         const size = @sizeOf(Type);
         self.context -= size;
@@ -61,7 +61,7 @@ pub const ThreadImpl = struct {
         self.push_to_context(@ptrToInt(return_to));
     }
 
-    fn start(self: *ThreadImpl) Error!void {
+    pub fn start(self: *ThreadImpl) Error!void {
         // TODO: Real Context Switch
         _ = self.pop_from_context(usize);
         const is = self.pop_from_context(InterruptStack);

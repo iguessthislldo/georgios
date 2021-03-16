@@ -97,13 +97,13 @@ pub fn boolean(value: bool) void {
     }
 }
 
-pub fn any(value: var) void {
+pub fn any(value: anytype) void {
     if (console_file) |o| {
         fprint.any(o, value) catch unreachable;
     }
 }
 
-pub fn format(comptime fmtstr: []const u8, args: var)void {
+pub fn format(comptime fmtstr: []const u8, args: anytype)void {
     if (console_file) |o| {
         fprint.format(o, fmtstr, args) catch unreachable;
     }
@@ -243,13 +243,13 @@ pub fn debug_boolean(value: bool) void {
     }
 }
 
-pub fn debug_any(value: var) void {
+pub fn debug_any(value: anytype) void {
     if (debug_print) {
         any(value);
     }
 }
 
-pub fn debug_format(comptime fmtstr: []const u8, args: var)void {
+pub fn debug_format(comptime fmtstr: []const u8, args: anytype)void {
     if (debug_print) {
         format(fmtstr, args);
     }

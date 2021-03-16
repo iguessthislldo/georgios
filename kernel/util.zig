@@ -80,7 +80,7 @@ pub fn zero_init(comptime Type: type) Type {
             }
             return struct_var;
         },
-        else => CastThrough = std.meta.IntType(false, @sizeOf(Type) * 8),
+        else => CastThrough = std.meta.IntType(.unsigned, @sizeOf(Type) * 8),
     }
     return @bitCast(Type, @intCast(CastThrough, 0));
 }
@@ -360,7 +360,7 @@ pub fn PackedArray(comptime T: type, count: usize) type {
 
         contents: [word_count]Word = undefined,
 
-        fn get(self: *const Self, index: usize) Error!Type {
+        pub fn get(self: *const Self, index: usize) Error!Type {
             if (index >= len) {
                 return Error.OutOfBounds;
             }
@@ -376,7 +376,7 @@ pub fn PackedArray(comptime T: type, count: usize) type {
             }
         }
 
-        fn set(self: *Self, index: usize, value: Type) Error!void {
+        pub fn set(self: *Self, index: usize, value: Type) Error!void {
             if (index >= len) {
                 return Error.OutOfBounds;
             }
@@ -388,7 +388,7 @@ pub fn PackedArray(comptime T: type, count: usize) type {
                 (@intCast(Word, @bitCast(InnerType, value)) << shift);
         }
 
-        fn reset(self: *Self) void {
+        pub fn reset(self: *Self) void {
             for (self.contents[0..]) |*ptr| {
                 ptr.* = 0;
             }
@@ -498,7 +498,7 @@ pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
     return slice;
 }
 
-pub inline fn to_bytes(value: var) []u8 {
+pub inline fn to_bytes(value: anytype) []u8 {
     comptime const Type = @TypeOf(value);
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {

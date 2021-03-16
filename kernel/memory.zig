@@ -69,7 +69,7 @@ pub const RealMemoryMap = struct {
 
     /// Given a memory range, add a frame group if there are frames that can
     /// fit in it.
-    fn add_frame_group(self: *RealMemoryMap, start: usize, end: usize) void {
+    pub fn add_frame_group(self: *RealMemoryMap, start: usize, end: usize) void {
         const aligned_start = util.align_up(start, platform.frame_size);
         const aligned_end = util.align_down(end, platform.frame_size);
         if (aligned_start < aligned_end) {
@@ -94,7 +94,7 @@ pub const Allocator = struct {
         return rv;
     }
 
-    pub fn free(self: *Allocator, value: var) FreeError!void {
+    pub fn free(self: *Allocator, value: anytype) FreeError!void {
         const bytes = util.to_bytes(value);
         if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@TypeOf(value)) ++
             ": {:a}\n", .{@ptrToInt(bytes.ptr)});
@@ -112,7 +112,7 @@ pub const Allocator = struct {
         return rv;
     }
 
-    pub fn free_array(self: *Allocator, array: var) FreeError!void {
+    pub fn free_array(self: *Allocator, array: anytype) FreeError!void {
         const traits = @typeInfo(@TypeOf(array)).Pointer;
         if (alloc_debug) print.format(
             "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
