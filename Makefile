@@ -6,6 +6,7 @@ ISO_BOOT_DIR=$(ISO_DIR)/boot
 DISK_DIR:=tmp/disk
 KERNEL:=$(ISO_BOOT_DIR)/kernel.elf
 ZIG_OUTPUT:=tmp/zig-cache/bin
+ZIG:=zig-0.5
 GRUB_PREFIX:=/usr
 GRUB_LOCATION:=$(GRUB_PREFIX)/lib/grub/i386-pc
 GRUB_CFG:=$(ISO_BOOT_DIR)/grub/grub.cfg
@@ -19,14 +20,14 @@ all: $(ISO) $(DISK)
 
 .PHONY: build_georgios
 build_georgios:
-	zig build \
+	$(ZIG) build \
 		--cache-dir tmp/zig-cache \
 		-Dmultiboot_vga_request=$(multiboot_vga_request) \
 		-Ddebug_log=$(debug_log) \
 
 .PHONY: test
 test:
-	zig test --cache-dir tmp/zig-cache kernel/test.zig
+	$(ZIG) test --cache-dir tmp/zig-cache kernel/test.zig
 
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)
