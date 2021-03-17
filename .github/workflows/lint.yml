@@ -1,4 +1,4 @@
-name: normal
+name: lint
 
 on:
     push:
