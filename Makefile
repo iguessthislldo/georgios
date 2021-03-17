@@ -20,6 +20,7 @@ all: $(ISO) $(DISK)
 
 .PHONY: build_georgios
 build_georgios:
+	python3 scripts/lint.py
 	$(ZIG) build \
 		--cache-dir tmp/zig-cache \
 		-Dmultiboot_vga_request=$(multiboot_vga_request) \
@@ -27,6 +28,7 @@ build_georgios:
 
 .PHONY: test
 test:
+	python3 scripts/lint.py
 	$(ZIG) test --cache-dir tmp/zig-cache kernel/test.zig
 
 $(GRUB_CFG): misc/grub.cfg

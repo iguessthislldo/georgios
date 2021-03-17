@@ -9,6 +9,8 @@ function do_or_pop {
     $@ || (echo "$@ failed" && pop && exit 1)
 }
 
+python3 scripts/lint.py
+
 git clean --force -dX
 git stash --keep-index --include-untracked
 do_or_pop make test
