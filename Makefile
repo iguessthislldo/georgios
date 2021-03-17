@@ -28,7 +28,6 @@ build_georgios:
 
 .PHONY: test
 test:
-	python3 scripts/lint.py
 	$(ZIG) test --cache-dir tmp/zig-cache kernel/test.zig
 
 $(GRUB_CFG): misc/grub.cfg
