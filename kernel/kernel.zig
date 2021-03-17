@@ -36,16 +36,20 @@ pub const Kernel = struct {
     filesystem: Ext2 = Ext2{},
     threading_manager: threading.Manager = undefined,
 
-    pub fn initialize(self: *Kernel) !void {
-        print.initialize(&self.console, build_options.debug_log);
-        try platform.initialize(self);
+    pub fn init(self: *Kernel) !void {
+        print.init(&self.console, build_options.debug_log);
+        try platform.init(self);
+
+        // Filesystem
         if (self.raw_block_store) |raw| {
             self.block_store.init(self.memory.small_alloc, raw, 128);
-            try self.filesystem.initialize(
+            try self.filesystem.init(
                 self.memory.small_alloc, &self.block_store.block_store);
         } else {
             print.string("No block store set\n");
         }
+
+        // Threading
         self.threading_manager = threading.Manager{.memory_manager = &self.memory};
     }
 
@@ -68,7 +72,7 @@ pub const Kernel = struct {
 var kernel = Kernel{};
 
 pub fn kernel_main() void {
-    if (kernel.run()) |_| {} else |e| {
+    if (kernel.init()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
     print.string("Done\n");

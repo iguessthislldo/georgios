@@ -98,19 +98,16 @@ pub fn print_stack_left() void {
         asm volatile ("mov %%esp, %[x]" : [x] "=r" (-> usize)) - @ptrToInt(&stack));
 }
 
-pub fn initialize(kernel: *Kernel) !void {
+pub fn init(kernel: *Kernel) !void {
     // Finish Setup of Console Logging
-    serial_log.initialize();
-    cga_console.initialize();
+    serial_log.init();
+    cga_console.init();
     kernel.console.write_impl = console_write;
     kernel.console.read_impl = console_read;
 
-    print.string("1\n");
-    print.string("2\n");
-
     // Setup Basic CPU Utilities
-    segments.initialize();
-    interrupts.initialize();
+    segments.init();
+    interrupts.init();
     util.estimate_cpu_speed();
 
     // List Multiboot Tags
@@ -122,15 +119,15 @@ pub fn initialize(kernel: *Kernel) !void {
     var real_memory_map = kmemory.RealMemoryMap{};
     const mmap_tag = try multiboot.find_tag(.Mmap);
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
-    try kernel.memory.initialize(&real_memory_map);
+    try kernel.memory.init(&real_memory_map);
 
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
     pci.find_pci_devices(kernel);
-    ps2.initialize();
+    ps2.init();
     vbe.init(&kernel.memory);
 
-    // acpi.initialize();
+    // acpi.init();
 
     interrupts.pic.start_ticking(100);
 }

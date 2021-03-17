@@ -365,7 +365,7 @@ pub const pic = struct {
         busywork();
     }
 
-    pub fn initialize() void {
+    pub fn init() void {
         // Start Initialization of PICs
         putil.out8(irq_0_7_command_port, init_command);
         busywork();
@@ -416,7 +416,7 @@ fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
     print.char('!');
 }
 
-pub fn initialize() void {
+pub fn init() void {
     table_pointer.limit = @sizeOf(Entry) * table.len;
     table_pointer.base = @ptrToInt(&table);
     // TODO: See top of file
@@ -457,7 +457,7 @@ pub fn initialize() void {
 
     load();
 
-    pic.initialize();
+    pic.init();
 }
 
 pub fn set_kernel_handler(index: u8, handler: fn() void) void {

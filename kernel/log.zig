@@ -50,7 +50,7 @@ pub const Log = struct {
 test "Log" {
     var buffer: [1024]u8 = undefined;
     var buffer_file = io.BufferFile{};
-    buffer_file.initialize(buffer[0..]);
+    buffer_file.init(buffer[0..]);
     const file = &buffer_file.file;
 
     {

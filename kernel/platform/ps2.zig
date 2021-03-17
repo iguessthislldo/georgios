@@ -65,7 +65,7 @@ pub fn get_char() ?u8 {
     return buffer.pop();
 }
 
-pub fn initialize() void {
+pub fn init() void {
     interrupts.IrqInterruptHandler(1, keyboard_event_occured).set(
         "IRQ1: Keyboard", segments.kernel_code_selector, interrupts.kernel_flags);
     interrupts.load();

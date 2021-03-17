@@ -11,7 +11,7 @@ const acpica = @cImport({
     @cInclude("georgios_acpica_wrapper.h");
 });
 
-pub fn initialize() void {
+pub fn init() void {
     // TODO
     // if (acpica.AcpiInitializeSubsystem() != acpica.Ok) {
     //     @panic("AcpiInitializeSubsystem Failed");

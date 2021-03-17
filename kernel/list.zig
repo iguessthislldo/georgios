@@ -141,7 +141,7 @@ test "List" {
     const equal = std.testing.expectEqual;
 
     var alloc = memory.UnitTestAllocator{};
-    alloc.initialize();
+    alloc.init();
     defer alloc.done();
 
     const UsizeList = List(usize);

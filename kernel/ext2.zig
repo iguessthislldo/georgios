@@ -380,7 +380,7 @@ pub const File = struct {
     buffer: ?[]u8 = null,
     position: usize = 0,
 
-    pub fn initialize(self: *File, fs: *Ext2, inode: u32) Error!void {
+    pub fn init(self: *File, fs: *Ext2, inode: u32) Error!void {
         self.* = File{};
         self.fs = fs;
         try fs.get_inode(inode, &self.inode);
@@ -463,7 +463,7 @@ pub const Ext2 = struct {
             @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
     }
 
-    pub fn initialize(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
+    pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
         self.alloc = alloc;
         self.block_store = block_store;
 
@@ -495,7 +495,7 @@ pub const Ext2 = struct {
             if (dir_iter.value.inode.is_file() and
                     util.memory_compare(name, dir_iter.value.name)) {
                 const file = try self.alloc.alloc(File);
-                try file.initialize(self, dir_iter.value.inode_number);
+                try file.init(self, dir_iter.value.inode_number);
                 return file;
             }
         }

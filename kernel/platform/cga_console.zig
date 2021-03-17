@@ -58,7 +58,7 @@ pub fn new_page() void {
     cursor(0, 0);
 }
 
-pub fn initialize() void {
+pub fn init() void {
     buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
     new_page();
 }

@@ -223,7 +223,7 @@ test "Map" {
     var alloc = memory.UnitTestAllocator{};
     const equal = std.testing.expectEqual;
 
-    alloc.initialize();
+    alloc.init();
     defer alloc.done();
 
     const UsizeUsizeMap = Map(usize, usize, usize_eql, usize_cmp);

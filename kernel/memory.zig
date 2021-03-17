@@ -144,7 +144,7 @@ pub const UnitTestAllocator = struct {
     impl: Impl = undefined,
     allocated: usize = undefined,
 
-    pub fn initialize(self: *Self) void {
+    pub fn init(self: *Self) void {
         self.impl = Impl.init(std.heap.page_allocator);
         self.allocator.alloc_impl = Self.alloc;
         self.allocator.free_impl = Self.free;
@@ -184,7 +184,7 @@ pub const Memory = struct {
     big_alloc: *Allocator = undefined,
 
     /// To be called by the platform after it can give "map".
-    pub fn initialize(self: *Memory, map: *RealMemoryMap) !void {
+    pub fn init(self: *Memory, map: *RealMemoryMap) !void {
         print.debug_format(
             \\ - Initializing Memory System
             \\   - Start of kernel:
@@ -218,7 +218,7 @@ pub const Memory = struct {
 
         // Initialize Platform Implementation
         // After this we should be able to manage all the memory on the system.
-        self.platform_memory.initialize(self, map);
+        self.platform_memory.init(self, map);
 
         // List Memory
         const total_memory: usize = map.total_frame_count * platform.frame_size;
@@ -232,7 +232,7 @@ pub const Memory = struct {
             total_memory >> 30});
 
         self.small_alloc_impl = try self.big_alloc.alloc(SmallAllocImplType);
-        self.small_alloc_impl.initialize(@ptrToInt(try self.big_alloc.alloc([small_alloc_size]u8)));
+        self.small_alloc_impl.init(@ptrToInt(try self.big_alloc.alloc([small_alloc_size]u8)));
         self.small_alloc = &self.small_alloc_impl.allocator;
     }
 

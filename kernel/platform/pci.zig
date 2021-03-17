@@ -298,7 +298,7 @@ fn check_function(kernel: *Kernel, location: Location, header: *const Header) vo
             check_bus(kernel, read_config8(location, 0x19));
         }
         if (class == .MassStorageController and header.subclass == 0x01) {
-            ata.initialize(kernel, location, header);
+            ata.init(kernel, location, header);
         }
     }
 }

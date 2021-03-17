@@ -289,7 +289,7 @@ const Controller = struct {
             print.format(log_indent ++ "    - type: {:x}\n", .{channel.read_cylinder()});
         }
 
-        pub fn initialize(self: *Device, temp_sector: *Sector, alloc: *memory.Allocator) Error!void {
+        pub fn init(self: *Device, temp_sector: *Sector, alloc: *memory.Allocator) Error!void {
             print.format(log_indent ++ "  - {}\n", .{
                 if (self.id == .Master)
                     @as([]const u8, "Master") else @as([]const u8, "Slave")});
@@ -465,13 +465,13 @@ const Controller = struct {
             putil.insw(self.io_base_port + 0, data);
         }
 
-        pub fn initialize(self: *Channel) void {
+        pub fn init(self: *Channel) void {
             print.format(log_indent ++ "- {}\n", .{
                 if (self.id == .Primary) "Primary" else "Secondary"});
-            self.master.initialize() catch {
+            self.master.init() catch {
                 print.string(log_indent ++ "  - Master Failed\n");
             };
-            self.slave.initialize() catch {
+            self.slave.init() catch {
                 print.string(log_indent ++ "  - Slave Failed\n");
             };
         }
@@ -493,7 +493,7 @@ const Controller = struct {
     device_interface: devices.Device = undefined,
     alloc: *Allocator = undefined,
 
-    pub fn initialize(self: *Controller,
+    pub fn init(self: *Controller,
             alloc: *Allocator, location: pci.Location, header: *const pci.Header) void {
         self.pci_location = location;
         self.alloc = alloc;
@@ -514,9 +514,9 @@ const Controller = struct {
         const temp_sector = alloc.alloc(Sector) catch @panic("ATA init alloc error");
         defer alloc.free(temp_sector) catch @panic("ATA init free error");
 
-        // self.primary.initialize();
-        // self.secondary.initialize();
-        self.primary.master.initialize(temp_sector, alloc) catch |e| {
+        // self.primary.init();
+        // self.secondary.init();
+        self.primary.master.init(temp_sector, alloc) catch |e| {
             print.string("Drive Initialize Failed\n");
             return;
         };
@@ -528,13 +528,13 @@ const Controller = struct {
     }
 };
 
-pub fn initialize(kernel: *Kernel, location: pci.Location,
+pub fn init(kernel: *Kernel, location: pci.Location,
         header: *const pci.Header) void {
     var controller = kernel.memory.small_alloc.alloc(Controller) catch {
         @panic("Failure");
     };
     controller.* = Controller{};
-    controller.initialize(kernel.memory.small_alloc, location, header);
+    controller.init(kernel.memory.small_alloc, location, header);
     kernel.devices.add_device(&controller.device_interface) catch {
         @panic("Failure");
     };

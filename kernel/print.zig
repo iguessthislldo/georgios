@@ -10,7 +10,7 @@ const io = @import("io.zig");
 var console_file: ?*io.File = null;
 pub var debug_print = false;
 
-pub fn initialize(file: ?*io.File, debug: bool) void {
+pub fn init(file: ?*io.File, debug: bool) void {
     console_file = file;
     debug_print = debug;
 }

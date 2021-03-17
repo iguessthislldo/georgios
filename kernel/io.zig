@@ -228,7 +228,7 @@ pub const BufferFile = struct {
     position: usize = 0,
     written_up_until: usize = 0,
 
-    pub fn initialize(self: *Self, buffer: []u8) void {
+    pub fn init(self: *Self, buffer: []u8) void {
         self.file.read_impl = Self.read;
         self.file.write_impl = Self.write;
         self.file.seek_impl = Self.seek;
@@ -302,7 +302,7 @@ pub const BufferFile = struct {
 test "BufferFile" {
     var file_buffer: [128]u8 = undefined;
     var buffer_file = BufferFile{};
-    buffer_file.initialize(file_buffer[0..]);
+    buffer_file.init(file_buffer[0..]);
     const file = &buffer_file.file;
 
     // Put "adc123" into `file_buffer`, read it into `result_buffer`, then

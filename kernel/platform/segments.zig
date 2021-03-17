@@ -198,7 +198,7 @@ pub export var user_code_selector: u16 = 0;
 pub export var user_data_selector: u16 = 0;
 pub export var tss_selector: u16 = 0;
 
-pub fn initialize() void {
+pub fn init() void {
     print.debug_string(" - Filling the Global Descriptor Table (GDT)\n");
     set_null_entry(0);
     const flags = Flags{};

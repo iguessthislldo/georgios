@@ -52,7 +52,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         const FreeBlocks = struct {
             lists: [level_count]?FreeBlock.Ptr = undefined,
 
-            pub fn initialize(self: *FreeBlocks, start: usize) void {
+            pub fn init(self: *FreeBlocks, start: usize) void {
                 for (self.lists) |*ptr| {
                     ptr.* = null;
                 }
@@ -114,13 +114,13 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         block_statuses: util.PackedArray(
             BlockStatus, unique_block_count) = undefined,
 
-        pub fn initialize(self: *Self, start: usize) void {
+        pub fn init(self: *Self, start: usize) void {
             self.allocator = Allocator{
                 .alloc_impl = alloc,
                 .free_impl = free,
             };
             self.start = start;
-            self.free_blocks.initialize(start);
+            self.free_blocks.init(start);
             self.block_statuses.reset();
             self.block_statuses.set(0, .Free) catch unreachable;
         }
@@ -364,11 +364,11 @@ test "BuddyAllocator" {
 
     var b = ABuddyAllocator{};
     var m: [size]u8 = undefined;
-    b.initialize(@ptrToInt(&m));
+    b.init(@ptrToInt(&m));
     const a = &b.allocator;
 
     var al_alloc = memory.UnitTestAllocator{};
-    al_alloc.initialize();
+    al_alloc.init();
     defer al_alloc.done();
     var al = AllocList{.alloc = &al_alloc.allocator};
 

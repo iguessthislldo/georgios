@@ -147,7 +147,7 @@ pub const Memory = struct {
     start_of_virtual_space: usize = 0,
     page_allocator: kmemory.Allocator = undefined,
 
-    pub fn initialize(self: *Memory, kernel_memory: *KernelMemory,
+    pub fn init(self: *Memory, kernel_memory: *KernelMemory,
             memory_map: *RealMemoryMap) void {
         self.kernel_memory = kernel_memory;
         self.page_allocator.alloc_impl = Self.page_alloc;

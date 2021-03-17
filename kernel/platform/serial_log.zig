@@ -4,7 +4,7 @@ const in8 = util.in8;
 
 const com1_port: u16 = 0x3f8;
 
-pub fn initialize() void {
+pub fn init() void {
     out8(com1_port + 1, 0x00); // Disable all interrupts
     out8(com1_port + 3, 0x80); // Enable DLAB (set baud rate divisor)
     out8(com1_port + 0, 0x03); // Set divisor to 3 (lo byte) 38400 baud

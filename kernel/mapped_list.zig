@@ -118,7 +118,7 @@ test "MappedList" {
     const equal = std.testing.expectEqual;
 
     var alloc = memory.UnitTestAllocator{};
-    alloc.initialize();
+    alloc.init();
     defer alloc.done();
 
     const UsizeUsizeMappedList = MappedList(usize, usize, usize_eql, usize_cmp);

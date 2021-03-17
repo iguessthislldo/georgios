@@ -7,7 +7,7 @@ pub const impl = switch(builtin.arch) {
 };
 
 pub const frame_size = impl.frame_size;
-pub const initialize = impl.initialize;
+pub const init = impl.init;
 pub const setup_devices = impl.setup_devices;
 pub const panic = impl.panic;
 pub const kernel_real_start = impl.kernel_real_start;
