@@ -43,6 +43,7 @@ const command_port: u16 = 0x03D4;
 const data_port: u16 = 0x03D5;
 const high_byte_command: u8 = 14;
 const low_byte_command: u8 = 15;
+const set_cursor_shape_command: u8 = 0x0a;
 
 var row: u32 = 0;
 var column: u32 = 0;
@@ -87,6 +88,11 @@ pub fn cursor(x: u32, y: u32) void {
     out8(data_port, @intCast(u8, (index >> 8) & 0xFF));
     out8(command_port, low_byte_command);
     out8(data_port, @intCast(u8, index & 0xFF));
+}
+
+pub fn disable_cursor() void {
+    out8(command_port, set_cursor_shape_command);
+    out8(data_port, 0x20); // Bit 5 Disables Cursor
 }
 
 pub fn scroll() void {

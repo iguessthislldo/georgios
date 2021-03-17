@@ -120,6 +120,7 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
     return struct {
         pub fn show(interrupt_number: u32, interrupt_stack: *const InterruptStackType) void {
             const Color = cga_console.Color;
+            cga_console.disable_cursor();
             cga_console.new_page();
             cga_console.set_colors(Color.Black, Color.Red);
             cga_console.fill_screen(' ');
