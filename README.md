@@ -7,11 +7,11 @@ Fairy Tales" by Flora Annie Webster Steel, [File
 Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
 
 Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
-making for fun which currently targets i386/IA-32. The purposes of this project
-are to serve as a learning experience in low-level hardware and as an
-experiment with a OS built around a
-[tag](https://en.wikipedia.org/wiki/Tag_\(metadata\))-based file system called
-I'm also planning on developing called [PiasaFS](docs/piasafs.md).
+making for fun which currently targets i386/IA-32. The purpose of this project
+is to serve as a learning experience.
+
+This OS is not anywhere near usable and currently will just run whatever I'm
+working on.
 
 ## Building
 
@@ -22,8 +22,9 @@ Building Georgios requires a Unix-like environment with:
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
-`make`. This can be written to a CD or USB Flash Drive. If installed, QEMU and
-Bochs can be run by running `make qemu` or `make bochs` respectively.
+`make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make
+bochs` respectively.  For the moment it assumes the exisitance of a IDE hard
+disk with certain files on it. 
 
 ## Resources Used
 
