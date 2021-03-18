@@ -54,10 +54,10 @@ pub const Kernel = struct {
     }
 
     pub fn run(self: *Kernel) !void {
-        try self.initialize();
+        try self.init();
 
         const a = try self.threading_manager.new_process();
-        var ext2_file = try self.filesystem.open("a.elf");
+        var ext2_file = try self.filesystem.open("bin/a.elf");
         var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
         // TODO: Function to set up a Process from an elf.Object
         var segments = elf_object.segments.iterator();
@@ -72,7 +72,7 @@ pub const Kernel = struct {
 var kernel = Kernel{};
 
 pub fn kernel_main() void {
-    if (kernel.init()) |_| {} else |e| {
+    if (kernel.run()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
     print.string("Done\n");

@@ -10,9 +10,12 @@ const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
+const filesystem = @import("filesystem.zig");
 
 const Error = error {
     FileNotFound,
+    NotADirectory,
+    NotAFile,
     InvalidFilesystem,
 } || io.BlockError || MemoryError || util.Error;
 
@@ -327,6 +330,9 @@ const DirectoryIterator = struct {
     value: Value = undefined,
 
     pub fn new(fs: *Ext2, inode: *Inode) Error!DirectoryIterator {
+        if (!inode.is_directory()) {
+            return Error.NotADirectory;
+        }
         return DirectoryIterator{
             .fs = fs,
             .inode = inode,
@@ -484,21 +490,41 @@ pub const Ext2 = struct {
         self.initialized = true;
     }
 
-    pub fn open(self: *Ext2, name: []const u8) Error!*File {
+    pub fn open(self: *Ext2, path: []const u8) Error!*File {
         if (!self.initialized) return Error.InvalidFilesystem;
-        var root_inode: Inode = undefined;
-        try self.get_inode(root_inode_number, &root_inode);
-        var dir_iter = try DirectoryIterator.new(self, &root_inode);
-        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
-        while (try dir_iter.next()) {
-            // print.format("entry: {}\n", dir_iter.value);
-            if (dir_iter.value.inode.is_file() and
-                    util.memory_compare(name, dir_iter.value.name)) {
-                const file = try self.alloc.alloc(File);
-                try file.init(self, dir_iter.value.inode_number);
-                return file;
+        var dir_inode: Inode = undefined;
+        try self.get_inode(Ext2.root_inode_number, &dir_inode);
+
+        var it = filesystem.PathIterator.new(path);
+        while (it.next()) |component| {
+            // See if That Component is in the Current Directory
+            var dir_iter = try DirectoryIterator.new(self, &dir_inode);
+            defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
+            var not_found = true;
+            while (not_found and try dir_iter.next()) {
+                // print.format("entry: {}\n", .{dir_iter.value});
+                if (util.memory_compare(component, dir_iter.value.name)) {
+                    if (dir_iter.value.inode.is_file()) {
+                        if (!it.done()) {
+                            return Error.NotADirectory;
+                        }
+                        const file = try self.alloc.alloc(File);
+                        try file.init(self, dir_iter.value.inode_number);
+                        return file;
+                    } else if (dir_iter.value.inode.is_directory()) {
+                        if (it.done()) {
+                            return Error.NotAFile;
+                        }
+                        dir_inode = dir_iter.value.inode;
+                        not_found = false;
+                    } else {
+                        // Don't know how to handle this is yet
+                        return if (it.done()) Error.NotAFile else Error.NotADirectory;
+                    }
+                }
             }
         }
+
         return Error.FileNotFound;
     }
 };
