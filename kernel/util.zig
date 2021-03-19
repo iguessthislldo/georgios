@@ -585,3 +585,17 @@ test "CircularBuffer" {
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
 }
+
+pub fn nibble_char(value: u4) u8 {
+    return
+        if (value < 10)
+            '0' + @intCast(u8, value)
+        else
+            'a' + @intCast(u8, value - 10);
+}
+
+/// Insert a hex byte to into a buffer.
+pub fn byte_buffer(buffer: []u8, value: u8) void {
+    buffer[0] = nibble_char(@intCast(u4, value >> 4));
+    buffer[1] = nibble_char(@intCast(u4, value % 0x10));
+}

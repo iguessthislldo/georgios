@@ -7,9 +7,9 @@ pub const Memory = @import("memory.zig").Memory;
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
 pub const util = @import("util.zig");
-pub const Ext2 = @import("ext2.zig").Ext2;
 pub const Devices = @import("devices.zig").Devices;
 pub const threading = @import("threading.zig");
+pub const Filesystem = @import("filesystem.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -33,7 +33,7 @@ pub const Kernel = struct {
     devices: Devices = Devices{},
     raw_block_store: ?*io.BlockStore = null,
     block_store: io.CachedBlockStore = io.CachedBlockStore{},
-    filesystem: Ext2 = Ext2{},
+    filesystem: Filesystem = Filesystem{},
     threading_manager: threading.Manager = undefined,
 
     pub fn init(self: *Kernel) !void {
@@ -46,7 +46,7 @@ pub const Kernel = struct {
             try self.filesystem.init(
                 self.memory.small_alloc, &self.block_store.block_store);
         } else {
-            print.string("No block store set\n");
+            print.string(" - No Disk Found\n");
         }
 
         // Threading

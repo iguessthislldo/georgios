@@ -15,7 +15,7 @@ target remote | qemu-system-i386 \
     -vga std \
     -cdrom georgios.iso \
     -serial file:tmp/serial.log \
-    -boot order=dc \
+    -boot order=cd \
     -no-reboot \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \

@@ -11,4 +11,5 @@ test "dummy" {
     const mapped_list = @import("mapped_list.zig");
     const log = @import("log.zig");
     const filesystem = @import("filesystem.zig");
+    const Guid = @import("guid.zig");
 }

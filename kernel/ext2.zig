@@ -12,7 +12,7 @@ const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
 const filesystem = @import("filesystem.zig");
 
-const Error = error {
+pub const Error = error {
     FileNotFound,
     NotADirectory,
     NotAFile,
@@ -435,6 +435,7 @@ pub const Ext2 = struct {
     initialized: bool = false,
     alloc: *Allocator = undefined,
     block_store: *io.BlockStore = undefined,
+    offset: io.AddressType = 0,
     superblock: Superblock = Superblock{},
     block_size: usize = 0,
     max_entries_per_block: usize = 0,
@@ -446,7 +447,7 @@ pub const Ext2 = struct {
     pub fn get_block_group_descriptor(self: *Ext2,
             index: usize, dest: *BlockGroupDescriptor) Error!void {
         const address = util.Ki(2) + @sizeOf(BlockGroupDescriptor) * index;
-        try self.block_store.read(address, util.to_bytes(dest));
+        try self.block_store.read(self.offset + address, util.to_bytes(dest));
     }
 
     pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) Error!void {
@@ -456,12 +457,12 @@ pub const Ext2 = struct {
             nm1 / self.superblock.inodes_per_group, &block_group);
         const address = @as(u64, block_group.inode_table) * self.block_size +
             (nm1 % self.superblock.inodes_per_group) * @sizeOf(Inode);
-        try self.block_store.read(address, util.to_bytes(inode));
+        try self.block_store.read(self.offset + address, util.to_bytes(inode));
         // print.format("inode {}\n{}\n", n, inode.*);
     }
 
     pub fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
-        try self.block_store.read(index * self.block_size, block);
+        try self.block_store.read(self.offset + index * self.block_size, block);
     }
 
     pub fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
@@ -473,7 +474,7 @@ pub const Ext2 = struct {
         self.alloc = alloc;
         self.block_store = block_store;
 
-        try block_store.read(util.Ki(1), util.to_bytes(&self.superblock));
+        try block_store.read(self.offset + util.Ki(1), util.to_bytes(&self.superblock));
 
         // print.format("{}\n", self.superblock);
         try self.superblock.verify();

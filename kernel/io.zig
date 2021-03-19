@@ -397,7 +397,7 @@ pub const Block = struct {
 pub const BlockStore = struct {
     const Self = @This();
 
-    block_size: u64,
+    block_size: AddressType,
     read_block_impl: fn(*BlockStore, *Block) BlockError!void = default.read_block_impl,
     free_block_impl: fn(*BlockStore, *Block) BlockError!void = default.free_block_impl,
 
@@ -422,7 +422,8 @@ pub const BlockStore = struct {
 
     pub fn read(self: *BlockStore, address: AddressType, to: []u8) BlockError!void {
         const start_block = address / self.block_size;
-        const block_count = util.div_round_up(u64, @intCast(u64, to.len), self.block_size);
+        const block_count = util.div_round_up(
+            AddressType, @intCast(AddressType, to.len), self.block_size);
         const end_block = start_block + block_count;
         var block_address = start_block;
         var dest_offset: usize = 0;

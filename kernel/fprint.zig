@@ -73,16 +73,8 @@ pub fn int_sign(file: *File, value: usize, show_positive: bool) FileError!void {
     try int(file, value);
 }
 
-fn nibble_char(value: u4) u8 {
-    return
-        if (value < 10)
-            '0' + @intCast(u8, value)
-        else
-            'a' + @intCast(u8, value - 10);
-}
-
 fn nibble(file: *File, value: u4) FileError!void {
-    try char(file, nibble_char(value));
+    try char(file, util.nibble_char(value));
 }
 
 fn hex_recurse(file: *File, value: usize) FileError!void {
@@ -115,7 +107,7 @@ pub fn address(file: *File, value: usize) FileError!void {
 
     for (buffer[1..]) |*ptr, i| {
         const nibble_index: usize = (nibble_count - 1) - i;
-        ptr.* = nibble_char(util.select_nibble(usize, value, nibble_index));
+        ptr.* = util.nibble_char(util.select_nibble(usize, value, nibble_index));
     }
 
     try string(file, buffer[0..]);
@@ -143,16 +135,10 @@ test "address" {
     std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
 }
 
-/// Insert a hex byte to into a buffer. Common to byte() and data().
-fn byte_buffer(buffer: []u8, value: u8) void {
-    buffer[0] = nibble_char(@intCast(u4, value >> 4));
-    buffer[1] = nibble_char(@intCast(u4, value % 0x10));
-}
-
 /// Print a hexadecimal representation of a byte (no "0x" prefix)
 pub fn byte(file: *File, value: u8) FileError!void {
     var buffer: [2]u8 = undefined;
-    byte_buffer(buffer[0..], value);
+    util.byte_buffer(buffer[0..], value);
     try string(file, buffer);
 }
 
@@ -367,7 +353,7 @@ pub fn dump_memory(file: *File, ptr: usize, size: usize) FileError!void {
         print_buffer = !has_next;
         {
             const new_pos = buffer_pos + 2;
-            byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*allowzero u8, ptr + i).*);
+            util.byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*allowzero u8, ptr + i).*);
             buffer_pos = new_pos;
         }
         byte_i += 1;

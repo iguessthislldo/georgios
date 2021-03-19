@@ -1,10 +1,80 @@
 // ===========================================================================
 // Virtual Filesystem Interface
 // ===========================================================================
-
-// TODO: Support Abstract Filesystem API
+// TODO: Acutally Make It Virtual
 
 const std = @import("std");
+
+const ext2 = @import("ext2.zig");
+const gpt = @import("gpt.zig");
+const Guid = @import("guid.zig");
+const io = @import("io.zig");
+const memory = @import("memory.zig");
+const print = @import("print.zig");
+
+const Self = @This();
+
+const Error = ext2.Error || gpt.Error || Guid.Error;
+const File = ext2.File;
+
+impl: ext2.Ext2 = ext2.Ext2{},
+
+pub fn init(self: *Self, alloc: *memory.Allocator, block_store: *io.BlockStore) Error!void {
+    if (gpt.Disk.new(block_store)) |disk| {
+        var disk_guid: [Guid.string_size]u8 = undefined;
+        try disk.guid.to_string(disk_guid[0..]);
+        print.format(
+            \\ - Disk GUID is {}
+            \\   - Disk partitions entries at LBA {}
+            \\   - Disk partitions entries are {}B each
+            \\   - Partitions:
+            \\
+            , .{
+            disk_guid,
+            disk.partition_entries_lba,
+            disk.partition_entry_size,
+        });
+
+        var part_it = try disk.partitions();
+        defer (part_it.done() catch unreachable);
+        while (try part_it.next()) |part| {
+            var type_guid: [Guid.string_size]u8 = undefined;
+            try part.type_guid.to_string(type_guid[0..]);
+            print.format(
+                \\     - Part
+                \\       - {}
+                \\       - {} - {}
+                \\
+                , .{
+                type_guid,
+                part.start,
+                part.end,
+            });
+            if (part.is_linux()) {
+                // TODO: Acutally see if this the right partition
+                print.string("     - Is Linux!\n");
+                self.impl.offset = part.start * block_store.block_size;
+            }
+        }
+
+        // TODO: If partition isn't found?
+
+    } else |e| {
+        if (e != gpt.Error.InvalidMbr) {
+            return e;
+        } else {
+            print.string(" - Disk doesn't have a MBR, going to try to use whole " ++
+                "disk as a ext2 filesystem.\n");
+            // Else try to use whole disk
+        }
+    }
+
+    try self.impl.init(alloc, block_store);
+}
+
+pub fn open(self: *Self, path: []const u8) Error!*File {
+    return self.impl.open(path);
+}
 
 pub const PathIterator = struct {
     path: []const u8,
