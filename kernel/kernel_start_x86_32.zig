@@ -10,12 +10,25 @@
 // a subdirectory of a zig package. I'm fine with such an important file being
 // an exception for platforms.
 
+const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 
 const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
 const util = @import("util.zig");
+
+const sse_enabled: bool = comptime {
+    for (builtin.arch.allFeaturesList()) |feature, index_usize| {
+        const index = @intCast(std.Target.Cpu.Feature.Set.Index, index_usize);
+        if (builtin.cpu.features.isEnabled(index)) {
+            if (feature.name.len >= 3 and std.mem.eql(u8, feature.name[0..3], "sse")) {
+                return true;
+            }
+        }
+    }
+    return false;
+};
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     kernel.panic(msg, trace);
@@ -245,18 +258,22 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     // work.
     // This also allows us to explicitly take advantage of it.
     // Based on the initialization code in https://wiki.osdev.org/SSE
-    asm volatile (
-        \\ mov %%cr0, %%eax
-        \\ and $0xFFFB, %%ax
-        \\ or $0x0002, %%ax
-        \\ mov %%eax, %%cr0
+    // TODO: Disabled for now in build.zig because we need to support saving
+    // and restoring SSE registers first.
+    if (sse_enabled) {
+        asm volatile (
+            \\ mov %%cr0, %%eax
+            \\ and $0xFFFB, %%ax
+            \\ or $0x0002, %%ax
+            \\ mov %%eax, %%cr0
 
-        \\ mov %%cr4, %%eax
-        \\ or $0x0600, %%ax
-        \\ mov %%eax, %%cr4
-    :::
-        "eax"
-    );
+            \\ mov %%cr4, %%eax
+            \\ or $0x0600, %%ax
+            \\ mov %%eax, %%cr4
+        :::
+            "eax"
+        );
+    }
 
     // Start the generic main function, jumping to high memory kernel at the
     // same time.

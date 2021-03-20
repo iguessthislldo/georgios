@@ -23,18 +23,26 @@ pub fn build(b: *std.build.Builder) void {
         \\Print debug information by default
         ) orelse true;
 
-    // TODO: Make Controllable
-    const zig_arch = builtin.Arch.i386;
-    const georgios_arch = "x86_32";
-    const target = std.zig.CrossTarget{
-        .cpu_arch = .i386,
-        .os_tag = .freestanding,
-        .abi = .gnu,
+    const target = b.standardTargetOptions(.{
+        .default_target = std.zig.CrossTarget.parse(.{
+            .arch_os_abi = "i386-freestanding-gnu",
+            .cpu_features = "pentiumpro"
+            // TODO: This is to forbid SSE code. See SSE init code in
+            // kernel_start_x86_32.zig for details.
+        }) catch @panic("Failed Making Default Target"),
+    });
+    const platform = switch (target.cpu_arch.?) {
+        .i386 => "x86_32",
+        else => {
+            std.debug.warn("Unsupported Platform: {}\n", .{@tagName(target.cpu_arch.?)});
+            @panic("Unsupported Platform");
+        },
     };
 
     // Kernel
-    const kernel = b.addExecutable("kernel.elf",
-        k_path ++ "kernel_start_" ++ georgios_arch ++ ".zig");
+    const root_file = std.fmt.allocPrint(
+        alloc, "{}kernel_start_{}.zig", .{k_path, platform}) catch @panic("root_file");
+    const kernel = b.addExecutable("kernel.elf", root_file);
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTarget(target);
     kernel.setBuildMode(build_mode);
