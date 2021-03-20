@@ -9,7 +9,7 @@ pub const elf = @import("elf.zig");
 pub const util = @import("util.zig");
 pub const Devices = @import("devices.zig").Devices;
 pub const threading = @import("threading.zig");
-pub const Filesystem = @import("filesystem.zig");
+pub const fs = @import("fs.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -33,7 +33,7 @@ pub const Kernel = struct {
     devices: Devices = Devices{},
     raw_block_store: ?*io.BlockStore = null,
     block_store: io.CachedBlockStore = io.CachedBlockStore{},
-    filesystem: Filesystem = Filesystem{},
+    filesystem: fs.Filesystem = fs.Filesystem{},
     threading_manager: threading.Manager = undefined,
 
     pub fn init(self: *Kernel) !void {

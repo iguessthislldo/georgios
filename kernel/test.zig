@@ -10,6 +10,6 @@ test "dummy" {
     const map = @import("map.zig");
     const mapped_list = @import("mapped_list.zig");
     const log = @import("log.zig");
-    const filesystem = @import("filesystem.zig");
+    const fs = @import("fs.zig");
     const Guid = @import("guid.zig");
 }

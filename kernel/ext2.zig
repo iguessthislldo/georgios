@@ -10,7 +10,7 @@ const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
-const filesystem = @import("filesystem.zig");
+const fs = @import("fs.zig");
 
 pub const Error = error {
     FileNotFound,
@@ -136,7 +136,7 @@ pub const DataBlockIterator = struct {
         EndOfFile: void,
     };
 
-    fs: *Ext2,
+    ext2: *Ext2,
     inode: *Inode,
     got: usize = 0,
     first_level_pos: usize = 0,
@@ -154,41 +154,43 @@ pub const DataBlockIterator = struct {
             self.second_level_pos = 0;
             self.third_level_pos = 0;
             self.fourth_level_pos = 0;
-        } else if (block >= Ext2.second_level_start and block < self.fs.third_level_start) {
+        } else if (block >= Ext2.second_level_start and block < self.ext2.third_level_start) {
             self.first_level_pos = second_level_index;
             self.second_level_pos = block - Ext2.second_level_start;
             self.third_level_pos = 0;
             self.fourth_level_pos = 0;
-        } else if (block >= self.fs.third_level_start and block < self.fs.fourth_level_start) {
+        } else if (block >= self.ext2.third_level_start and
+                block < self.ext2.fourth_level_start) {
             self.first_level_pos = third_level_index;
-            const level_offset = block - self.fs.third_level_start;
-            self.second_level_pos = level_offset / self.fs.max_entries_per_block;
-            self.third_level_pos = level_offset % self.fs.max_entries_per_block;
+            const level_offset = block - self.ext2.third_level_start;
+            self.second_level_pos = level_offset / self.ext2.max_entries_per_block;
+            self.third_level_pos = level_offset % self.ext2.max_entries_per_block;
             self.fourth_level_pos = 0;
-        } else if (block >= self.fs.fourth_level_start and
-                block < self.fs.max_fourth_level_entries) {
+        } else if (block >= self.ext2.fourth_level_start and
+                block < self.ext2.max_fourth_level_entries) {
             self.first_level_pos = fourth_level_index;
-            const level_offset = block - self.fs.fourth_level_start;
-            self.second_level_pos = level_offset / self.fs.max_third_level_entries;
-            const sub_level_offset = level_offset % self.fs.max_third_level_entries;
-            self.third_level_pos = sub_level_offset / self.fs.max_entries_per_block;
-            self.fourth_level_pos = sub_level_offset % self.fs.max_entries_per_block;
+            const level_offset = block - self.ext2.fourth_level_start;
+            self.second_level_pos = level_offset / self.ext2.max_third_level_entries;
+            const sub_level_offset = level_offset % self.ext2.max_third_level_entries;
+            self.third_level_pos = sub_level_offset / self.ext2.max_entries_per_block;
+            self.fourth_level_pos = sub_level_offset % self.ext2.max_entries_per_block;
         } else return Error.OutOfBounds;
-        self.got = block * self.fs.block_size;
+        self.got = block * self.ext2.block_size;
         self.new_pos = true;
     }
 
     fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) Error!void {
         if (level.* == null) {
-            level.* = try self.fs.alloc.alloc_array(u32, self.fs.block_size / @sizeOf(u32));
+            level.* = try self.ext2.alloc.alloc_array(
+                u32, self.ext2.block_size / @sizeOf(u32));
         }
-        try self.fs.get_entry_block(level.*.?, index);
+        try self.ext2.get_entry_block(level.*.?, index);
     }
 
     fn prepare_level(self: *DataBlockIterator, index: usize,
             level_pos: *usize, level: *?[]u32, parent_level_pos: *usize) bool {
         if (self.first_level_pos < index) return false;
-        if (level_pos.* >= self.fs.max_entries_per_block) {
+        if (level_pos.* >= self.ext2.max_entries_per_block) {
             parent_level_pos.* += 1;
             level_pos.* = 0;
             return true;
@@ -280,27 +282,27 @@ pub const DataBlockIterator = struct {
     }
 
     pub fn next(self: *DataBlockIterator, dest: []u8) Error!?[]u8 {
-        if (dest.len < self.fs.block_size) {
+        if (dest.len < self.ext2.block_size) {
             return Error.NotEnoughDestination;
         }
-        const dest_use = dest[0..self.fs.block_size];
+        const dest_use = dest[0..self.ext2.block_size];
         switch (try self.get_next_block_info()) {
             .Index => |index| {
-                try self.fs.get_data_block(dest_use, index);
+                try self.ext2.get_data_block(dest_use, index);
             },
             .FillInZeros => util.memory_set(dest_use, 0),
             .EndOfFile => return null,
         }
-        const got = util.min(u32, self.inode.size - self.got, self.fs.block_size);
+        const got = util.min(u32, self.inode.size - self.got, self.ext2.block_size);
         // print.format("DataBlockIterator.next: got: {} {}\n", self.inode.size, self.got);
         self.got += got;
         return dest_use[0..got];
     }
 
     pub fn done(self: *DataBlockIterator) Error!void {
-        if (self.second_level != null) try self.fs.alloc.free_array(self.second_level.?);
-        if (self.third_level != null) try self.fs.alloc.free_array(self.third_level.?);
-        if (self.fourth_level != null) try self.fs.alloc.free_array(self.fourth_level.?);
+        if (self.second_level != null) try self.ext2.alloc.free_array(self.second_level.?);
+        if (self.third_level != null) try self.ext2.alloc.free_array(self.third_level.?);
+        if (self.fourth_level != null) try self.ext2.alloc.free_array(self.fourth_level.?);
     }
 };
 
@@ -320,7 +322,7 @@ const DirectoryIterator = struct {
         inode: Inode,
     };
 
-    fs: *Ext2,
+    ext2: *Ext2,
     inode: *Inode,
     data_block_iter: DataBlockIterator,
     buffer: []u8,
@@ -329,21 +331,21 @@ const DirectoryIterator = struct {
     initial: bool = true,
     value: Value = undefined,
 
-    pub fn new(fs: *Ext2, inode: *Inode) Error!DirectoryIterator {
+    pub fn new(ext2: *Ext2, inode: *Inode) Error!DirectoryIterator {
         if (!inode.is_directory()) {
             return Error.NotADirectory;
         }
         return DirectoryIterator{
-            .fs = fs,
+            .ext2 = ext2,
             .inode = inode,
-            .data_block_iter = DataBlockIterator{.fs = fs, .inode = inode},
-            .buffer = try fs.alloc.alloc_array(u8, fs.block_size),
-            .block_count = inode.size / fs.block_size,
+            .data_block_iter = DataBlockIterator{.ext2 = ext2, .inode = inode},
+            .buffer = try ext2.alloc.alloc_array(u8, ext2.block_size),
+            .block_count = inode.size / ext2.block_size,
         };
     }
 
     pub fn next(self: *DirectoryIterator) Error!bool {
-        const get_next_block = self.buffer_pos >= self.fs.block_size;
+        const get_next_block = self.buffer_pos >= self.ext2.block_size;
         if (get_next_block) {
             self.buffer_pos = 0;
             self.block_count -= 1;
@@ -364,13 +366,13 @@ const DirectoryIterator = struct {
         self.buffer_pos += entry.next_entry_offset;
         self.value.inode_number = entry.inode;
         self.value.name = self.buffer[name_pos..name_pos + entry.name_size];
-        try self.fs.get_inode(entry.inode, &self.value.inode);
+        try self.ext2.get_inode(entry.inode, &self.value.inode);
         return true;
     }
 
     pub fn done(self: *DirectoryIterator) Error!void {
         try self.data_block_iter.done();
-        try self.fs.alloc.free_array(self.buffer);
+        try self.ext2.alloc.free_array(self.buffer);
     }
 };
 
@@ -379,18 +381,18 @@ pub const File = struct {
 
     const FileError = Error || io.FileError;
 
-    fs: *Ext2 = undefined,
+    ext2: *Ext2 = undefined,
     inode: Inode = undefined,
     io_file: io.File = undefined,
     data_block_iter: DataBlockIterator = undefined,
     buffer: ?[]u8 = null,
     position: usize = 0,
 
-    pub fn init(self: *File, fs: *Ext2, inode: u32) Error!void {
+    pub fn init(self: *File, ext2: *Ext2, inode: u32) Error!void {
         self.* = File{};
-        self.fs = fs;
-        try fs.get_inode(inode, &self.inode);
-        self.data_block_iter = DataBlockIterator{.fs = fs, .inode = &self.inode};
+        self.ext2 = ext2;
+        try ext2.get_inode(inode, &self.inode);
+        self.data_block_iter = DataBlockIterator{.ext2 = ext2, .inode = &self.inode};
         self.io_file = io.File{
             .read_impl = Self.read,
             .write_impl = io.File.unsupported.write_impl,
@@ -402,16 +404,16 @@ pub const File = struct {
     pub fn read(file: *io.File, to: []u8) FileError!usize {
         const self = @fieldParentPtr(Self, "io_file", file);
         if (self.buffer == null) {
-            self.buffer = try self.fs.alloc.alloc_array(u8, self.fs.block_size);
+            self.buffer = try self.ext2.alloc.alloc_array(u8, self.ext2.block_size);
         }
         var got: usize = 0;
         while (got < to.len) {
             // TODO: See if buffer already has the data we need!!!
-            try self.data_block_iter.set_position(self.position / self.fs.block_size);
+            try self.data_block_iter.set_position(self.position / self.ext2.block_size);
             const block = try self.data_block_iter.next(self.buffer.?);
             if (block == null) break;
             const read_size = util.memory_copy_truncate(
-                to[got..], block.?[self.position % self.fs.block_size..]);
+                to[got..], block.?[self.position % self.ext2.block_size..]);
             if (read_size == 0) break;
             self.position += read_size;
             got += read_size;
@@ -496,7 +498,7 @@ pub const Ext2 = struct {
         var dir_inode: Inode = undefined;
         try self.get_inode(Ext2.root_inode_number, &dir_inode);
 
-        var it = filesystem.PathIterator.new(path);
+        var it = fs.PathIterator.new(path);
         while (it.next()) |component| {
             // See if That Component is in the Current Directory
             var dir_iter = try DirectoryIterator.new(self, &dir_inode);
