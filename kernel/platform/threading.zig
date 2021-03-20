@@ -93,7 +93,7 @@ pub const ProcessImpl = struct {
         try self.pmem().mark_virtual_memory_present(
             self.page_directory, usermode_stack, true);
         const kernelmode_stack = try self.kmem().big_alloc.alloc_range(kutil.Ki(4));
-        platform.segments.set_usermode_interrupt_stack(kernelmode_stack.end() - 1);
+        platform.segments.set_interrupt_handler_stack(kernelmode_stack.end() - 1);
         try pmemory.load_page_directory(self.page_directory, null);
         self.process.main_thread.impl.setup_context(
             usermode_stack.end() - 1, self.process.entry);

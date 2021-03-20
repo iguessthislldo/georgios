@@ -75,6 +75,8 @@ var table = table_init: {
     break :table_init entries;
 };
 
+// TODO: Bochs error for interrupt 39 is missing default error messeage, figure
+// out why.
 const invalid_index = "Interrupt number is invalid";
 var names = names_init: {
     var the_names: [table.len][]const u8 = undefined;
@@ -239,19 +241,27 @@ fn BaseInterruptHandler(
         impl: fn(u32, *const InterruptStackType) void) type {
     return struct {
         const index: u8 = i;
+        const irq_number: u32 = if (irq) i - pic.irq_0_7_interrupt_offset else 0;
 
         fn inner_handler(interrupt_stack: *const InterruptStackType) void {
+            const spurious =
+                if (irq_number == 7 or irq_number == 15)
+                    pic.is_spurious_irq(irq_number)
+                else
+                    false;
             if (irq) {
-                const irq_number = @as(u32, i - pic.irq_0_7_interrupt_offset);
-                pic.silence_irq(irq_number);
-                impl(irq_number, interrupt_stack);
-            } else {
+                if (!spurious) {
+                    impl(irq_number, interrupt_stack);
+                }
+                pic.end_of_interrupt(irq_number, spurious);
+            } else if (!spurious) {
                 impl(@as(u32, i), interrupt_stack);
             }
         }
 
         pub fn handler() callconv(.Naked) noreturn {
             asm volatile ("cli");
+
             // Push EAX, ECX, EDX, EBX, original ESP, EBP, ESI, and EDI
             asm volatile ("pushal");
 
@@ -338,30 +348,53 @@ pub const pic = struct {
     const irq_8_15_command_port: u16 = 0xA0;
     const irq_8_15_data_port: u16 = 0xA1;
 
+    const read_irr_command: u8 = 0x0a;
+    const read_isr_command: u8 = 0x0b;
     const init_command: u8 = 0x11;
     const reset_command: u8 = 0x20;
 
-    fn busywork() void {
+    inline fn busywork() void {
         asm volatile (
             \\add %%ch, %%bl
             \\add %%ch, %%bl
         );
     }
 
-    pub fn silence_irq(irq: u8) void {
-        if (irq >= 8) putil.out8(irq_8_15_data_port, reset_command);
-        putil.out8(irq_0_7_command_port, reset_command);
+    inline fn irq_mask(irq: u8) u8 {
+        var offset = irq;
+        if (irq >= 8) {
+            offset -= 8;
+        }
+        return @as(u8, 1) << @intCast(u3, offset);
+    }
+
+    pub fn is_spurious_irq(irq: u8) bool {
+        var port = irq_0_7_command_port;
+        if (irq >= 8) {
+            port = irq_8_15_command_port;
+        }
+        putil.out8(port, read_isr_command);
+        const rv = putil.in8(port) & irq_mask(irq) == 0;
+        return rv;
+    }
+
+    pub fn end_of_interrupt(irq: u8, spurious: bool) void {
+        const chained = irq >= 8;
+        if (chained and !spurious) {
+            putil.out8(irq_8_15_command_port, reset_command);
+        }
+        if (!spurious or (chained and spurious)) {
+            putil.out8(irq_0_7_command_port, reset_command);
+        }
         busywork();
     }
 
     pub fn allow_irq(irq: u8, enabled: bool) void {
-        var offset = irq;
         var port = irq_0_7_data_port;
         if (irq >= 8) {
-            offset -= 8;
             port = irq_8_15_data_port;
         }
-        putil.out8(port, putil.in8(port) & ~(@as(u8, 1) << @intCast(u3, offset)));
+        putil.out8(port, putil.in8(port) & ~irq_mask(irq));
         busywork();
     }
 
@@ -409,8 +442,6 @@ pub const pic = struct {
         pic.allow_irq(0, true);
     }
 };
-
-// Public Interface ==========================================================
 
 fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
     print.char('!');

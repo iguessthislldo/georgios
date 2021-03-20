@@ -69,7 +69,7 @@ pub const Kernel = struct {
     }
 };
 
-var kernel = Kernel{};
+pub var kernel = Kernel{};
 
 pub fn kernel_main() void {
     if (kernel.run()) |_| {} else |e| {

@@ -61,7 +61,7 @@ const TaskStateSegment = packed struct {
 };
 var task_state_segment = TaskStateSegment{};
 
-pub fn set_usermode_interrupt_stack(esp: u32) void {
+pub fn set_interrupt_handler_stack(esp: u32) void {
     task_state_segment.esp0 = esp;
     task_state_segment.ss0 = kernel_data_selector;
 }
@@ -97,6 +97,7 @@ const Entry = packed struct {
     base_0_15: u16,
     base_16_23: u8,
     access: Access,
+    // TODO: Zig Bug?
     // Highest 4 bits of limit and flags. Was going to have this be two 4 bit
     // fields, but that wasn't the same thing as this for some reason...
     limit_16_19: u8,
