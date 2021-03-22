@@ -9,3 +9,7 @@ pub inline fn getc() u8 {
         [syscall_number] "{eax}" (@as(u32, 1)), [arg1] "{ebx}" (@ptrToInt(&c)));
     return c;
 }
+
+pub inline fn yield() void {
+    asm volatile ("int $100" :: [syscall_number] "{eax}" (@as(u32, 2)));
+}

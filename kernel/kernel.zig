@@ -51,12 +51,13 @@ pub const Kernel = struct {
 
         // Threading
         self.threading_manager = threading.Manager{.memory_manager = &self.memory};
+        try self.threading_manager.init();
     }
 
     pub fn run(self: *Kernel) !void {
         try self.init();
 
-        const a = try self.threading_manager.new_process();
+        const a = try self.threading_manager.new_process(true);
         var ext2_file = try self.filesystem.open("bin/a.elf");
         var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
         // TODO: Function to set up a Process from an elf.Object
@@ -66,6 +67,16 @@ pub const Kernel = struct {
         }
         a.entry = elf_object.header.entry;
         try self.threading_manager.start_process(a);
+
+        var c: usize = 0;
+        while (true) {
+            print.char('k');
+            c += 1;
+            if (c == 50) {
+                self.threading_manager.yield();
+                c = 0;
+            }
+        }
     }
 };
 

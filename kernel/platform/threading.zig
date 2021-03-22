@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const kernel = @import("../kernel.zig");
 const kthreading = @import("../threading.zig");
 const Thread = kthreading.Thread;
 const Process = kthreading.Process;
@@ -52,20 +53,51 @@ pub const ThreadImpl = struct {
         unreachable;
     }
 
+    const SwitchToFrame = packed struct {
+        // pushf
+        eflags: u32,
+        // pusha
+        edi: u32,
+        esi: u32,
+        ebp: u32,
+        esp: u32,
+        ebx: u32,
+        edx: u32,
+        ecx: u32,
+        eax: u32,
+        // Function
+        func_value1: u32,
+        func_value0: u32,
+        func_ebx: u32,
+        func_ebp: u32,
+        func_return: u32,
+    };
+
     fn setup_context(self: *ThreadImpl, sp: usize, ip: usize) void {
         self.context = sp;
-        var is = kutil.zero_init(InterruptStack);
-        is.eip = ip;
-        is.esp = sp;
-        self.push_to_context(is);
-        self.push_to_context(@ptrToInt(return_to));
+        var frame = kutil.zero_init(SwitchToFrame);
+        frame.esp = sp;
+        frame.func_return = ip;
+        frame.func_ebp = sp;
+        self.push_to_context(frame);
     }
 
     pub fn start(self: *ThreadImpl) Error!void {
-        // TODO: Real Context Switch
-        _ = self.pop_from_context(usize);
-        const is = self.pop_from_context(InterruptStack);
-        usermode(is.eip, is.esp);
+    }
+
+    pub fn switch_to(thread_impl: *ThreadImpl) void {
+        const last = kernel.kernel.threading_manager.current;
+        kernel.kernel.threading_manager.current = thread_impl.thread;
+        asm volatile (
+            \\pusha
+            \\pushf
+            \\movl %%esp, (%[old_context_ptr])
+            \\movl %[new_context], %%esp
+            \\popf
+            \\popa
+            : :
+                [old_context_ptr] "{ax}" (@ptrToInt(&last.impl.context)),
+                [new_context] "{bx}" (thread_impl.context));
     }
 };
 
@@ -87,6 +119,8 @@ pub const ProcessImpl = struct {
     }
 
     pub fn start(self: *ProcessImpl) Error!void {
+        // TODO: If there is an error here it won't be good. Need to be able to
+        // undo th effects.
         const usermode_stack = Range{
             .start = platform.kernel_to_virtual(0) - platform.frame_size,
             .size = platform.frame_size};
@@ -97,7 +131,7 @@ pub const ProcessImpl = struct {
         try pmemory.load_page_directory(self.page_directory, null);
         self.process.main_thread.impl.setup_context(
             usermode_stack.end() - 1, self.process.entry);
-        try self.process.main_thread.start();
+        self.process.main_thread.impl.switch_to();
     }
 
     pub fn address_space_copy(self: *ProcessImpl,

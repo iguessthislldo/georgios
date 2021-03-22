@@ -43,7 +43,10 @@ fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptSt
     const call_number = interrupt_stack.eax;
     const arg1 = interrupt_stack.ebx;
     switch (call_number) {
+        // print_string(s: []const u8) void
         0 => print.string(@intToPtr(*[]const u8, arg1).*),
+
+        // getc() u8
         1 => {
             const ps2 = @import("ps2.zig");
             while (true) {
@@ -54,6 +57,10 @@ fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptSt
                 putil.wait_milliseconds(100);
             }
         },
+
+        // yield() void
+        2 => kernel.kernel.threading_manager.yield(),
+
         else => @panic("Invalid System Call"),
     }
 }
@@ -483,8 +490,8 @@ pub fn init() void {
     InterruptHandler(system_call_interrupt_number, handle_system_call).set(
         "System Call", kernel_code_selector, user_flags);
 
-    IrqInterruptHandler(0, tick).set(
-        "IRQ0: Timer", kernel_code_selector, kernel_flags);
+    // IrqInterruptHandler(0, tick).set(
+    //     "IRQ0: Timer", kernel_code_selector, kernel_flags);
 
     load();
 

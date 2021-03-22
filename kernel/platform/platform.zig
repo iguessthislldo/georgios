@@ -129,5 +129,5 @@ pub fn init(kernel: *Kernel) !void {
 
     // acpi.init();
 
-    interrupts.pic.start_ticking(100);
+    // interrupts.pic.start_ticking(100);
 }
