@@ -54,19 +54,24 @@ pub const Kernel = struct {
         try self.threading_manager.init();
     }
 
+    fn exec(self: *Kernel, path: []const u8) !void {
+        const process = try self.threading_manager.new_process(true);
+        var ext2_file = try self.filesystem.open(path);
+        var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
+        var segments = elf_object.segments.iterator();
+        while (segments.next()) |segment| {
+            try process.address_space_copy(segment.address, segment.data);
+        }
+        process.entry = elf_object.header.entry;
+        try self.threading_manager.start_process(process);
+    }
+
     pub fn run(self: *Kernel) !void {
         try self.init();
 
-        const a = try self.threading_manager.new_process(true);
-        var ext2_file = try self.filesystem.open("bin/a.elf");
-        var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
-        // TODO: Function to set up a Process from an elf.Object
-        var segments = elf_object.segments.iterator();
-        while (segments.next()) |segment| {
-            try a.address_space_copy(segment.address, segment.data);
-        }
-        a.entry = elf_object.header.entry;
-        try self.threading_manager.start_process(a);
+        try self.exec("bin/a.elf");
+        try self.exec("bin/b.elf");
+        self.threading_manager.yield();
 
         var c: usize = 0;
         while (true) {

@@ -39,7 +39,6 @@ pub const Process = struct {
 
     pub fn init(self: *Process, memory_manager: *memory.Memory) Error!void {
         self.memory_manager = memory_manager;
-        self.impl = pthreading.ProcessImpl{.process = self};
         try self.impl.init(self);
         self.main_thread.process = self;
         try self.main_thread.init(memory_manager);
@@ -65,7 +64,8 @@ pub const Manager = struct {
     head_thread: ?*Thread = null,
     tail_thread: ?*Thread = null,
     next_thread_id: Thread.Id = 1,
-    current: *Thread = undefined,
+    current_process: ?*Process = null,
+    current: *Thread = undefined, // TODO: Rename to current_thread
     boot_thread: Thread = .{.id = 0, .kernel_mode = true},
 
     pub fn init(self: *Manager) Error!void {
@@ -82,7 +82,7 @@ pub const Manager = struct {
 
     pub fn start_process(self: *Manager, process: *Process) Error!void {
         self.insert_thread(&process.main_thread);
-        try process.start();
+        // try process.start();
     }
 
     pub fn insert_thread(self: *Manager, thread: *Thread) void {
@@ -100,15 +100,14 @@ pub const Manager = struct {
     }
 
     pub fn next(self: *Manager) ?*Thread {
-        return if (self.current == &self.boot_thread) self.head_thread else &self.boot_thread;
-        // var next_thread: ?*Thread = self.current.next_in_system;
-        // if (next_thread == null) {
-        //     next_thread = self.head_thread;
-        // }
-        // if (next_thread.? == self.current) {
-        //     next_thread = null;
-        // }
-        // return next_thread;
+        var next_thread: ?*Thread = self.current.next_in_system;
+        if (next_thread == null) {
+            next_thread = self.head_thread;
+        }
+        if (next_thread.? == self.current) {
+            next_thread = null;
+        }
+        return next_thread;
     }
 
     pub fn yield(self: *Manager) void {

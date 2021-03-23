@@ -237,6 +237,8 @@ pub fn flush_buffer() void {
 
 pub fn init(memory: *kmemory.Memory) void {
     if (multiboot.get_vbe_info()) |vbe| {
+        print.string(" - Got VBE info from Multiboot...\n");
+
         mem = memory;
 
         info = @ptrCast(*Info, &vbe.control_info[0]);
@@ -282,6 +284,6 @@ pub fn init(memory: *kmemory.Memory) void {
             flush_buffer();
         }
     } else {
-        print.string("Missing VBE info from Multiboot. Could not init VBE.\n");
+        print.string(" - Missing VBE info from Multiboot. Could not init VBE.\n");
     }
 }
