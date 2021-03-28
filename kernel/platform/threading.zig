@@ -13,14 +13,38 @@ const platform = @import("platform.zig");
 const pmemory = @import("memory.zig");
 const interrupts = @import("interrupts.zig");
 const InterruptStack = interrupts.InterruptStack;
+const segments = @import("segments.zig");
 
 pub const Error = kutil.Error || kmemory.MemoryError;
 
 const pmem = &kernel.memory.platform_memory;
 
-pub extern fn setup_process(usermode: bool, ip: u32, sp: u32) u32;
-pub extern fn context_switch(old: u32, new: u32) void;
-pub extern fn usermode(ip: u32, sp: u32) noreturn;
+fn usermode(ip: u32, sp: u32) noreturn {
+    asm volatile (
+        \\// Load User Data Selector into Data Segment Registers
+        \\movw %[user_data_selector], %%ds
+        \\movw %[user_data_selector], %%es
+        \\movw %[user_data_selector], %%fs
+        \\movw %[user_data_selector], %%gs
+        \\
+        \\// Push arguments for iret
+        \\pushl %[user_data_selector] // ss
+        \\pushl %[sp] // sp
+        \\// Push Flags with Interrupts Enabled
+        \\pushf
+        \\movl (%%esp), %%edx
+        \\orl $0x0200, %%edx
+        \\movl %%edx, (%%esp)
+        \\pushl %[user_code_selector]
+        \\pushl %[ip] // ip
+        \\iret // jump to ip as ring 3
+    : :
+        [user_code_selector] "{cx}" (@as(u32, segments.user_code_selector)),
+        [user_data_selector] "{dx}" (@as(u32, segments.user_data_selector)),
+        [sp] "{bx}" (sp),
+        [ip] "{ax}" (ip));
+    unreachable;
+}
 
 pub const ThreadImpl = struct {
     thread: *Thread,

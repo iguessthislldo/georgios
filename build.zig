@@ -5,10 +5,6 @@ const t_path = "tmp/";
 const k_path = "kernel/";
 const p_path = k_path ++ "platform/";
 
-const s_sources = [_][]const u8 {
-    p_path ++ "threading.s",
-};
-
 const boot_path = t_path ++ "iso/boot/";
 
 pub fn build(b: *std.build.Builder) void {
@@ -49,9 +45,6 @@ pub fn build(b: *std.build.Builder) void {
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
     kernel.addBuildOption(bool, "debug_log", debug_log);
-    for (s_sources) |s_source| {
-        kernel.addAssemblyFile(s_source);
-    }
     // ACPICA
     if (false) { // TODO: Disabled for now
         var acpica = b.addObject("acpica", null);
