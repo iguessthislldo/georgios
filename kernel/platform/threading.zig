@@ -83,13 +83,13 @@ pub const ThreadImpl = struct {
         if (self.thread.process) |process| {
             process.impl.switch_to() catch @panic("ProcessImpl.switch_to");
         }
-        kernel.kernel.threading_manager.current_process = self.thread.process;
-        kernel.kernel.threading_manager.current_thread = self.thread;
+        kernel.threading_manager.current_process = self.thread.process;
+        kernel.threading_manager.current_thread = self.thread;
     }
 
     pub fn switch_to(self: *ThreadImpl) void {
         // WARNING: A FRAME FOR THIS FUNCTION NEEDS TO BE SETUP IN setup_context!
-        const last = kernel.kernel.threading_manager.current_thread.?;
+        const last = kernel.threading_manager.current_thread.?;
         self.before_switch();
         asm volatile (
             \\pushf
@@ -124,12 +124,12 @@ pub const ThreadImpl = struct {
         print.format("Thread {} is Starting\n", .{self.thread.id});
         self.run_impl();
         platform.disable_interrupts();
-        kernel.kernel.threading_manager.remove_thread(self.thread);
+        kernel.threading_manager.remove_thread(self.thread);
         print.format("Thread {} is Done\n", .{self.thread.id});
         platform.enable_interrupts();
         // TODO: Cleanup Process
         while (true) {
-            kernel.kernel.threading_manager.yield();
+            kernel.threading_manager.yield();
         }
         platform.done();
         // unreachable;
@@ -170,7 +170,7 @@ pub const ProcessImpl = struct {
             platform.segments.set_interrupt_handler_stack(self.kernelmode_stack.end() - 1);
         }
         var current_page_directory: ?[]u32 = null;
-        if (kernel.kernel.threading_manager.current_process) |current| {
+        if (kernel.threading_manager.current_process) |current| {
             current_page_directory = current.impl.page_directory;
         }
         try pmemory.load_page_directory(self.page_directory, current_page_directory);

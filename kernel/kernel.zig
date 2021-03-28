@@ -27,67 +27,62 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     platform.panic(msg, trace);
 }
 
-pub const Kernel = struct {
-    console: io.File = io.File{},
-    memory: Memory = Memory{},
-    devices: Devices = Devices{},
-    raw_block_store: ?*io.BlockStore = null,
-    block_store: io.CachedBlockStore = io.CachedBlockStore{},
-    filesystem: fs.Filesystem = fs.Filesystem{},
-    threading_manager: threading.Manager = undefined,
+pub var console: io.File = .{};
+pub var memory: Memory = .{};
+pub var devices: Devices = .{};
+pub var raw_block_store: ?*io.BlockStore = null;
+pub var block_store: io.CachedBlockStore = .{};
+pub var filesystem: fs.Filesystem = .{};
+pub var threading_manager: threading.Manager = undefined;
 
-    pub fn init(self: *Kernel) !void {
-        print.init(&self.console, build_options.debug_log);
-        try platform.init(self);
+pub fn init() !void {
+    print.init(&console, build_options.debug_log);
+    try platform.init();
 
-        // Filesystem
-        if (self.raw_block_store) |raw| {
-            self.block_store.init(self.memory.small_alloc, raw, 128);
-            try self.filesystem.init(
-                self.memory.small_alloc, &self.block_store.block_store);
-        } else {
-            print.string(" - No Disk Found\n");
-        }
-
-        // Threading
-        self.threading_manager = threading.Manager{.memory_manager = &self.memory};
-        try self.threading_manager.init();
+    // Filesystem
+    if (raw_block_store) |raw| {
+        block_store.init(memory.small_alloc, raw, 128);
+        try filesystem.init(memory.small_alloc, &block_store.block_store);
+    } else {
+        print.string(" - No Disk Found\n");
     }
 
-    fn exec(self: *Kernel, path: []const u8) !void {
-        const process = try self.threading_manager.new_process(true);
-        var ext2_file = try self.filesystem.open(path);
-        var elf_object = try elf.Object.from_file(self.memory.small_alloc, &ext2_file.io_file);
-        var segments = elf_object.segments.iterator();
-        while (segments.next()) |segment| {
-            try process.address_space_copy(segment.address, segment.data);
-        }
-        process.entry = elf_object.header.entry;
-        try self.threading_manager.start_process(process);
+    // Threading
+    threading_manager = threading.Manager{.memory_manager = &memory};
+    try threading_manager.init();
+}
+
+fn exec(path: []const u8) !void {
+    const process = try threading_manager.new_process(true);
+    var ext2_file = try filesystem.open(path);
+    var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
+    var segments = elf_object.segments.iterator();
+    while (segments.next()) |segment| {
+        try process.address_space_copy(segment.address, segment.data);
     }
+    process.entry = elf_object.header.entry;
+    try threading_manager.start_process(process);
+}
 
-    pub fn run(self: *Kernel) !void {
-        try self.init();
+pub fn run() !void {
+    try init();
 
-        try self.exec("bin/a.elf");
-        try self.exec("bin/b.elf");
+    try exec("bin/a.elf");
+    try exec("bin/b.elf");
 
-        var c: usize = 0;
-        while (true) {
-            print.char('k');
-            c += 1;
-            if (c == 50) {
-                self.threading_manager.yield();
-                c = 0;
-            }
+    var c: usize = 0;
+    while (true) {
+        print.char('k');
+        c += 1;
+        if (c == 50) {
+            threading_manager.yield();
+            c = 0;
         }
     }
-};
-
-pub var kernel = Kernel{};
+}
 
 pub fn kernel_main() void {
-    if (kernel.run()) |_| {} else |e| {
+    if (run()) |_| {} else |e| {
         panic(@errorName(e), @errorReturnTrace());
     }
     print.string("Done\n");

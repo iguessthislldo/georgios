@@ -61,7 +61,7 @@ fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptSt
         // yield() void
         2 => {
             print.char('Y');
-            kernel.kernel.threading_manager.yield();
+            kernel.threading_manager.yield();
         },
 
         else => @panic("Invalid System Call"),
@@ -458,7 +458,7 @@ pub var in_tick = false;
 fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
     in_tick = true;
     print.char('!');
-    kernel.kernel.threading_manager.yield();
+    kernel.threading_manager.yield();
     in_tick = false;
 }
 

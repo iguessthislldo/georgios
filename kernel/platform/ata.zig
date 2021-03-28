@@ -5,7 +5,7 @@ const memory = @import("../memory.zig");
 const MemoryError = memory.MemoryError;
 const Allocator = memory.Allocator;
 const devices = @import("../devices.zig");
-const Kernel = @import("../kernel.zig").Kernel;
+const kernel = @import("../kernel.zig");
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
@@ -528,8 +528,7 @@ const Controller = struct {
     }
 };
 
-pub fn init(kernel: *Kernel, location: pci.Location,
-        header: *const pci.Header) void {
+pub fn init(location: pci.Location, header: *const pci.Header) void {
     var controller = kernel.memory.small_alloc.alloc(Controller) catch {
         @panic("Failure");
     };

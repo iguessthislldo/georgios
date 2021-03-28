@@ -2,7 +2,7 @@ const builtin = @import("builtin");
 
 const io = @import("../io.zig");
 const print = @import("../print.zig");
-const Kernel = @import("../kernel.zig").Kernel;
+const kernel = @import("../kernel.zig");
 const kmemory = @import("../memory.zig");
 const Devices = @import("../devices.zig").Devices;
 
@@ -100,7 +100,7 @@ pub fn print_stack_left() void {
         asm volatile ("mov %%esp, %[x]" : [x] "=r" (-> usize)) - @ptrToInt(&stack));
 }
 
-pub fn init(kernel: *Kernel) !void {
+pub fn init() !void {
     // Finish Setup of Console Logging
     serial_log.init();
     cga_console.init();
@@ -125,7 +125,7 @@ pub fn init(kernel: *Kernel) !void {
 
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
-    pci.find_pci_devices(kernel);
+    pci.find_pci_devices();
     ps2.init();
     vbe.init(&kernel.memory);
 
