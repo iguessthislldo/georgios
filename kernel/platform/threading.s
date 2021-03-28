@@ -88,8 +88,11 @@ usermode:
     // Push arguments for iret
     pushl %edx // ss
     pushl %ebx // sp
-    pushf // flags
+    // Push Flags with Interrupts Enabled
+    pushf
+    movl (%esp), %edx
+    orl $0x0200, %edx
+    movl %edx, (%esp)
     pushl %ecx // cs
     pushl %eax // ip
-    sti
     iret // jump to ip as ring 3

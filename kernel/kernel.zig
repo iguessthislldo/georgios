@@ -48,12 +48,12 @@ pub fn init() !void {
     }
 
     // Threading
-    threading_manager = threading.Manager{.memory_manager = &memory};
+    threading_manager = threading.Manager{};
     try threading_manager.init();
 }
 
-fn exec(path: []const u8) !void {
-    const process = try threading_manager.new_process(true);
+fn exec(path: []const u8, kernel_mode: bool) !void {
+    const process = try threading_manager.new_process(kernel_mode);
     var ext2_file = try filesystem.open(path);
     var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
     var segments = elf_object.segments.iterator();
@@ -67,8 +67,8 @@ fn exec(path: []const u8) !void {
 pub fn run() !void {
     try init();
 
-    try exec("bin/a.elf");
-    try exec("bin/b.elf");
+    try exec("bin/a.elf", true);
+    try exec("bin/b.elf", false);
 
     var c: usize = 0;
     while (true) {

@@ -12,17 +12,17 @@ pub const Thread = struct {
 
     id: Id = undefined,
     kernel_mode: bool = false,
-    impl: pthreading.ThreadImpl = pthreading.ThreadImpl{},
+    impl: pthreading.ThreadImpl = undefined,
     process: ?*Process = null,
     prev_in_system: ?*Thread = null,
     next_in_system: ?*Thread = null,
     entry: usize = 0,
 
-    pub fn init(self: *Thread, memory_manger: *memory.Memory) Error!void {
+    pub fn init(self: *Thread, boot_thread: bool) Error!void {
         if (self.process) |process| {
             self.kernel_mode = process.kernel_mode;
         }
-        try self.impl.init(self, memory_manger);
+        try self.impl.init(self, boot_thread);
     }
 
     pub fn start(self: *Thread) Error!void {
@@ -33,21 +33,20 @@ pub const Thread = struct {
 pub const Process = struct {
     const Id = u32;
 
-    memory_manager: *memory.Memory = undefined,
     id: Id = undefined,
     kernel_mode: bool = false,
     impl: pthreading.ProcessImpl = undefined,
     main_thread: Thread = Thread{},
     entry: usize = 0,
 
-    pub fn init(self: *Process, memory_manager: *memory.Memory) Error!void {
-        self.memory_manager = memory_manager;
+    pub fn init(self: *Process) Error!void {
         try self.impl.init(self);
         self.main_thread.process = self;
-        try self.main_thread.init(memory_manager);
+        try self.main_thread.init(false);
     }
 
     pub fn start(self: *Process) Error!void {
+        self.main_thread.entry = self.entry;
         try self.impl.start();
     }
 
@@ -63,7 +62,6 @@ pub const Process = struct {
 };
 
 pub const Manager = struct {
-    memory_manager: *memory.Memory,
     head_thread: ?*Thread = null,
     tail_thread: ?*Thread = null,
     next_thread_id: Thread.Id = 0,
@@ -72,7 +70,7 @@ pub const Manager = struct {
     boot_thread: Thread = .{.id = 0, .kernel_mode = true},
 
     pub fn init(self: *Manager) Error!void {
-        try self.boot_thread.init(self.memory_manager);
+        try self.boot_thread.init(true);
         self.current_thread = &self.boot_thread;
         platform.disable_interrupts();
         self.insert_thread(&self.boot_thread);
@@ -80,9 +78,9 @@ pub const Manager = struct {
     }
 
     pub fn new_process(self: *Manager, kernel_mode: bool) Error!*Process {
-        const p = try self.memory_manager.small_alloc.alloc(Process);
+        const p = try kernel.memory.small_alloc.alloc(Process);
         p.* = Process{.kernel_mode = kernel_mode};
-        try p.init(self.memory_manager);
+        try p.init();
         return p;
     }
 
@@ -124,7 +122,22 @@ pub const Manager = struct {
         }
     }
 
-    fn next_from(self: *Manager, thread_maybe: ?*Thread) ?*Thread {
+    pub fn remove_current_thread(self: *Manager) void {
+        platform.disable_interrupts();
+        if (self.current_thread) |thread| {
+            print.format("Thread {} has Finished\n", .{thread.id});
+            self.remove_thread(thread);
+            // TODO: Cleanup Process, Memory
+            while (true) {
+                self.yield();
+            }
+        } else {
+            @panic("remove_current_thread: no current thread");
+        }
+        @panic("remove_current_thread: reached end");
+    }
+
+    fn next_from(self: *const Manager, thread_maybe: ?*Thread) ?*Thread {
         var next_thread: ?*Thread = null;
         if (thread_maybe) |thread| {
             next_thread = thread.next_in_system;

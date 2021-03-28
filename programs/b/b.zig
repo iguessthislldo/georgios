@@ -12,4 +12,6 @@ export fn main() void {
             // system_calls.yield();
         }
     }
+    system_calls.print_string("b about to exit");
+    system_calls.exit(0);
 }

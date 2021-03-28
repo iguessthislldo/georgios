@@ -13,3 +13,8 @@ pub inline fn getc() u8 {
 pub inline fn yield() void {
     asm volatile ("int $100" :: [syscall_number] "{eax}" (@as(u32, 2)));
 }
+
+pub inline fn exit(status: u8) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 3)), [arg1] "{ebx}" (status));
+}

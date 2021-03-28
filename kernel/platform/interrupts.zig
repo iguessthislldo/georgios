@@ -60,8 +60,14 @@ fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptSt
 
         // yield() void
         2 => {
-            print.char('Y');
+            print.string("\nY");
             kernel.threading_manager.yield();
+        },
+
+        // exit(status: u8) void
+        3 => {
+            print.string("\nE");
+            kernel.threading_manager.remove_current_thread();
         },
 
         else => @panic("Invalid System Call"),
