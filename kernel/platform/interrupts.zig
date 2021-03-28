@@ -59,7 +59,10 @@ fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptSt
         },
 
         // yield() void
-        2 => kernel.kernel.threading_manager.yield(),
+        2 => {
+            print.char('Y');
+            kernel.kernel.threading_manager.yield();
+        },
 
         else => @panic("Invalid System Call"),
     }
@@ -450,8 +453,13 @@ pub const pic = struct {
     }
 };
 
+pub var in_tick = false;
+
 fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
+    in_tick = true;
     print.char('!');
+    kernel.kernel.threading_manager.yield();
+    in_tick = false;
 }
 
 pub fn init() void {
@@ -490,8 +498,8 @@ pub fn init() void {
     InterruptHandler(system_call_interrupt_number, handle_system_call).set(
         "System Call", kernel_code_selector, user_flags);
 
-    // IrqInterruptHandler(0, tick).set(
-    //     "IRQ0: Timer", kernel_code_selector, kernel_flags);
+    IrqInterruptHandler(0, tick).set(
+        "IRQ0: Timer", kernel_code_selector, kernel_flags);
 
     load();
 

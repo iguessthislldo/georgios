@@ -22,6 +22,8 @@ pub const vbe = @import("vbe.zig");
 
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
+pub const enable_interrupts = util.enable_interrupts;
+pub const disable_interrupts = util.disable_interrupts;
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     asm volatile ("int $50");
@@ -129,5 +131,5 @@ pub fn init(kernel: *Kernel) !void {
 
     // acpi.init();
 
-    // interrupts.pic.start_ticking(100);
+    interrupts.pic.start_ticking(100);
 }

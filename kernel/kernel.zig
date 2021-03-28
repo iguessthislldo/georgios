@@ -71,7 +71,6 @@ pub const Kernel = struct {
 
         try self.exec("bin/a.elf");
         try self.exec("bin/b.elf");
-        self.threading_manager.yield();
 
         var c: usize = 0;
         while (true) {

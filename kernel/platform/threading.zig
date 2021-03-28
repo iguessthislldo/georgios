@@ -7,6 +7,7 @@ const Process = kthreading.Process;
 const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
+const print = @import("../print.zig");
 
 const platform = @import("platform.zig");
 const pmemory = @import("memory.zig");
@@ -45,17 +46,7 @@ pub const ThreadImpl = struct {
         return value;
     }
 
-    fn return_to() callconv(.Naked) noreturn {
-        asm volatile (
-            \\popal
-            \\iret
-            );
-        unreachable;
-    }
-
     const SwitchToFrame = packed struct {
-        // pushf
-        eflags: u32,
         // pusha
         edi: u32,
         esi: u32,
@@ -65,45 +56,83 @@ pub const ThreadImpl = struct {
         edx: u32,
         ecx: u32,
         eax: u32,
-        // Function
+        // pushf
+        eflags: u32,
+        // switch_to itself
         func_value1: u32,
         func_value0: u32,
         func_ebx: u32,
         func_ebp: u32,
         func_return: u32,
+        safety_factor: [8]u32, // Arbitrary, For Safety
     };
 
-    fn setup_context(self: *ThreadImpl, sp: usize, ip: usize) void {
+    fn setup_context(self: *ThreadImpl, sp: usize, ) void {
         self.context = sp;
         var frame = kutil.zero_init(SwitchToFrame);
+        frame.eflags = 0x00000200;
         frame.esp = sp;
-        frame.func_return = ip;
+        // TODO: Zig Bug? @ptrToInt(&run) results in weird address
+        frame.func_return = @ptrToInt(run);
         frame.func_ebp = sp;
+        frame.ecx = @ptrToInt(self);
         self.push_to_context(frame);
     }
 
-    pub fn prepare_for_switch_to(self: *ThreadImpl) void {
+    pub fn before_switch(self: *ThreadImpl) void {
         if (self.thread.process) |process| {
             process.impl.switch_to() catch @panic("ProcessImpl.switch_to");
         }
         kernel.kernel.threading_manager.current_process = self.thread.process;
+        kernel.kernel.threading_manager.current_thread = self.thread;
     }
 
     pub fn switch_to(self: *ThreadImpl) void {
         // WARNING: A FRAME FOR THIS FUNCTION NEEDS TO BE SETUP IN setup_context!
-        const last = kernel.kernel.threading_manager.current;
-        kernel.kernel.threading_manager.current = self.thread;
-        self.prepare_for_switch_to();
+        const last = kernel.kernel.threading_manager.current_thread.?;
+        self.before_switch();
         asm volatile (
-            \\pusha
             \\pushf
+            \\pusha
             \\movl %%esp, (%[old_context_ptr])
             \\movl %[new_context], %%esp
-            \\popf
             \\popa
+            \\popf
             : :
                 [old_context_ptr] "{ax}" (@ptrToInt(&last.impl.context)),
                 [new_context] "{bx}" (self.context));
+        after_switch();
+    }
+
+    pub fn after_switch() void {
+        if (interrupts.in_tick) {
+            print.char('#');
+            interrupts.pic.end_of_interrupt(0, false);
+            interrupts.in_tick = false;
+        }
+        platform.enable_interrupts();
+    }
+
+// TODO: Set interrupt stack right before swich to usermode.
+
+    pub fn run_impl(self: *ThreadImpl) void {
+        self.before_switch();
+        asm volatile ("call *%[entry]" : : [entry] "{ax}" (self.thread.entry));
+    }
+
+    pub fn run(self: *ThreadImpl) void {
+        print.format("Thread {} is Starting\n", .{self.thread.id});
+        self.run_impl();
+        platform.disable_interrupts();
+        kernel.kernel.threading_manager.remove_thread(self.thread);
+        print.format("Thread {} is Done\n", .{self.thread.id});
+        platform.enable_interrupts();
+        // TODO: Cleanup Process
+        while (true) {
+            kernel.kernel.threading_manager.yield();
+        }
+        platform.done();
+        // unreachable;
     }
 };
 
@@ -150,7 +179,8 @@ pub const ProcessImpl = struct {
             const stack_range =
                 if (self.process.kernel_mode) self.kernelmode_stack else self.usermode_stack;
             const stack_address = stack_range.end() - 1;
-            self.process.main_thread.impl.setup_context(stack_address, self.process.entry);
+            self.process.main_thread.entry = self.process.entry;
+            self.process.main_thread.impl.setup_context(stack_address);
             self.main_thread_is_setup = true;
         }
     }

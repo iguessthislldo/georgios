@@ -23,3 +23,5 @@ pub const kernel_range_virtual_start_available =
     impl.kernel_range_virtual_start_available;
 pub const done = impl.done;
 pub const Memory = impl.Memory;
+pub const enable_interrupts = impl.enable_interrupts;
+pub const disable_interrupts = impl.disable_interrupts;

@@ -18,4 +18,6 @@ is for a different ring, then `iret` will also pop new values for the `esp` and
 
 - [Skelix OS tutorial part 4](https://web.archive.org/web/20170103060529/http://skelix.net/skelixos/tutorial04_en.html)
 
-http://ethv.net/workshops/osdev/notes/notes-4.html
+- http://ethv.net/workshops/osdev/notes/notes-4.html
+
+- https://forum.osdev.org/viewtopic.php?f=1&t=36922

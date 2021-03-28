@@ -1,7 +1,9 @@
-const pthreading = @import("platform.zig").impl.threading;
+const platform = @import("platform.zig");
+const pthreading = platform.impl.threading;
 const kernel = @import("kernel.zig");
 const memory = @import("memory.zig");
 const util = @import("util.zig");
+const print = @import("print.zig");
 
 const Error = pthreading.Error;
 
@@ -14,6 +16,7 @@ pub const Thread = struct {
     process: ?*Process = null,
     prev_in_system: ?*Thread = null,
     next_in_system: ?*Thread = null,
+    entry: usize = 0,
 
     pub fn init(self: *Thread, memory_manger: *memory.Memory) Error!void {
         if (self.process) |process| {
@@ -63,14 +66,17 @@ pub const Manager = struct {
     memory_manager: *memory.Memory,
     head_thread: ?*Thread = null,
     tail_thread: ?*Thread = null,
-    next_thread_id: Thread.Id = 1,
+    next_thread_id: Thread.Id = 0,
     current_process: ?*Process = null,
-    current: *Thread = undefined, // TODO: Rename to current_thread
+    current_thread: ?*Thread = null,
     boot_thread: Thread = .{.id = 0, .kernel_mode = true},
 
     pub fn init(self: *Manager) Error!void {
         try self.boot_thread.init(self.memory_manager);
-        self.current = &self.boot_thread;
+        self.current_thread = &self.boot_thread;
+        platform.disable_interrupts();
+        self.insert_thread(&self.boot_thread);
+        platform.enable_interrupts();
     }
 
     pub fn new_process(self: *Manager, kernel_mode: bool) Error!*Process {
@@ -81,36 +87,68 @@ pub const Manager = struct {
     }
 
     pub fn start_process(self: *Manager, process: *Process) Error!void {
+        platform.disable_interrupts();
         self.insert_thread(&process.main_thread);
-        // try process.start();
+        try process.start();
     }
 
     pub fn insert_thread(self: *Manager, thread: *Thread) void {
+        // Assign ID
         thread.id = self.next_thread_id;
         self.next_thread_id += 1;
-        if (self.tail_thread) |tail| {
-            tail.next_in_system = thread;
-            thread.prev_in_system = tail;
-            self.tail_thread = thread;
-        }
+
+        // Insert into Thread List
         if (self.head_thread == null) {
             self.head_thread = thread;
-            self.tail_thread = thread;
+        }
+        if (self.tail_thread) |tail| {
+            tail.next_in_system = thread;
+        }
+        thread.prev_in_system = self.tail_thread;
+        thread.next_in_system = null;
+        self.tail_thread = thread;
+    }
+
+    pub fn remove_thread(self: *Manager, thread: *Thread) void {
+        if (thread.next_in_system) |nt| {
+            nt.prev_in_system = thread.prev_in_system;
+        }
+        if (thread.prev_in_system) |pt| {
+            pt.next_in_system = thread.next_in_system;
+        }
+        if (self.head_thread == thread) {
+            self.head_thread = thread.next_in_system;
+        }
+        if (self.tail_thread == thread) {
+            self.tail_thread = thread.prev_in_system;
         }
     }
 
-    pub fn next(self: *Manager) ?*Thread {
-        var next_thread: ?*Thread = self.current.next_in_system;
-        if (next_thread == null) {
-            next_thread = self.head_thread;
+    fn next_from(self: *Manager, thread_maybe: ?*Thread) ?*Thread {
+        var next_thread: ?*Thread = null;
+        if (thread_maybe) |thread| {
+            next_thread = thread.next_in_system;
+            if (next_thread == null) {
+                next_thread = self.head_thread;
+            }
+            if (next_thread != null and next_thread.? == thread) {
+                next_thread = null;
+            }
         }
-        if (next_thread.? == self.current) {
-            next_thread = null;
+        if (next_thread) |nt| {
+            print.format("({})", .{nt.id});
+        } else {
+            print.string("(null)");
         }
         return next_thread;
     }
 
+    pub fn next(self: *Manager) ?*Thread {
+        return self.next_from(self.current_thread);
+    }
+
     pub fn yield(self: *Manager) void {
+        platform.disable_interrupts();
         if (self.next()) |next_thread| {
             next_thread.impl.switch_to();
         }
