@@ -102,6 +102,19 @@ pub fn MappedList(comptime KeyType: type, comptime ValueType: type,
             self.list.bump_node_to_back(&node.list);
             return node.value;
         }
+
+        pub fn find_remove(self: *Self, key: KeyType) memory.MemoryError!?ValueType {
+            const node_maybe = self.map.find_node(key);
+            if (node_maybe == null) {
+                return null;
+            }
+            const node = node_maybe.?.value;
+            self.list.remove_node(&node.list);
+            self.map.remove_node(&node.map);
+            const value = node.value;
+            try self.alloc.free(node);
+            return value;
+        }
     };
 }
 
@@ -154,9 +167,14 @@ test "MappedList" {
     // Push and Pop Several Times From Both Directions
     try ml.push_front(11, 1);
     try ml.push_front(22, 2);
+    try ml.push_back(123, 456);
     try ml.push_back(33, 3);
     try ml.push_front(44, 4);
     try ml.push_back(55, 5);
+
+    // 44: 4, 22: 2, 11: 1, 123: 456, 33: 3, 55: 5
+    equal(@as(usize, 456), (try ml.find_remove(123)).?);
+
     // 44: 4, 22: 2, 11: 1, 33: 3, 55: 5
     equal(@as(usize, 5), ml.len());
     equal(@as(usize, 1), ml.find(11).?);

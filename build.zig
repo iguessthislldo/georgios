@@ -103,23 +103,31 @@ pub fn build(b: *std.build.Builder) void {
     const echoer = b.addExecutable("echoer.elf", "programs/echoer/echoer.zig");
     echoer.setLinkerScriptPath("programs/common/linking.ld");
     echoer.setTarget(target);
+    echoer.addPackagePath("common", "programs/common/common.zig");
     echoer.linkLibrary(libcommon);
-    echoer.addPackagePath("system_calls", "programs/common/system_calls.zig");
     echoer.install();
 
     // programs/a
     const a_prog = b.addExecutable("a.elf", "programs/a/a.zig");
     a_prog.setLinkerScriptPath("programs/common/linking.ld");
     a_prog.setTarget(target);
+    a_prog.addPackagePath("common", "programs/common/common.zig");
     a_prog.linkLibrary(libcommon);
-    a_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
     a_prog.install();
 
     // programs/b
     const b_prog = b.addExecutable("b.elf", "programs/b/b.zig");
     b_prog.setLinkerScriptPath("programs/common/linking.ld");
     b_prog.setTarget(target);
+    b_prog.addPackagePath("common", "programs/common/common.zig");
     b_prog.linkLibrary(libcommon);
-    b_prog.addPackagePath("system_calls", "programs/common/system_calls.zig");
     b_prog.install();
+
+    // programs/shell
+    const shell = b.addExecutable("shell.elf", "programs/shell/shell.zig");
+    shell.setLinkerScriptPath("programs/common/linking.ld");
+    shell.setTarget(target);
+    shell.addPackagePath("common", "programs/common/common.zig");
+    shell.linkLibrary(libcommon);
+    shell.install();
 }

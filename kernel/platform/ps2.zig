@@ -10,11 +10,9 @@ const interrupts = @import("interrupts.zig");
 const segments = @import("segments.zig");
 const PS2_Scan_Code = @import("ps2_scan_codes.zig").PS2_Scan_Code;
 
-var right_shift_is_pressed: bool = false;
-var left_shift_is_pressed: bool = false;
-var alt_is_pressed: bool = false;
-var control_is_pressed: bool = false;
-var buffer = kutil.CircularBuffer(u8, 128){};
+var modifiers = kutil.Key.Modifiers{};
+
+var buffer = kutil.CircularBuffer(kutil.Key, 128){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
@@ -31,18 +29,17 @@ pub fn keyboard_event_occured(
     if (scan_code_maybe == null) return;
     const scan_code = scan_code_maybe.?;
     switch (scan_code) {
-        .Key_Left_Shift_Pressed => left_shift_is_pressed = true,
-        .Key_Right_Shift_Pressed => right_shift_is_pressed = true,
-        .Key_Left_Shift_Released => left_shift_is_pressed = false,
-        .Key_Right_Shift_Released => right_shift_is_pressed = false,
-        .Key_Left_Alt_Pressed => alt_is_pressed = true,
-        .Key_Left_Alt_Released => alt_is_pressed = false,
-        .Key_Left_Control_Pressed => control_is_pressed = true,
-        .Key_Left_Control_Released => control_is_pressed = false,
+        .Key_Left_Shift_Pressed => modifiers.left_shift_is_pressed = true,
+        .Key_Right_Shift_Pressed => modifiers.right_shift_is_pressed = true,
+        .Key_Left_Shift_Released => modifiers.left_shift_is_pressed = false,
+        .Key_Right_Shift_Released => modifiers.right_shift_is_pressed = false,
+        .Key_Left_Alt_Pressed => modifiers.alt_is_pressed = true,
+        .Key_Left_Alt_Released => modifiers.alt_is_pressed = false,
+        .Key_Left_Control_Pressed => modifiers.control_is_pressed = true,
+        .Key_Left_Control_Released => modifiers.control_is_pressed = false,
         else => {
             if (scan_code.to_char()) |c| {
-                const shifted = right_shift_is_pressed or left_shift_is_pressed;
-                buffer.push(if (!shifted and c >= 'A' and c <= 'Z') c + 'a' - 'A' else c);
+                buffer.push(.{.unshifted_char = c, .modifiers = modifiers});
             }
         },
     }
@@ -52,14 +49,28 @@ pub fn get_text(dest: []u8) []u8 {
     putil.disable_interrupts();
     var got: usize = 0;
     while (buffer.len > 0 and got < dest.len) {
-        dest[got] = buffer.pop().?;
-        got += 1;
+        if (buffer.pop().?.shifted_char()) |c| {
+            dest[got] = c;
+            got += 1;
+        }
     }
     putil.enable_interrupts();
     return dest[0..got];
 }
 
 pub fn get_char() ?u8 {
+    putil.disable_interrupts();
+    defer putil.enable_interrupts();
+    if (buffer.peek()) |key| {
+        if (key.shifted_char()) |c| {
+            _ = buffer.pop();
+            return c;
+        }
+    }
+    return null;
+}
+
+pub fn get_key() ?kutil.Key {
     putil.disable_interrupts();
     defer putil.enable_interrupts();
     return buffer.pop();

@@ -31,8 +31,12 @@ control_raw = [
 ]
 codes.extend(list(map(lambda x: (x[0], x[1], 0), control_raw)))
 
-codes.append((0x1c, 'Enter', char('\\n')))
-codes.append((0x39, 'Space', char(' ')))
+codes.extend(list(map(lambda x: (x[0], x[1], char(x[2])), [
+    (0x1c, 'Enter', '\\n'),
+    (0x39, 'Space', ' '),
+    (0x34, 'Period', '.'),
+    (0x35, 'Slash', '/'),
+])))
 
 table = ['null'] * 256
 

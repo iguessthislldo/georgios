@@ -1,4 +1,4 @@
-const system_calls = @import("system_calls");
+const system_calls = @import("common").system_calls;
 
 export fn main() void {
     var buffer: [128]u8 = undefined;

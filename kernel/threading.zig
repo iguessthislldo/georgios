@@ -4,11 +4,14 @@ const kernel = @import("kernel.zig");
 const memory = @import("memory.zig");
 const util = @import("util.zig");
 const print = @import("print.zig");
+const MappedList = @import("mapped_list.zig").MappedList;
 
-const Error = pthreading.Error;
+pub const debug = false;
+
+pub const Error = pthreading.Error;
 
 pub const Thread = struct {
-    const Id = u32;
+    pub const Id = u32;
 
     id: Id = undefined,
     kernel_mode: bool = false,
@@ -31,7 +34,7 @@ pub const Thread = struct {
 };
 
 pub const Process = struct {
-    const Id = u32;
+    pub const Id = u32;
 
     id: Id = undefined,
     kernel_mode: bool = false,
@@ -62,14 +65,27 @@ pub const Process = struct {
 };
 
 pub const Manager = struct {
+    fn pid_eql(a: Process.Id, b: Process.Id) bool {
+        return a == b;
+    }
+
+    fn pid_cmp(a: Process.Id, b: Process.Id) bool {
+        return a > b;
+    }
+
+    const ProcessList = MappedList(Process.Id, *Process, pid_eql, pid_cmp);
+
+    boot_thread: Thread = .{.id = 0, .kernel_mode = true},
+    next_thread_id: Thread.Id = 0,
+    current_thread: ?*Thread = null,
     head_thread: ?*Thread = null,
     tail_thread: ?*Thread = null,
-    next_thread_id: Thread.Id = 0,
+    process_list: ProcessList = undefined,
+    next_process_id: Process.Id = 0,
     current_process: ?*Process = null,
-    current_thread: ?*Thread = null,
-    boot_thread: Thread = .{.id = 0, .kernel_mode = true},
 
     pub fn init(self: *Manager) Error!void {
+        self.process_list = .{.alloc = kernel.memory.small_alloc};
         try self.boot_thread.init(true);
         self.current_thread = &self.boot_thread;
         platform.disable_interrupts();
@@ -86,6 +102,12 @@ pub const Manager = struct {
 
     pub fn start_process(self: *Manager, process: *Process) Error!void {
         platform.disable_interrupts();
+        // Assign ID
+        process.id = self.next_process_id;
+        self.next_process_id += 1;
+
+        // Start
+        try self.process_list.push_back(process.id, process);
         self.insert_thread(&process.main_thread);
         try process.start();
     }
@@ -120,12 +142,18 @@ pub const Manager = struct {
         if (self.tail_thread == thread) {
             self.tail_thread = thread.prev_in_system;
         }
+        if (thread.process) |process| {
+            if (thread == &process.main_thread) {
+                _ = self.process_list.find_remove(process.id)
+                    catch @panic("remove_thread: process_list.find_remove");
+            }
+        }
     }
 
     pub fn remove_current_thread(self: *Manager) void {
         platform.disable_interrupts();
         if (self.current_thread) |thread| {
-            print.format("Thread {} has Finished\n", .{thread.id});
+            if (debug) print.format("Thread {} has Finished\n", .{thread.id});
             self.remove_thread(thread);
             // TODO: Cleanup Process, Memory
             while (true) {
@@ -148,10 +176,12 @@ pub const Manager = struct {
                 next_thread = null;
             }
         }
-        if (next_thread) |nt| {
-            print.format("({})", .{nt.id});
-        } else {
-            print.string("(null)");
+        if (debug) {
+            if (next_thread) |nt| {
+                print.format("({})", .{nt.id});
+            } else {
+                print.string("(null)");
+            }
         }
         return next_thread;
     }
@@ -164,6 +194,18 @@ pub const Manager = struct {
         platform.disable_interrupts();
         if (self.next()) |next_thread| {
             next_thread.impl.switch_to();
+        }
+    }
+
+    pub fn process_is_running(self: *Manager, id: Process.Id) bool {
+        return self.process_list.find(id) != null;
+    }
+
+    pub fn yield_while_process_is_running(self: *Manager, id: Process.Id) void {
+        platform.disable_interrupts();
+        while (self.process_is_running(id)) {
+            self.yield();
+            platform.disable_interrupts();
         }
     }
 };

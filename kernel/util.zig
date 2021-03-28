@@ -540,6 +540,11 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
             defer increment(&self.start);
             return self.contents[self.start];
         }
+
+        pub fn peek(self: *Self) ?Type {
+            if (self.len == 0) return null;
+            return self.contents[self.start];
+        }
     };
 }
 
@@ -550,22 +555,28 @@ test "CircularBuffer" {
     // Empty
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
+    std.testing.expectEqual(nil, buffer.peek());
 
     // Push Some Values
     buffer.push(1);
     std.testing.expectEqual(@as(usize, 1), buffer.len);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
     buffer.push(2);
     buffer.push(3);
     std.testing.expectEqual(@as(usize, 3), buffer.len);
 
     // Pop The Values
+    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
     std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek().?);
     std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek().?);
     std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
 
     // It's empty again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
+    std.testing.expectEqual(nil, buffer.peek());
 
     // Fill It
     buffer.push(5);
@@ -584,6 +595,7 @@ test "CircularBuffer" {
     // It's empty yet again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
+    std.testing.expectEqual(nil, buffer.peek());
 }
 
 pub fn nibble_char(value: u4) u8 {
@@ -599,3 +611,27 @@ pub fn byte_buffer(buffer: []u8, value: u8) void {
     buffer[0] = nibble_char(@intCast(u4, value >> 4));
     buffer[1] = nibble_char(@intCast(u4, value % 0x10));
 }
+
+pub const Key = struct {
+    pub const Modifiers = struct {
+        right_shift_is_pressed: bool = false,
+        left_shift_is_pressed: bool = false,
+        alt_is_pressed: bool = false,
+        control_is_pressed: bool = false,
+
+        pub fn shifted(self: *const Modifiers) bool {
+            return self.right_shift_is_pressed or self.left_shift_is_pressed;
+        }
+    };
+
+    pub fn shifted_char(self: *const Key) ?u8 {
+        if (self.unshifted_char) |c| {
+            return if (!self.modifiers.shifted() and c >= 'A' and c <= 'Z')
+                c + 'a' - 'A' else c;
+        }
+        return null;
+    }
+
+    unshifted_char: ?u8,
+    modifiers: Modifiers,
+};

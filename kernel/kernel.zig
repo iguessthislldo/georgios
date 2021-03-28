@@ -52,7 +52,7 @@ pub fn init() !void {
     try threading_manager.init();
 }
 
-fn exec(path: []const u8, kernel_mode: bool) !void {
+pub fn exec(path: []const u8, kernel_mode: bool) !threading.Process.Id {
     const process = try threading_manager.new_process(kernel_mode);
     var ext2_file = try filesystem.open(path);
     var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
@@ -62,23 +62,12 @@ fn exec(path: []const u8, kernel_mode: bool) !void {
     }
     process.entry = elf_object.header.entry;
     try threading_manager.start_process(process);
+    return process.id;
 }
 
 pub fn run() !void {
     try init();
-
-    try exec("bin/a.elf", true);
-    try exec("bin/b.elf", false);
-
-    var c: usize = 0;
-    while (true) {
-        print.char('k');
-        c += 1;
-        if (c == 50) {
-            threading_manager.yield();
-            c = 0;
-        }
-    }
+    threading_manager.yield_while_process_is_running(try exec("bin/shell.elf", false));
 }
 
 pub fn kernel_main() void {

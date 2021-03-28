@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const kernel = @import("../kernel.zig");
 const kutil = @import("../util.zig");
 const print = @import("../print.zig");
+const kthreading = @import("../threading.zig");
 
 const putil = @import("util.zig");
 // TODO: Zig Bug? unable to evaluate constant expression
@@ -11,6 +12,7 @@ const putil = @import("util.zig");
 // const user_code_selector = segments.user_code_selector;
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
+const ps2 = @import("ps2.zig");
 
 pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
     return packed struct {
@@ -42,33 +44,61 @@ const system_call_interrupt_number: u8 = 100;
 fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptStack) void {
     const call_number = interrupt_stack.eax;
     const arg1 = interrupt_stack.ebx;
+    const arg2 = interrupt_stack.ecx;
+
+    // TODO: Using pointers for args can cause Zig's alignment checks to fail.
+    // Find a way around this without turning off safety?
+    @setRuntimeSafety(false);
+
     switch (call_number) {
         // print_string(s: []const u8) void
         0 => print.string(@intToPtr(*[]const u8, arg1).*),
 
         // getc() u8
         1 => {
-            const ps2 = @import("ps2.zig");
             while (true) {
                 if (ps2.get_char()) |c| {
                     @intToPtr(*u8, arg1).* = c;
                     break;
                 }
-                putil.wait_milliseconds(100);
+                kernel.threading_manager.yield();
             }
         },
 
         // yield() void
         2 => {
-            print.string("\nY");
+            if (kthreading.debug) print.string("\nY");
             kernel.threading_manager.yield();
         },
 
         // exit(status: u8) void
         3 => {
-            print.string("\nE");
+            if (kthreading.debug) print.string("\nE");
             kernel.threading_manager.remove_current_thread();
         },
+
+        // exec(path: []const u8) bool
+        4 => {
+            @intToPtr(*bool, arg2).* = false;
+            const pid = kernel.exec(@intToPtr(*[]const u8, arg1).*, false) catch |e| {
+                print.format("exec failed: {}\n", .{@errorName(e)});
+                @intToPtr(*bool, arg2).* = true;
+                return;
+            };
+            kernel.threading_manager.yield_while_process_is_running(pid);
+        },
+
+        // get_key() Key
+        5 => {
+            while (true) {
+                if (ps2.get_key()) |key| {
+                    @intToPtr(*kutil.Key, arg1).* = key;
+                    break;
+                }
+                kernel.threading_manager.yield();
+            }
+        },
+
 
         else => @panic("Invalid System Call"),
     }
@@ -463,7 +493,7 @@ pub var in_tick = false;
 
 fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
     in_tick = true;
-    print.char('!');
+    if (kthreading.debug) print.char('!');
     kernel.threading_manager.yield();
     in_tick = false;
 }

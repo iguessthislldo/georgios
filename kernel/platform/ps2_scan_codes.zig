@@ -90,6 +90,10 @@ pub const PS2_Scan_Code = enum(u8) {
     Key_Enter_Released = 0x9c,
     Key_Space_Pressed = 0x39,
     Key_Space_Released = 0xb9,
+    Key_Period_Pressed = 0x34,
+    Key_Period_Released = 0xb4,
+    Key_Slash_Pressed = 0x35,
+    Key_Slash_Released = 0xb5,
 
     pub fn to_char(self: PS2_Scan_Code) ?u8 {
         const value: usize = @intCast(usize, @enumToInt(self));
@@ -278,8 +282,8 @@ const ps2_scan_code_map = [_]?u8 {
     'N',
     'M',
     null,
-    null,
-    null,
+    '.',
+    '/',
     0,
     null,
     0,

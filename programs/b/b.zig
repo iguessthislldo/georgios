@@ -1,4 +1,4 @@
-const system_calls = @import("system_calls");
+const system_calls = @import("common").system_calls;
 
 export fn main() void {
     var c1: usize = 0;
@@ -12,6 +12,6 @@ export fn main() void {
             // system_calls.yield();
         }
     }
-    system_calls.print_string("b about to exit");
+    system_calls.print_string("<B about to exit>\n");
     system_calls.exit(0);
 }

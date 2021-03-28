@@ -14,6 +14,8 @@ const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const List = @import("list.zig").List;
 
+const debug = false;
+
 pub const Error = error {
     InvalidElfFile,
     InvalidElfObjectType,
@@ -173,13 +175,13 @@ pub const Object = struct {
 
         // Read Header
         _ = try file.read(util.to_bytes(&object.header));
-        print.format("Header Size: {}\n", .{@as(usize, @sizeOf(Header))});
+        if (debug) print.format("Header Size: {}\n", .{@as(usize, @sizeOf(Header))});
         try object.header.verify_executable();
 
-        print.format("Entry: {:a}\n", .{@as(usize, @sizeOf(Header))});
+        if (debug) print.format("Entry: {:a}\n", .{@as(usize, @sizeOf(Header))});
 
         // Read Section Headers
-        print.format("Section Header Count: {}\n",
+        if (debug) print.format("Section Header Count: {}\n",
             .{object.header.section_header_entry_count});
         {
             _ = try file.seek(
@@ -194,14 +196,14 @@ pub const Object = struct {
             }
         }
         for (object.section_headers) |*section_header| {
-            print.format("section: kind: {} offset: {:x} size: {:x}\n", .{
+            if (debug) print.format("section: kind: {} offset: {:x} size: {:x}\n", .{
                 section_header.kind,
                 @bitCast(usize, section_header.offset),
                 section_header.size});
         }
 
         // Read Program Headers
-        print.format("Program Header Count: {}\n",
+        if (debug) print.format("Program Header Count: {}\n",
             .{object.header.program_header_entry_count});
         {
             _ = try file.seek(@
@@ -216,7 +218,7 @@ pub const Object = struct {
             }
         }
         for (object.program_headers) |*program_header| {
-            print.format("program: kind: {} offset: {:x} " ++
+            if (debug) print.format("program: kind: {} offset: {:x} " ++
                 "size in file: {:x} size in memory: {:x}\n", .{
                 program_header.kind,
                 @bitCast(usize, program_header.offset),
@@ -225,14 +227,14 @@ pub const Object = struct {
             // Read the Program
             // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {
-                print.format("segment at {}\n", .{program_header.virtual_address});
+                if (debug) print.format("segment at {}\n", .{program_header.virtual_address});
                 var segment = Segment{
                     .data = try alloc.alloc_array(u8, program_header.size_in_file),
                     .address = program_header.virtual_address,
                 };
                 _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
                 _ = try file.read_or_error(segment.data);
-                print.dump_bytes(segment.data);
+                if (debug) print.dump_bytes(segment.data);
                 try object.segments.push_back(segment);
             }
         }

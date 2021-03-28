@@ -161,7 +161,7 @@ pub const ThreadImpl = struct {
 
     pub fn after_switch() void {
         if (interrupts.in_tick) {
-            print.char('#');
+            if (kthreading.debug) print.char('#');
             interrupts.pic.end_of_interrupt(0, false);
             interrupts.in_tick = false;
             platform.enable_interrupts();
@@ -180,7 +180,7 @@ pub const ThreadImpl = struct {
 
     // WARNING: THIS FUNCTION'S ARGUMENTS NEED TO BE SETUP IN setup_context!
     pub fn run(self: *ThreadImpl) callconv(.C) void {
-        print.format("Thread {} has Started\n", .{self.thread.id});
+        if (kthreading.debug) print.format("Thread {} has Started\n", .{self.thread.id});
         self.run_impl();
     }
 };

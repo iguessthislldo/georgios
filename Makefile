@@ -47,7 +47,7 @@ $(ISO): $(KERNEL) $(GRUB_CFG)
 
 $(ZIG_OUTPUT)/echoer.elf: build_georgios
 
-$(DISK): $(ZIG_OUTPUT)/echoer.elf $(ZIG_OUTPUT)/a.elf $(ZIG_OUTPUT)/b.elf
+$(DISK): $(ZIG_OUTPUT)/echoer.elf $(ZIG_OUTPUT)/a.elf $(ZIG_OUTPUT)/b.elf $(ZIG_OUTPUT)/shell.elf
 	@mkdir -p $(DISK_DIR)/bin
 	cp $^ $(DISK_DIR)/bin
 	rm -f $(DISK)
