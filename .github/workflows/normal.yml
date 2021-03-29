@@ -8,6 +8,11 @@ on:
 
 jobs:
     build:
+        strategey:
+            fail-fast: false
+            matrix:
+                zig-version: ['0.7.1', 'master']
+
         runs-on: ubuntu-latest
 
         steps:
@@ -17,7 +22,7 @@ jobs:
 
             - uses: goto-bus-stop/setup-zig@v1
               with:
-                version: 0.7.1
+                  version: ${{ matrix.zig-version }}
 
             - name: Install Packages
               run: sudo apt-get install grub-pc-bin
