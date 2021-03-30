@@ -27,9 +27,10 @@ pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
         edx: u32,
         ecx: u32,
         eax: u32,
-        // Pushed By Some Exceptions
-        error_code: if (include_error_code) u32 else void,
+
         // Pushed by CPU
+        // Pushed by some exceptions, but not others.
+        error_code: if (include_error_code) u32 else void,
         eip: u32,
         cs: u32,
         eflags: u32,
@@ -277,7 +278,7 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                 segments.get_name(interrupt_stack.cs / 8),
             });
 
-            putil.halt();
+            putil.halt_forever();
         }
     };
 }
