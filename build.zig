@@ -30,14 +30,14 @@ pub fn build(b: *std.build.Builder) void {
     const platform = switch (target.cpu_arch.?) {
         .i386 => "x86_32",
         else => {
-            std.debug.warn("Unsupported Platform: {}\n", .{@tagName(target.cpu_arch.?)});
+            std.debug.warn("Unsupported Platform: {s}\n", .{@tagName(target.cpu_arch.?)});
             @panic("Unsupported Platform");
         },
     };
 
     // Kernel
     const root_file = std.fmt.allocPrint(
-        alloc, "{}kernel_start_{}.zig", .{k_path, platform}) catch @panic("root_file");
+        alloc, "{s}kernel_start_{s}.zig", .{k_path, platform}) catch @panic("root_file");
     const kernel = b.addExecutable("kernel.elf", root_file);
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTarget(target);
@@ -85,7 +85,7 @@ pub fn build(b: *std.build.Builder) void {
                 const path = i.?.path;
                 if (std.mem.endsWith(u8, path, ".c") and
                         !std.mem.endsWith(u8, path, "dump.c")) {
-                    std.debug.warn("{}\n", .{path});
+                    std.debug.warn("{s}\n", .{path});
                     acpica.addCSourceFile(path, &[_][]const u8{});
                 }
                 i = walker.next() catch unreachable;
