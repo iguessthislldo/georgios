@@ -1,4 +1,10 @@
 // Interface to use the IBM PC Color Graphics Adapter (CGA)'s 80x25 text mode.
+//
+// For Reference See:
+//   "IBM Color/Graphics Monitor Adaptor"
+//   https://en.wikipedia.org/wiki/VGA_text_mode
+//   https://en.wikipedia.org/wiki/Code_page_437
+//   https://wiki.osdev.org/Printing_to_Screen
 
 const builtin = @import("builtin");
 
@@ -150,6 +156,8 @@ pub fn print_all_characters() void {
     }
 }
 
+// Print UTF8 Strings as Code Page 437 ========================================
+
 pub fn from_unicode(c: u32) ?u8 {
     // Code Page 437 Doesn't Have Any Points Past 2^16
     if (c > 0xFFFF) return null;
@@ -162,7 +170,8 @@ pub fn from_unicode(c: u32) ?u8 {
     const hash = c16 % code_point_437.bucket_count;
     if (hash > code_point_437.max_hash_used) return null;
     const offset = hash * code_point_437.max_bucket_length;
-    const bucket = code_point_437.hash_table[offset..offset + code_point_437.max_bucket_length];
+    const bucket = code_point_437.hash_table[offset..offset +
+        code_point_437.max_bucket_length];
     for (bucket[0..]) |entry| {
         const valid = @intCast(u8, entry >> 24);
         if (valid == 0) return null;

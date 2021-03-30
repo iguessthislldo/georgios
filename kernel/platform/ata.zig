@@ -1,3 +1,12 @@
+// ATA Drive Interface
+//
+// Also known as Parallel ATA or IDE. This is a simple PIO-based driver.
+//
+// For Reference See:
+//   https://wiki.osdev.org/ATA_PIO_Mode
+//   https://en.wikipedia.org/wiki/Parallel_ATA
+//   FYSOS: Media Storage Devices https://www.amazon.com/dp/1514111888/
+
 const print = @import("../print.zig");
 const kutil = @import("../util.zig");
 const io = @import("../io.zig");
@@ -462,7 +471,7 @@ const Controller = struct {
         }
 
         pub fn read_sector_impl(self: *Channel, data: []u8) void {
-            putil.insw(self.io_base_port + 0, data);
+            putil.in_bytes(self.io_base_port + 0, data);
         }
 
         pub fn init(self: *Channel) void {

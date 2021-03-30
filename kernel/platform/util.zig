@@ -1,3 +1,7 @@
+// Miscellaneous Assembly-based Utilities
+
+// x86 I/O Port Access ========================================================
+
 pub fn out8(port: u16, val: u8) void {
     asm volatile ("outb %[val], %[port]" : :
         [val] "{al}" (val), [port] "N{dx}" (port));
@@ -28,13 +32,18 @@ pub fn in32(port: u16) u32 {
         [rv] "={al}" (-> u32) : [port] "N{dx}" (port) );
 }
 
-pub fn insw(port: u16, destination: []u8) void {
+/// Copy a series of bytes into destination, like using in8 over the slice.
+///
+/// https://c9x.me/x86/html/file_module_x86_id_141.html
+pub fn in_bytes(port: u16, destination: []u8) void {
     asm volatile ("rep insw" : :
         [port] "{dx}" (port),
         [dest_ptr] "{di}" (@truncate(u32, @ptrToInt(destination.ptr))),
         [dest_size] "{ecx}"  (@truncate(u32, destination.len) >> 1) :
         "memory");
 }
+
+// Mask/Unmask Interrupts =====================================================
 
 pub fn enable_interrupts() void {
     asm volatile ("sti");
@@ -57,9 +66,16 @@ pub fn halt_forever() noreturn {
     unreachable;
 }
 
+// x86 Control Registers ======================================================
+
+/// Page Fault Address
 pub fn cr2() u32 {
     return asm volatile ("mov %%cr2, %[rv]" : [rv] "={eax}" (-> u32));
 }
+
+// Crude rdtsc-based Timer ====================================================
+// Uses the PIC and rdtsc instruction to estimate the clock speed and then use
+// rdtsc as a crude timer.
 
 pub fn rdtsc() u64 {
     // Based on // https://github.com/ziglang/zig/issues/215#issuecomment-261581922
