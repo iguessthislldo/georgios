@@ -45,54 +45,7 @@ pub fn build(b: *std.build.Builder) void {
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
     kernel.addBuildOption(bool, "debug_log", debug_log);
-    // ACPICA
-    if (false) { // TODO: Disabled for now
-        var acpica = b.addObject("acpica", null);
-        acpica.setTarget(target);
-        const components = [_][]const u8 {
-            "dispatcher",
-            "events",
-            "executer",
-            "hardware",
-            "namespace",
-            "parser",
-            "resources",
-            "tables",
-            "utilities",
-        };
-        const acpica_path = p_path ++ "acpica/";
-        const source_path = acpica_path ++ "acpica/source/";
-
-        // Configure Source
-        var configure_step = b.addSystemCommand(&[_][]const u8{
-            acpica_path ++ "prepare_source.py", acpica_path});
-        acpica.step.dependOn(&configure_step.step);
-
-        // Includes
-        for ([_]*std.build.LibExeObjStep{kernel, acpica}) |obj| {
-            obj.addIncludeDir(acpica_path ++ "include");
-            obj.addIncludeDir(source_path ++ "include");
-            obj.addIncludeDir(source_path ++ "include/platform");
-        }
-
-        // Add Sources
-        for (components) |component| {
-            const component_path = std.fs.path.join(alloc,
-                &[_][]const u8{source_path, "components", component}) catch unreachable;
-            var walker = std.fs.walkPath(alloc, component_path) catch unreachable;
-            var i = walker.next() catch unreachable;
-            while (i != null) {
-                const path = i.?.path;
-                if (std.mem.endsWith(u8, path, ".c") and
-                        !std.mem.endsWith(u8, path, "dump.c")) {
-                    std.debug.warn("{s}\n", .{path});
-                    acpica.addCSourceFile(path, &[_][]const u8{});
-                }
-                i = walker.next() catch unreachable;
-            }
-        }
-        kernel.addObject(acpica);
-    }
+    // build_acpica(b, alloc, target, kernel);
     kernel.install();
 
     // libcommon
@@ -130,4 +83,51 @@ pub fn build(b: *std.build.Builder) void {
     shell.addPackagePath("common", "programs/common/common.zig");
     shell.linkLibrary(libcommon);
     shell.install();
+}
+
+pub fn build_acpica(b: *std.build.Builder, alloc: *std.mem.Allocator,
+        target: std.zig.CrossTarget, kernel: *std.build.LibExeObjStep) void {
+    var acpica = b.addObject("acpica", null);
+    acpica.setTarget(target);
+    const components = [_][]const u8 {
+        "dispatcher",
+        "events",
+        "executer",
+        "hardware",
+        "namespace",
+        "parser",
+        "resources",
+        "tables",
+        "utilities",
+    };
+    const acpica_path = p_path ++ "acpica/";
+    const source_path = acpica_path ++ "acpica/source/";
+
+    // Configure Source
+    var configure_step = b.addSystemCommand(&[_][]const u8{
+        acpica_path ++ "prepare_source.py", acpica_path});
+    acpica.step.dependOn(&configure_step.step);
+
+    // Includes
+    for ([_]*std.build.LibExeObjStep{kernel, acpica}) |obj| {
+        obj.addIncludeDir(acpica_path ++ "include");
+        obj.addIncludeDir(source_path ++ "include");
+        obj.addIncludeDir(source_path ++ "include/platform");
+    }
+
+    // Add Sources
+    for (components) |component| {
+        const component_path = std.fs.path.join(alloc,
+            &[_][]const u8{source_path, "components", component}) catch unreachable;
+        var walker = std.fs.walkPath(alloc, component_path) catch unreachable;
+        while (walker.next() catch unreachable) |i| {
+            const path = i.path;
+            if (std.mem.endsWith(u8, path, ".c") and
+                    !std.mem.endsWith(u8, path, "dump.c")) {
+                std.debug.warn("acpica source: {s}\n", .{path});
+                acpica.addCSourceFile(b.dupe(path), &[_][]const u8{});
+            }
+        }
+    }
+    kernel.addObject(acpica);
 }
