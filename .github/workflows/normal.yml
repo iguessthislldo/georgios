@@ -2,17 +2,12 @@ name: normal
 
 on:
     push:
-        branches: [ master ]
+        branches: [ master, zig-nightly ]
     pull_request:
-        branches: [ master ]
+        branches: [ master, zig-nightly ]
 
 jobs:
     build:
-        strategy:
-            fail-fast: false
-            matrix:
-                zig-version: ['0.7.1', 'master']
-
         runs-on: ubuntu-latest
 
         steps:
@@ -20,9 +15,17 @@ jobs:
               with:
                   submodules: true
 
-            - uses: goto-bus-stop/setup-zig@v1
+            - name: Get Zig
+              uses: goto-bus-stop/setup-zig@v1
               with:
-                  version: ${{ matrix.zig-version }}
+                  version: '0.7.1' 
+              if: ${{ github.ref == 'refs/heads/master' }}
+
+            - name: Get Nightly Zig
+              uses: goto-bus-stop/setup-zig@v1
+              with:
+                  version: 'master'
+              if: ${{ github.ref == 'refs/heads/zig-nightly' }}
 
             - name: Install Packages
               run: sudo apt-get install grub-pc-bin
