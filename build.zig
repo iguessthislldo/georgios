@@ -45,7 +45,7 @@ pub fn build(b: *std.build.Builder) void {
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
     kernel.addBuildOption(bool, "debug_log", debug_log);
-    // build_acpica(b, alloc, target, kernel);
+    build_acpica(b, alloc, target, kernel);
     kernel.install();
 
     // libcommon
