@@ -2,7 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 /// Returns true if the contents of the slices `a` and `b` are the same.
-pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
+pub fn memory_compare(a: []const u8, b: []const u8) callconv(.Inline) bool {
     if (a.len != b.len) return false;
     for (a[0..]) |value, i| {
         if (value != b[i]) return false;

@@ -154,7 +154,7 @@ pub fn any(file: *File, value: anytype) FileError!void {
     var invalid: bool = false;
     switch (Traits) {
         builtin.TypeId.Int => |int_type| {
-            if (int_type.is_signed) {
+            if (int_type.signedness == .signed) {
                 try int(file, value);
             } else {
                 if (int_type.bits * 8 > @sizeOf(usize)) {

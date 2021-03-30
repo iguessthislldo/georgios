@@ -29,11 +29,11 @@ pub const Color = enum {
     White = 15,
 };
 
-inline fn combine_colors(fg: Color, bg: Color) u8 {
+fn combine_colors(fg: Color, bg: Color) callconv(.Inline) u8 {
     return @enumToInt(fg) | (@intCast(u8, @enumToInt(bg)) << 4);
 }
 
-inline fn colored_char(c: u8, colors: u8) u16 {
+fn colored_char(c: u8, colors: u8) callconv(.Inline) u16 {
     return @intCast(u16, c) | (@intCast(u16, colors) << 8);
 }
 

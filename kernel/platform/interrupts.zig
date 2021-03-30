@@ -400,14 +400,14 @@ pub const pic = struct {
     const init_command: u8 = 0x11;
     const reset_command: u8 = 0x20;
 
-    inline fn busywork() void {
+    fn busywork() callconv(.Inline) void {
         asm volatile (
             \\add %%ch, %%bl
             \\add %%ch, %%bl
         );
     }
 
-    inline fn irq_mask(irq: u8) u8 {
+    fn irq_mask(irq: u8) callconv(.Inline) u8 {
         var offset = irq;
         if (irq >= 8) {
             offset -= 8;

@@ -91,7 +91,7 @@ pub fn estimate_cpu_speed() void {
     estimated_ticks_per_nanosecond = estimated_ticks_per_microsecond / 1000;
 }
 
-inline fn wait_ticks(ticks: u64) void {
+fn wait_ticks(ticks: u64) callconv(.Inline) void {
     const until = rdtsc() + ticks;
     while (until > rdtsc()) {
         asm volatile ("nop");

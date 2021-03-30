@@ -58,7 +58,7 @@ pub const Location = struct {
     function: Function,
 };
 
-inline fn read_config16(location: Location, offset: Offset) u16 {
+fn read_config16(location: Location, offset: Offset) callconv(.Inline) u16 {
     const Config = packed struct {
         offset: Offset,
         function: Function,
@@ -79,7 +79,7 @@ inline fn read_config16(location: Location, offset: Offset) u16 {
         @intCast(u5, (offset & 2) * 8) & 0xFFFF) & 0xFFFF);
 }
 
-inline fn read_config8(location: Location, offset: Offset) u8 {
+fn read_config8(location: Location, offset: Offset) callconv(.Inline) u8 {
     return @intCast(u8, (read_config16(
         location, offset) >> @intCast(u4, (offset *% 8) & 0xF)) & 0xFF);
 }

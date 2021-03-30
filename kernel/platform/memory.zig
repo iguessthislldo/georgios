@@ -26,51 +26,51 @@ export var kernel_page_tables: []u32 = undefined;
 pub export var kernel_range_start_available: u32 = undefined;
 export var kernel_page_table_count: u32 = 0;
 
-pub inline fn get_address(dir_index: usize, table_index: usize) usize {
+pub fn get_address(dir_index: usize, table_index: usize) callconv(.Inline) usize {
     return dir_index * table_pages_size + table_index * page_size;
 }
 
 // Page Directory Operations
-pub inline fn get_directory_index(address: u32) u32 {
+pub fn get_directory_index(address: u32) callconv(.Inline) u32 {
     return (address & 0xffc00000) >> 22;
 }
 
 extern var _VIRTUAL_OFFSET: u32;
-pub inline fn get_kernel_space_start_directory_index() u32 {
+pub fn get_kernel_space_start_directory_index() callconv(.Inline) u32 {
     return get_directory_index(@ptrToInt(&_VIRTUAL_OFFSET));
 }
 
-pub inline fn table_is_present(entry: u32) bool {
+pub fn table_is_present(entry: u32) callconv(.Inline) bool {
     return (entry & 1) == 1;
 }
 
-pub inline fn get_table_address(entry: u32) u32 {
+pub fn get_table_address(entry: u32) callconv(.Inline) u32 {
     return entry & 0xfffff000;
 }
 
-pub inline fn get_table(dir_entry: u32) [*]allowzero u32 {
+pub fn get_table(dir_entry: u32) callconv(.Inline) [*]allowzero u32 {
     return @intToPtr([*]allowzero u32, to_virtual(get_table_address(dir_entry)));
 }
 // (End of Page Directory Operations)
 
 // Page Table Operations
-pub inline fn get_table_index(address: u32) u32 {
+pub fn get_table_index(address: u32) callconv(.Inline) u32 {
     return (address & 0x003ff000) >> 12;
 }
 
-pub inline fn page_is_present(entry: u32) bool {
+pub fn page_is_present(entry: u32) callconv(.Inline) bool {
     return (entry & 1) == 1;
 }
 
-pub inline fn get_page_address(entry: u32) u32 {
+pub fn get_page_address(entry: u32) callconv(.Inline) u32 {
     return entry & 0xfffff000;
 }
 
-pub inline fn present_entry(address: u32) u32 {
+pub fn present_entry(address: u32) callconv(.Inline) u32 {
     return (address & 0xfffff000) | 1;
 }
 
-pub inline fn set_entry(entry: *allowzero u32, address: usize, user: bool) void {
+pub fn set_entry(entry: *allowzero u32, address: usize, user: bool) callconv(.Inline) void {
     // TODO: Seperate User and Write
     entry.* = present_entry(address) | (if (user) @as(u32, 0b110) else @as(u32, 0));
 }

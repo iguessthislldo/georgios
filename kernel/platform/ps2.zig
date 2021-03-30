@@ -18,7 +18,7 @@ const intel8042 = struct {
     const data_port: u16 = 0x60;
     const command_status_port: u16 = 0x64;
 
-    pub inline fn get_scan_code() ?PS2_Scan_Code {
+    pub fn get_scan_code() callconv(.Inline) ?PS2_Scan_Code {
         return kutil.int_to_enum(PS2_Scan_Code, putil.in8(data_port));
     }
 };

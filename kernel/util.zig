@@ -8,19 +8,19 @@ pub const Error = error {
 };
 
 // NOTE: DO NOT TRY TO REMOVE INLINE ON THESE, WILL BREAK LOW KERNEL
-pub inline fn Ki(x: usize) usize {
+pub fn Ki(x: usize) callconv(.Inline) usize {
     return x << 10;
 }
 
-pub inline fn Mi(x: usize) usize {
+pub fn Mi(x: usize) callconv(.Inline) usize {
     return x << 20;
 }
 
-pub inline fn Gi(x: usize) usize {
+pub fn Gi(x: usize) callconv(.Inline) usize {
     return x << 30;
 }
 
-pub inline fn Ti(x: usize) usize {
+pub fn Ti(x: usize) callconv(.Inline) usize {
     return x << 40;
 }
 
@@ -32,11 +32,11 @@ pub fn align_up(value: usize, align_by: usize) usize {
     return align_down(value +% align_by -% 1, align_by);
 }
 
-pub inline fn padding(value: usize, align_by: usize) usize {
+pub fn padding(value: usize, align_by: usize) callconv(.Inline) usize {
     return -%value & (align_by - 1);
 }
 
-pub inline fn div_round_up(comptime Type: type, n: Type, d: Type) Type {
+pub fn div_round_up(comptime Type: type, n: Type, d: Type) callconv(.Inline) Type {
     return n / d + (if (n % d != 0) @as(Type, 1) else @as(Type, 0));
 }
 
@@ -52,7 +52,7 @@ pub fn isspace(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\t' or c == '\r';
 }
 
-pub inline fn stripped_string_size(str: []const u8) usize {
+pub fn stripped_string_size(str: []const u8) callconv(.Inline) usize {
     var stripped_size: usize = 0;
     for (str) |c, i| {
         if (!isspace(c)) stripped_size = i + 1;
@@ -116,7 +116,7 @@ pub fn packed_bit_size(comptime Type: type) comptime_int {
 
 /// @intToEnum can't be used to test if a value is a valid Enum, so this wraps
 /// it and gives that functionality.
-pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType {
+pub fn int_to_enum(comptime EnumType: type, value: std.meta.Tag(EnumType)) ?EnumType {
     const type_info = @typeInfo(EnumType).Enum;
     inline for (type_info.fields) |*field| {
         if (@intCast(type_info.tag_type, field.value) == value) {
@@ -127,7 +127,7 @@ pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType
 }
 
 pub fn valid_enum(comptime EnumType: type, value: EnumType) bool {
-    return int_to_enum(EnumType, @bitCast(@TagType(EnumType), value)) != null;
+    return int_to_enum(EnumType, @bitCast(std.meta.Tag(EnumType), value)) != null;
 }
 
 test "int_to_enum" {
@@ -140,16 +140,16 @@ test "int_to_enum" {
     };
 
     // Check with Literals
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0)).? == Abc.A);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 1)).? == Abc.B);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 2)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 11)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 12)).? == Abc.C);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 13)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0xFF)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 0)).? == Abc.A);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 1)).? == Abc.B);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 2)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 11)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 12)).? == Abc.C);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 13)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 0xFF)) == null);
 
     // Check with Variable
-    var x: @TagType(Abc) = 0;
+    var x: std.meta.Tag(Abc) = 0;
     assert(int_to_enum(Abc, x).? == Abc.A);
     x = 0xFF;
     assert(int_to_enum(Abc, x) == null);
@@ -183,7 +183,7 @@ pub fn min(comptime T: type, a: T, b: T) T {
 }
 
 /// Returns true if the contents of the slices `a` and `b` are the same.
-pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
+pub fn memory_compare(a: []const u8, b: []const u8) callconv(.Inline) bool {
     if (a.len != b.len) return false;
     for (a[0..]) |value, i| {
         if (value != b[i]) return false;
@@ -194,7 +194,7 @@ pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
 /// Copy contents from `source` to `destination`.
 ///
 /// If `source.len != destination.len` then the copy is truncated.
-pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize {
+pub fn memory_copy_truncate(destination: []u8, source: []const u8) callconv(.Inline) usize {
     const size = min(usize, destination.len, source.len);
     for (destination[0..size]) |*ptr, i| {
         ptr.* = source[i];
@@ -202,7 +202,7 @@ pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize 
     return size;
 }
 
-pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usize {
+pub fn memory_copy_error(destination: []u8, source: []const u8) callconv(.Inline) Error!usize {
     if (destination.len < source.len) {
         return Error.NotEnoughDestination;
     }
@@ -214,7 +214,7 @@ pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usi
 }
 
 /// Set all the elements of `destination` to `value`.
-pub inline fn memory_set(destination: []u8, value: u8) void {
+pub fn memory_set(destination: []u8, value: u8) callconv(.Inline) void {
     for (destination[0..]) |*ptr| {
         ptr.* = value;
     }
@@ -222,7 +222,7 @@ pub inline fn memory_set(destination: []u8, value: u8) void {
 
 pub fn max_of_int(comptime T: type) T {
     comptime const Traits = @typeInfo(T);
-    return if (Traits.Int.is_signed)
+    return if (Traits.Int.signedness == .signed)
         (1 << (Traits.Int.bits - 1)) - 1
     else
         @as(T, 0) -% 1;
@@ -246,7 +246,7 @@ pub fn add_signed_to_unsigned(
     return result;
 }
 
-pub inline fn add_isize_to_usize(a: usize, b: isize) ?usize {
+pub fn add_isize_to_usize(a: usize, b: isize) callconv(.Inline) ?usize {
     return add_signed_to_unsigned(usize, a, isize, b);
 }
 
@@ -260,7 +260,7 @@ test "add_signed_to_unsigned" {
     std.testing.expect(add_isize_to_usize(max_usize, 10) == null);
 }
 
-pub inline fn string_length(bytes: []const u8) usize {
+pub fn string_length(bytes: []const u8) callconv(.Inline) usize {
     for (bytes[0..]) |*ptr, i| {
         if (ptr.* == 0) {
             return i;
@@ -294,7 +294,7 @@ pub fn int_bit_size(comptime Type: type) usize {
 
 pub fn IntLog2Type(comptime Type: type) type {
     return @Type(builtin.TypeInfo{.Int = builtin.TypeInfo.Int{
-        .is_signed = false,
+        .signedness = .unsigned,
         .bits = int_log2(usize, int_bit_size(Type)),
     }});
 }
@@ -491,14 +491,14 @@ test "pow2_round_up" {
     std.testing.expectEqual(@as(u8, 32), pow2_round_up(u8, 17));
 }
 
-pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
+pub fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) callconv(.Inline) []Type {
     var slice: []Type = undefined;
     slice.ptr = ptr;
     slice.len = len;
     return slice;
 }
 
-pub inline fn to_bytes(value: anytype) []u8 {
+pub fn to_bytes(value: anytype) callconv(.Inline) []u8 {
     comptime const Type = @TypeOf(value);
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
@@ -522,7 +522,7 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
         end: usize = 0,
         len: usize = 0,
 
-        inline fn increment(pos: *usize) void {
+        fn increment(pos: *usize) callconv(.Inline) void {
             pos.* = (pos.* + 1) % max_len;
         }
 

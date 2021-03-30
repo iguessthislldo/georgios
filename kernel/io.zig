@@ -16,7 +16,7 @@ pub const FileError = error {
 
 /// File IO Interface
 pub const File = struct {
-    pub const StdOutStream = std.io.OutStream(*File, FileError, write);
+    pub const Writer = std.io.Writer(*File, FileError, write);
 
     /// Used for seek()
     pub const SeekType = enum {
@@ -64,8 +64,8 @@ pub const File = struct {
 
     valid: bool = false,
     index: usize = 0,
-    set_up_std_out_stream: bool = false,
-    _std_out_stream: StdOutStream = undefined,
+    set_up_writer: bool = false,
+    _writer: Writer = undefined,
     read_impl: fn(*File, []u8) anyerror!usize = unsupported.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = unsupported.write_impl,
     seek_impl: fn(*File, isize, SeekType) FileError!usize = unsupported.seek_impl,
@@ -94,14 +94,14 @@ pub const File = struct {
     /// should never return `FileError.OutOfBounds` or
     /// `FileError.NotEnoughDestination`, but `read_or_error` will. The exact
     /// return values are defined by the file implementation.
-    pub inline fn read(file: *File, to: []u8) anyerror!usize {
+    pub fn read(file: *File, to: []u8) callconv(.Inline) anyerror!usize {
         return file.read_impl(file, to);
     }
 
     /// Same as `read`, but return `FileError.OutOfBounds` if an empty `to` was
     /// passed or `FileError.OutOfBounds` if trying to read from a file that's
     /// already reached the end.
-    pub inline fn read_or_error(file: *File, to: []u8) anyerror!usize {
+    pub fn read_or_error(file: *File, to: []u8) callconv(.Inline) anyerror!usize {
         if (to.len == 0) {
             return FileError.NotEnoughDestination;
         }
@@ -118,14 +118,14 @@ pub const File = struct {
     /// already reached. Also like `read` this should never return
     /// `FileError.OutOfBounds`, but `write_or_error` can. The exact return
     /// values are defined by the file implementation.
-    pub inline fn write(file: *File, from: []const u8) FileError!usize {
+    pub fn write(file: *File, from: []const u8) FileError!usize {
         return file.write_impl(file, from);
     }
 
     /// Same as `write`, but return `FileError.OutOfBounds` if an empty `from`
     /// was passed or `FileError.OutOfBounds` if trying to write to a file
     /// that's already reached the end.
-    pub inline fn write_or_error(file: *File, from: []const u8) FileError!usize {
+    pub fn write_or_error(file: *File, from: []const u8) callconv(.Inline) FileError!usize {
         const result = file.write_impl(file, to);
         if (result == 0 and from.len > 0) {
             return FileError.OutOfBounds;
@@ -135,13 +135,13 @@ pub const File = struct {
 
     /// Shift where the file is operating from. Returns the new location if
     /// that's applicable, but if it's not it always returns 0.
-    pub inline fn seek(file: *File,
-            offset: isize, seek_type: File.SeekType) FileError!usize {
+    pub fn seek(file: *File, offset: isize,
+            seek_type: File.SeekType) callconv(.Inline) FileError!usize {
         return file.seek_impl(file, offset, seek_type);
     }
 
     /// Free resources used by the file.
-    pub inline fn close(file: *File) FileError!void {
+    pub fn close(file: *File) callconv(.Inline) FileError!void {
         defer file.valid = false;
         file.close_impl(file) catch |e| return e;
     }
@@ -171,15 +171,15 @@ pub const File = struct {
         return FileError.OutOfBounds;
     }
 
-    pub fn get_std_out_stream(self: *File) *StdOutStream {
-        if (!self.set_up_std_out_stream) {
-            self._std_out_stream = StdOutStream{.context = self};
-            self.set_up_std_out_stream = true;
+    pub fn get_writer(self: *File) *Writer {
+        if (!self.set_up_writer) {
+            self._writer = Writer{.context = self};
+            self.set_up_writer = true;
         }
-        return &self._std_out_stream;
+        return &self._writer;
     }
 
-    // fn std_out_stream_write(self: *File, bytes: []const u8) FileError!void {
+    // fn writer_write(self: *File, bytes: []const u8) FileError!void {
     //     _ = try self.write(bytes);
     // }
 };

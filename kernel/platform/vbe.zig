@@ -79,11 +79,11 @@ var info: *Info = undefined;
 var mode: *Mode = undefined;
 var mem: *kmemory.Memory = undefined;
 
-inline fn video_memory_offset(x: u32, y: u32) u32 {
+fn video_memory_offset(x: u32, y: u32) callconv(.Inline) u32 {
     return y * mode.pitch + x * bytes_per_pixel;
 }
 
-inline fn draw_pixel(x: u32, y: u32, color: u32) void {
+fn draw_pixel(x: u32, y: u32, color: u32) callconv(.Inline) void {
     const offset = video_memory_offset(x, y);
     if (offset + 2 < buffer.len) {
         buffer[offset] = @truncate(u8, color);
@@ -93,7 +93,7 @@ inline fn draw_pixel(x: u32, y: u32, color: u32) void {
     }
 }
 
-inline fn draw_pixel_bgr(x: u32, y: u32, color: u32) void {
+fn draw_pixel_bgr(x: u32, y: u32, color: u32) callconv(.Inline) void {
     const offset = video_memory_offset(x, y);
     if (offset + 2 < buffer.len) {
         buffer[offset + 2] = @truncate(u8, color);

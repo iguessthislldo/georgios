@@ -13,7 +13,7 @@ const Utf8Iterator = struct {
     input: []const u8,
     pos: usize = 0,
 
-    inline fn next_byte(self: *Utf8Iterator) Error!u8 {
+    fn next_byte(self: *Utf8Iterator) callconv(.Inline) Error!u8 {
         if (self.pos >= self.input.len) {
             return Error.OutOfBounds;
         }
