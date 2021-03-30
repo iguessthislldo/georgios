@@ -18,7 +18,7 @@ jobs:
             - name: Get Zig
               uses: goto-bus-stop/setup-zig@v1
               with:
-                  version: '0.7.1' 
+                  version: '0.7.1'
               if: ${{ github.ref == 'refs/heads/master' }}
 
             - name: Get Nightly Zig
