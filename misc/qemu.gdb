@@ -6,7 +6,7 @@ set logging file tmp/gdb.log
 set logging overwrite on
 set logging on
 
-break panic
+break kernel.panic
 # break platform.interrupts.BaseInterruptHandler(14,false,false).handler
 
 target remote | qemu-system-i386 \

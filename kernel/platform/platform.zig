@@ -132,8 +132,6 @@ pub fn init() !void {
 
     // acpi.init();
 
-    timing.beep(750, 100);
-
     // Start Ticking
     timing.set_pit_freq(.Irq0, 10000);
     interrupts.pic.allow_irq(0, true);
