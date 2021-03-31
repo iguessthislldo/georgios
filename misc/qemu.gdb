@@ -19,6 +19,7 @@ target remote | qemu-system-i386 \
     -no-reboot \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \
+    -soundhw pcspk \
     disk.img
 
 #    -trace 'ide_*' \

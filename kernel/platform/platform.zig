@@ -21,6 +21,7 @@ pub const ata = @import("ata.zig");
 pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
+pub const timing = @import("timing.zig");
 
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
@@ -110,7 +111,7 @@ pub fn init() !void {
     // Setup Basic CPU Utilities
     segments.init();
     interrupts.init();
-    util.estimate_cpu_speed();
+    timing.estimate_cpu_speed();
 
     // List Multiboot Tags
     if (print.debug_print) {
@@ -131,5 +132,9 @@ pub fn init() !void {
 
     // acpi.init();
 
-    interrupts.pic.start_ticking(100);
+    timing.beep(750, 100);
+
+    // Start Ticking
+    timing.set_pit_freq(.Irq0, 10000);
+    interrupts.pic.allow_irq(0, true);
 }

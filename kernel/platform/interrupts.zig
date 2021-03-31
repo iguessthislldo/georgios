@@ -392,8 +392,6 @@ pub const pic = struct {
     const irq_0_7_interrupt_offset: u8 = 32;
     const irq_8_15_interrupt_offset: u8 = irq_0_7_interrupt_offset + 8;
 
-    const channel_port: u16 = 0x40;
-    const mode_port: u16 = 0x43;
     const irq_0_7_command_port: u16 = 0x20;
     const irq_0_7_data_port: u16 = 0x21;
     const irq_8_15_command_port: u16 = 0xA0;
@@ -482,15 +480,6 @@ pub const pic = struct {
 
         // Enable Interrupts
         putil.enable_interrupts();
-    }
-
-    pub fn start_ticking(frequency: u32) void {
-        // TODO: Magic Numbers
-        const div = @intCast(u16, 1193180 / frequency);
-        putil.out8(mode_port, 0x36);
-        putil.out8(channel_port, @truncate(u8, div));
-        putil.out8(channel_port, @truncate(u8, div >> 8));
-        pic.allow_irq(0, true);
     }
 };
 

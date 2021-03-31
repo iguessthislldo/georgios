@@ -18,6 +18,7 @@ const kernel = @import("../kernel.zig");
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
+const timing = @import("timing.zig");
 
 pub const Error = error {
     FailedToSelectDrive,
@@ -214,7 +215,7 @@ const Controller = struct {
 
             try channel.read_command_status().assert_selectable();
             channel.write_select(self.id);
-            putil.wait_microseconds(1);
+            timing.wait_microseconds(1);
             _ = channel.read_command_status();
             try channel.read_command_status().assert_selectable();
             // self.selected = true;
@@ -233,7 +234,7 @@ const Controller = struct {
                     print.string("wait_while_busy Timeout\n");
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -248,7 +249,7 @@ const Controller = struct {
                         channel.read_control_status()});
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -262,7 +263,7 @@ const Controller = struct {
                     print.string("wait_for_data Timeout\n");
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -274,17 +275,17 @@ const Controller = struct {
             // Enable Reset
             channel.write_control(Control{.interrupts_disabled = true, .reset = true});
             // Wait 5+ us
-            putil.wait_microseconds(5);
+            timing.wait_microseconds(5);
 
             // Disable Reset
             channel.write_control(Control{.interrupts_disabled = true, .reset = false});
             // Wait 2+ ms
-            putil.wait_milliseconds(2);
+            timing.wait_milliseconds(2);
 
             // Wait for controller to stop being busy
             try self.wait_while_busy();
             // Wait 5+ ms
-            putil.wait_milliseconds(5);
+            timing.wait_milliseconds(5);
             _ = channel.read_error();
 
             // Read Expected Values
@@ -331,7 +332,7 @@ const Controller = struct {
             const channel = self.get_channel();
             try self.wait_for_drive();
             channel.write_lba48(self.id, address, 1);
-            putil.wait_microseconds(5);
+            timing.wait_microseconds(5);
             channel.read_sectors_command();
             _ = channel.read_command_status();
             const error_reg = channel.read_error();
