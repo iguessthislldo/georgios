@@ -31,7 +31,6 @@ const sse_enabled: bool = comptime {
 };
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
-    kernel.platform.impl.timing.beep(750, 100);
     kernel.panic(msg, trace);
 }
 

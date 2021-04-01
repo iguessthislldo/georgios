@@ -17,7 +17,6 @@ const putil = @import("util.zig");
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 const ps2 = @import("ps2.zig");
-const timing = @import("timing.zig");
 
 pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
     return packed struct {
@@ -193,7 +192,6 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
             if (!is_exception(interrupt_number)) {
                 print.string(kernel.panic_message);
             } else {
-                timing.beep(750, 100);
                 print.string(get_name(interrupt_number));
                 if (has_ec and interrupt_number == 13) {
                     // Explain General Protection Fault Cause
