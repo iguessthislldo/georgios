@@ -197,7 +197,7 @@ pub var kernel_code_selector: u16 = 0;
 pub var kernel_data_selector: u16 = 0;
 pub var user_code_selector: u16 = 0;
 pub var user_data_selector: u16 = 0;
-pub var tss_selector: u16 = 0;
+export var tss_selector: u16 = 0;
 
 pub fn init() void {
     print.debug_string(" - Filling the Global Descriptor Table (GDT)\n");
