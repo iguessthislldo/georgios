@@ -23,8 +23,8 @@ Building Georgios requires a Unix-like environment with:
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
 `make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make
-bochs` respectively.  For the moment it assumes the exisitance of a IDE hard
-disk with certain files on it.
+bochs` respectively.  For the moment it assumes the existence of an IDE disk
+with certain files on it.
 
 ## Resources Used
 
