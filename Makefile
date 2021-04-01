@@ -29,7 +29,7 @@ build_georgios:
 
 .PHONY: test
 test:
-	$(ZIG) test kernel/test.zig
+	$(ZIG) build test
 
 $(GRUB_CFG): misc/grub.cfg
 	@mkdir -p $(dir $@)

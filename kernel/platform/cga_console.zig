@@ -8,7 +8,7 @@
 
 const builtin = @import("builtin");
 
-const unicode = @import("../unicode.zig");
+const utils = @import("utils");
 
 const util = @import("util.zig");
 const out8 = util.out8;
@@ -185,9 +185,9 @@ pub fn from_unicode(c: u32) ?u8 {
 
 pub fn print_utf8_string(s: []const u8) void {
     var b: [128]u32 = undefined;
-    var r = unicode.Utf8ToUtf32Result{.leftovers=s[0..]};
+    var r = utils.Utf8ToUtf32Result{.leftovers=s[0..]};
     while (true) {
-        r = unicode.utf8_to_utf32(r.leftovers, b[0..])
+        r = utils.utf8_to_utf32(r.leftovers, b[0..])
             catch @panic("UTF-8 CGA Console Failure");
         for (r.fit_in_output[0..]) |i| {
             if (i == '\n') {

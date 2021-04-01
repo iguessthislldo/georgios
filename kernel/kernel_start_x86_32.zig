@@ -16,7 +16,7 @@ const build_options = @import("build_options");
 
 const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
-const util = @import("util.zig");
+const utils = @import("utils");
 
 const sse_enabled: bool = comptime {
     for (builtin.arch.allFeaturesList()) |feature, index_usize| {
@@ -102,17 +102,17 @@ extern var low_kernel_page_table_count: u32;
 extern var low_kernel_page_tables: []u32;
 
 /// Real Address of page_directory
-extern var low_page_directory: [util.Ki(1)]u32;
+extern var low_page_directory: [utils.Ki(1)]u32;
 
 /// Stack for kernel_main_wrapper(). This will be reclaimed later as a frame
 /// when the memory system is initialized.
-pub export var temp_stack: [util.Ki(4)]u8
-    align(util.Ki(4)) linksection(".low_bss") = undefined;
+pub export var temp_stack: [utils.Ki(4)]u8
+    align(utils.Ki(4)) linksection(".low_bss") = undefined;
 
 /// Stack for kernel_main()
 /// TODO: Allow this to grow later or what ever kernel stacks are supposed to
 /// do?
-export var stack: [util.Ki(16)]u8 align(16) linksection(".bss") = undefined;
+export var stack: [utils.Ki(16)]u8 align(16) linksection(".bss") = undefined;
 
 /// Entry Point
 export fn kernel_start() linksection(".low_text") callconv(.Naked) noreturn {
@@ -226,14 +226,14 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     // Virtually Map Kernel to the Real Location and the Kernel Offset
     var table_i: usize = 0;
     while (table_i < low_kernel_page_table_count) {
-        const table_start = &low_kernel_page_tables[table_i * util.Ki(1)];
+        const table_start = &low_kernel_page_tables[table_i * utils.Ki(1)];
         const entry = (@ptrToInt(table_start) & 0xFFFFF000) | 1;
         low_page_directory[table_i] = entry;
         low_page_directory[(offset >> 22) + table_i] = entry; // Div by 4MiB
         table_i += 1;
     }
     for (low_kernel_page_tables[0..frame_count]) |*ptr, i| {
-        ptr.* = i * util.Ki(4) + 1;
+        ptr.* = i * utils.Ki(4) + 1;
     }
     // Translate for high mode
     low_kernel_page_tables.ptr =

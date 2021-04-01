@@ -1,6 +1,6 @@
 const common = @import("common");
 const system_calls = common.system_calls;
-const util = common.util;
+const utils = common.utils;
 
 export fn main() void {
     system_calls.print_string("Type \"bin/a.elf\" or \"bin/b.elf\", or \"bin/shell.elf\"\n");
@@ -29,7 +29,7 @@ export fn main() void {
         }
         if (got > 0) {
             const command = buffer[0..got];
-            if (util.memory_compare(command, "exit")) {
+            if (utils.memory_compare(command, "exit")) {
                 break;
             }
             if (system_calls.exec(command)) {

@@ -8,14 +8,34 @@ const root_path = t_path ++ "root/";
 const boot_path = root_path ++ "boot/";
 const bin_path = root_path ++ "bin/";
 
+const utils_pkg = std.build.Pkg{
+    .name = "utils",
+    .path = "libs/utils/utils.zig",
+};
+const common_pkg = std.build.Pkg{
+    .name = "common",
+    .path = "programs/common/common.zig",
+    .dependencies = &[_]std.build.Pkg {
+        utils_pkg,
+    },
+};
+
 var b: *std.build.Builder = undefined;
 var target: std.zig.CrossTarget = undefined;
 var alloc: *std.mem.Allocator = undefined;
 var kernel: *std.build.LibExeObjStep = undefined;
-var libcommon: *std.build.LibExeObjStep = undefined;
+var build_mode: builtin.Mode = undefined;
+var test_step: *std.build.Step = undefined;
 
 fn format(comptime fmt: []const u8, args: anytype) []u8 {
     return std.fmt.allocPrint(alloc, fmt, args) catch unreachable;
+}
+
+fn add_tests(source: []const u8) void {
+    const tests = b.addTest(source);
+    tests.setBuildMode(build_mode);
+    tests.addPackage(utils_pkg);
+    test_step.dependOn(&tests.step);
 }
 
 pub fn build(builder: *std.build.Builder) void {
@@ -23,7 +43,7 @@ pub fn build(builder: *std.build.Builder) void {
     var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     alloc = &arena_alloc.allocator;
 
-    const build_mode = b.standardReleaseOptions();
+    build_mode = b.standardReleaseOptions();
     const multiboot_vga_request = b.option(bool, "multiboot_vga_request",
         \\Ask the bootloader to switch to a graphics mode for us.
         ) orelse false;
@@ -52,6 +72,11 @@ pub fn build(builder: *std.build.Builder) void {
     b.setInstallPrefix(root_path);
     b.resolveInstallPrefix();
 
+    // Tests
+    test_step = b.step("test", "Run Tests");
+    add_tests("libs/utils/test.zig");
+    add_tests("kernel/test.zig");
+
     // Kernel
     const root_file = format("{s}kernel_start_{s}.zig", .{k_path, platform});
     kernel = b.addExecutable("kernel.elf", root_file);
@@ -63,15 +88,12 @@ pub fn build(builder: *std.build.Builder) void {
         "multiboot_vga_request", multiboot_vga_request);
     kernel.addBuildOption(bool, "debug_log", debug_log);
     // build_acpica();
-    kernel.install();
-
-    // libcommon
-    libcommon = b.addStaticLibrary("common", "programs/common/common.zig");
-    libcommon.setTarget(target);
+    kernel.addPackage(utils_pkg);
     var generate_system_calls_step = b.addSystemCommand(&[_][]const u8{
         "scripts/codegen/generate_system_calls.py"
     });
-    libcommon.step.dependOn(&generate_system_calls_step.step);
+    kernel.step.dependOn(&generate_system_calls_step.step);
+    kernel.install();
 
     // Programs
     build_program("shell");
@@ -133,7 +155,6 @@ fn build_program(name: []const u8) void {
     const prog = b.addExecutable(elf, zig);
     prog.setLinkerScriptPath("programs/common/linking.ld");
     prog.setTarget(target);
-    prog.addPackagePath("common", "programs/common/common.zig");
-    prog.linkLibrary(libcommon);
+    prog.addPackage(common_pkg);
     prog.install();
 }

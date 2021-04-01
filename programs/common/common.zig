@@ -1,5 +1,5 @@
 pub const system_calls = @import("system_calls.zig");
-pub const util = @import("util.zig");
+pub const utils = @import("utils");
 
 extern fn main() void;
 

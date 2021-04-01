@@ -1,10 +1,11 @@
 const std = @import("std");
 
+const utils = @import("utils");
+
 const kernel = @import("../kernel.zig");
 const kthreading = @import("../threading.zig");
 const Thread = kthreading.Thread;
 const Process = kthreading.Process;
-const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
 const print = @import("../print.zig");
@@ -15,7 +16,7 @@ const interrupts = @import("interrupts.zig");
 const InterruptStack = interrupts.InterruptStack;
 const segments = @import("segments.zig");
 
-pub const Error = kutil.Error || kmemory.MemoryError;
+pub const Error = utils.Error || kmemory.MemoryError;
 
 const pmem = &kernel.memory.platform_memory;
 
@@ -57,7 +58,7 @@ pub const ThreadImpl = struct {
         self.thread = thread;
         self.context_is_setup = boot_thread;
         if (!boot_thread) {
-            self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(kutil.Ki(4));
+            self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(utils.Ki(4));
         }
     }
 
@@ -65,14 +66,14 @@ pub const ThreadImpl = struct {
         const Type = @TypeOf(value);
         const size = @sizeOf(Type);
         self.context -= size;
-        _ = kutil.memory_copy_truncate(
+        _ = utils.memory_copy_truncate(
             @intToPtr([*]u8, self.context)[0..size], std.mem.asBytes(&value));
     }
 
     fn pop_from_context(self: *ThreadImpl, comptime Type: type) Type {
         const size = @sizeOf(Type);
         var value: Type = undefined;
-        _ = kutil.memory_copy_truncate(
+        _ = utils.memory_copy_truncate(
             std.mem.asBytes(&value), @intToPtr([*]const u8, self.context)[0..size]);
         self.context += size;
         return value;
@@ -118,7 +119,7 @@ pub const ThreadImpl = struct {
         // Setup Initial Kernel Mode Stack/Context
         const sp = self.kernelmode_stack.end() - 1;
         self.context = sp;
-        var frame = kutil.zero_init(SwitchToFrame);
+        var frame = utils.zero_init(SwitchToFrame);
         frame.esp = sp;
         // TODO: Zig Bug? @ptrToInt(&run) results in weird address
         frame.func_return = @ptrToInt(run);

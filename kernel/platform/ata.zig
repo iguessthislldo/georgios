@@ -7,8 +7,9 @@
 //   https://en.wikipedia.org/wiki/Parallel_ATA
 //   FYSOS: Media Storage Devices https://www.amazon.com/dp/1514111888/
 
+const utils = @import("utils");
+
 const print = @import("../print.zig");
-const kutil = @import("../util.zig");
 const io = @import("../io.zig");
 const memory = @import("../memory.zig");
 const MemoryError = memory.MemoryError;
@@ -129,7 +130,7 @@ const IndentifyResults = struct {
     };
 
     comptime {
-        const raw_bit_size = kutil.packed_bit_size(Raw);
+        const raw_bit_size = utils.packed_bit_size(Raw);
         const sector_bit_size = Sector.size * 8;
         if (raw_bit_size != sector_bit_size) {
             @compileLog("IndentifyResults.Raw is ", raw_bit_size, " bits");
@@ -163,7 +164,7 @@ const IndentifyResults = struct {
         for (raw.model) |*i| {
             i.* = @byteSwap(u16, i.*);
         }
-        results.model.len = kutil.stripped_string_size(results.model);
+        results.model.len = utils.stripped_string_size(results.model);
         // TODO: Other Strings
 
         if (raw.lba) {

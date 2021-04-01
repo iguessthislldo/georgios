@@ -14,7 +14,7 @@ const Allocator = memory.Allocator;
 const MemoryError = memory.MemoryError;
 const AllocError = memory.AllocError;
 const FreeError = memory.FreeError;
-const util = @import("util.zig");
+const util = @import("utils");
 const print = @import("print.zig");
 
 const BlockStatus = packed enum(u2) {

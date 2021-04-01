@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const util = @import("util.zig");
+const utils = @import("utils");
 const print = @import("print.zig");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
@@ -32,7 +32,7 @@ pub const Range = struct {
     }
 
     pub fn to_slice(self: *const Range, comptime Type: type) []Type {
-        return util.make_slice(Type, self.to_ptr([*]Type), self.size / @sizeOf(Type));
+        return utils.make_slice(Type, self.to_ptr([*]Type), self.size / @sizeOf(Type));
     }
 };
 
@@ -70,8 +70,8 @@ pub const RealMemoryMap = struct {
     /// Given a memory range, add a frame group if there are frames that can
     /// fit in it.
     pub fn add_frame_group(self: *RealMemoryMap, start: usize, end: usize) void {
-        const aligned_start = util.align_up(start, platform.frame_size);
-        const aligned_end = util.align_down(end, platform.frame_size);
+        const aligned_start = utils.align_up(start, platform.frame_size);
+        const aligned_end = utils.align_down(end, platform.frame_size);
         if (aligned_start < aligned_end) {
             self.add_frame_group_impl(aligned_start,
                 (aligned_end - aligned_start) / platform.frame_size);
@@ -95,7 +95,7 @@ pub const Allocator = struct {
     }
 
     pub fn free(self: *Allocator, value: anytype) FreeError!void {
-        const bytes = util.to_bytes(value);
+        const bytes = utils.to_bytes(value);
         if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@TypeOf(value)) ++
             ": {:a}\n", .{@ptrToInt(bytes.ptr)});
         try self.free_impl(self, bytes);
@@ -172,7 +172,7 @@ pub const UnitTestAllocator = struct {
 
 /// Used by the kernel to manage system memory
 pub const Memory = struct {
-    const small_alloc_size = util.Mi(1);
+    const small_alloc_size = utils.Mi(1);
     const SmallAllocImplType = BuddyAllocator(small_alloc_size);
 
     platform_memory: PlatformMemory = PlatformMemory{},

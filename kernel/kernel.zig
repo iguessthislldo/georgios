@@ -6,7 +6,6 @@ pub const print = @import("print.zig");
 pub const Memory = @import("memory.zig").Memory;
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
-pub const util = @import("util.zig");
 pub const Devices = @import("devices.zig").Devices;
 pub const threading = @import("threading.zig");
 pub const fs = @import("fs.zig");
@@ -67,6 +66,7 @@ pub fn exec(path: []const u8, kernel_mode: bool) !threading.Process.Id {
 
 pub fn run() !void {
     try init();
+    platform.impl.cga_console.new_page();
     threading_manager.yield_while_process_is_running(try exec("bin/shell.elf", false));
 }
 

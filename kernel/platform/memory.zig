@@ -1,7 +1,7 @@
 const std = @import("std");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
-const kutil = @import("../util.zig");
+const utils = @import("utils");
 const kmemory = @import("../memory.zig");
 const KernelMemory = kmemory.Memory;
 const RealMemoryMap = kmemory.RealMemoryMap;
@@ -13,11 +13,11 @@ const print = @import("../print.zig");
 const platform = @import("platform.zig");
 const to_virtual = platform.kernel_to_virtual;
 
-pub const frame_size = kutil.Ki(4);
+pub const frame_size = utils.Ki(4);
 pub const page_size = frame_size;
-const pages_per_table = kutil.Ki(1);
+const pages_per_table = utils.Ki(1);
 const table_pages_size = page_size * pages_per_table;
-const tables_per_directory = kutil.Ki(1);
+const tables_per_directory = utils.Ki(1);
 const table_size = @sizeOf(u32) * pages_per_table;
 
 export var active_page_directory: [tables_per_directory]u32
@@ -89,13 +89,13 @@ pub fn reload_active_page_directory() void {
     );
 }
 
-pub fn load_page_directory(new: []const u32, old: ?[]u32) kutil.Error!void {
+pub fn load_page_directory(new: []const u32, old: ?[]u32) utils.Error!void {
     const end = get_kernel_space_start_directory_index();
     if (old) |o| {
-        _ = try kutil.memory_copy_error(
+        _ = try utils.memory_copy_error(
             sliceAsBytes(o[0..end]), sliceAsBytes(active_page_directory[0..end]));
     }
-    _ = try kutil.memory_copy_error(
+    _ = try utils.memory_copy_error(
         sliceAsBytes(active_page_directory[0..end]), sliceAsBytes(new[0..end]));
     reload_active_page_directory();
 }
@@ -177,7 +177,7 @@ pub const Memory = struct {
         // }
         // print.format("total_count: {}, counted: {}\n", total_count, counted);
 
-        self.start_of_virtual_space = kutil.align_up(
+        self.start_of_virtual_space = utils.align_up(
             @ptrToInt(kernel_page_tables.ptr) + kernel_page_tables.len * table_size,
             table_pages_size);
     }
@@ -220,7 +220,7 @@ pub const Memory = struct {
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
         const table_index_start = get_table_index(start);
-        var rv = Range{.size = kutil.align_up(requested_size, page_size)};
+        var rv = Range{.size = utils.align_up(requested_size, page_size)};
         var range = Range{};
         var dir_index: usize = dir_index_start;
         while (dir_index < tables_per_directory) {
@@ -346,7 +346,7 @@ pub const Memory = struct {
         const end = get_kernel_space_start_directory_index();
         const page_directory =
             try self.kernel_memory.big_alloc.alloc_array(u32, tables_per_directory);
-        _ = kutil.memory_set(sliceAsBytes(page_directory[0..]), 0);
+        _ = utils.memory_set(sliceAsBytes(page_directory[0..]), 0);
         return page_directory;
     }
 
@@ -376,7 +376,7 @@ pub const Memory = struct {
                 }
                 self.map_virtual_page(get_page_address(table[table_index]));
                 const page = @intToPtr([*]u8, self.virtual_page_address)[0..page_size];
-                const copied = kutil.memory_copy_truncate(page, data_left);
+                const copied = utils.memory_copy_truncate(page, data_left);
                 data_left = data_left[copied..];
                 table_index += 1;
             }

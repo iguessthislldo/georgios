@@ -2,7 +2,6 @@ const platform = @import("platform.zig");
 const pthreading = platform.impl.threading;
 const kernel = @import("kernel.zig");
 const memory = @import("memory.zig");
-const util = @import("util.zig");
 const print = @import("print.zig");
 const MappedList = @import("mapped_list.zig").MappedList;
 

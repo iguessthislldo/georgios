@@ -2,7 +2,8 @@
 // PS/2 Keyboard Interface
 // ============================================================================
 
-const kutil = @import("../util.zig");
+const utils = @import("utils");
+
 const print = @import("../print.zig");
 
 const putil = @import("util.zig");
@@ -10,16 +11,16 @@ const interrupts = @import("interrupts.zig");
 const segments = @import("segments.zig");
 const PS2_Scan_Code = @import("ps2_scan_codes.zig").PS2_Scan_Code;
 
-var modifiers = kutil.Key.Modifiers{};
+var modifiers = utils.Key.Modifiers{};
 
-var buffer = kutil.CircularBuffer(kutil.Key, 128){};
+var buffer = utils.CircularBuffer(utils.Key, 128){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
     const command_status_port: u16 = 0x64;
 
     pub inline fn get_scan_code() ?PS2_Scan_Code {
-        return kutil.int_to_enum(PS2_Scan_Code, putil.in8(data_port));
+        return utils.int_to_enum(PS2_Scan_Code, putil.in8(data_port));
     }
 };
 
@@ -40,6 +41,7 @@ pub fn keyboard_event_occured(
         else => {
             if (scan_code.to_char()) |c| {
                 buffer.push(.{.unshifted_char = c, .modifiers = modifiers});
+            } else {
             }
         },
     }
@@ -70,7 +72,7 @@ pub fn get_char() ?u8 {
     return null;
 }
 
-pub fn get_key() ?kutil.Key {
+pub fn get_key() ?utils.Key {
     putil.disable_interrupts();
     defer putil.enable_interrupts();
     return buffer.pop();

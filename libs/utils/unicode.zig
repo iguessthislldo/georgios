@@ -3,11 +3,11 @@
 // More Information:
 //   https://en.wikipedia.org/wiki/UTF-8
 
-const util = @import("util.zig");
+const utils = @import("utils.zig");
 
-const Error = error {
+pub const Error = error {
     InvalidUtf8,
-} || util.Error;
+} || utils.Error;
 
 const Utf8Iterator = struct {
     input: []const u8,

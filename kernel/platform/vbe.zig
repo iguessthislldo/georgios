@@ -5,11 +5,12 @@
 
 const std = @import("std");
 
+const utils = @import("utils");
+
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
 
-const kutil = @import("../util.zig");
 const print = @import("../print.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
@@ -36,7 +37,7 @@ const Info = packed struct {
     };
 
     pub fn get_version(self: @This()) ?Version {
-        return kutil.int_to_enum(Version, @intCast(u8, self.version >> 8));
+        return utils.int_to_enum(Version, @intCast(u8, self.version >> 8));
     }
 };
 

@@ -1,9 +1,10 @@
 // System Call Handling
 
+const utils = @import("utils");
+
 const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
 const kthreading = @import("../threading.zig");
-const kutil = @import("../util.zig");
 
 const ps2 = @import("ps2.zig");
 const interrupts = @import("interrupts.zig");
@@ -92,12 +93,12 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_manager.yield_while_process_is_running(pid);
         },
 
-        // SYSCALL: get_key() key: util.Key
-        // IMPORT: util "util.zig"
+        // SYSCALL: get_key() key: utils.Key
+        // IMPORT: utils "utils"
         5 => {
             while (true) {
                 if (ps2.get_key()) |key| {
-                    @intToPtr(*kutil.Key, arg1).* = key;
+                    @intToPtr(*utils.Key, arg1).* = key;
                     break;
                 }
                 kernel.threading_manager.yield();

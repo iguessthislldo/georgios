@@ -1,8 +1,9 @@
 const std = @import("std");
 const bytesAsSlice = std.mem.bytesAsSlice;
 
-const util = @import("util.zig");
-const Guid = @import("guid.zig");
+const utils = @import("utils");
+const Guid = utils.Guid;
+
 const io = @import("io.zig");
 const constant_guids = @import("constant_guids.zig");
 

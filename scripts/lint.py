@@ -18,10 +18,11 @@ def get_files():
 
 status = 0
 
+# Find Files ==================================================================
 trailing_whitespace = re.compile(r'.*\s$')
-zig_test = re.compile(r'^test ".*" {$')
-zig_test_files = set()
-main_test_file = "kernel/test.zig"
+zig_test_re = re.compile(r'^test "(.*)" {$')
+zig_test_roots = set()
+zig_files_with_tests = set()
 for path in get_files():
     if not path.is_file() or path.suffix in ('.img', '.png'):
         continue
@@ -38,25 +39,54 @@ for path in get_files():
             if trailing_whitespace.match(line):
                 print('Trailing space on {}:{}'.format(str(path), lineno))
                 status = 1
-            if zig_file and str(path) != main_test_file and zig_test.match(line):
-                zig_test_files |= {str(path)}
+            if zig_file:
+                m = zig_test_re.match(line)
+                if m:
+                    if m.group(1).endswith("test root"):
+                        zig_test_roots |= {path}
+                    else:
+                        zig_files_with_tests |= {path}
             lineno += 1
 
-# Check that the files that have tests are the same as the files in kernel/test.zig
-zig_test_import_re = re.compile(r'const \w+ = @import\("(\w+.zig)"\);')
-zig_test_imports = set()
-with open(main_test_file) as f:
+# Make sure all tests are being tested ========================================
+
+# Make sure all test roots are in build.zig
+zig_add_tests_re = re.compile(r'add_tests\("([\w/]+.zig)"\);')
+zig_add_tests = set()
+with open('build.zig') as f:
     for line in f.readlines():
-        m = zig_test_import_re.search(line)
+        m = zig_add_tests_re.search(line)
         if m:
-            zig_test_imports |= {'kernel/' + m.group(1)}
-missing_from_test_zig = zig_test_files - zig_test_imports
-if missing_from_test_zig:
-    print('Missing from', main_test_file + ':', ', '.join(missing_from_test_zig))
+            zig_add_tests |= {Path(m.group(1))}
+missing_from_build_zig = zig_test_roots - zig_add_tests
+if missing_from_build_zig:
+    print('Missing from build.zig:',
+        ', '.join([str(p) for p in missing_from_build_zig]))
     status = 1
-missing_zig_tests = zig_test_imports - zig_test_files
+missing_zig_test_roots = zig_add_tests - zig_test_roots
+if missing_zig_test_roots:
+    print('add_tests in build.zig that are not test roots:',
+        ', '.join([str(p) for p in missing_zig_test_roots]))
+    status = 1
+
+# Make sure all zig files with tests are in a test root
+imported_in_test_roots = set()
+test_import_re = re.compile(r'const \w+ = @import\("(\w+.zig)"\);')
+for zig_test_root in zig_test_roots:
+    with open(zig_test_root) as f:
+        for line in f.readlines():
+            m = test_import_re.search(line)
+            if m:
+                imported_in_test_roots |= {zig_test_root.parent / m.group(1)}
+missing_from_test_roots = zig_files_with_tests - imported_in_test_roots
+if missing_from_test_roots:
+    print('Missing from a test root:',
+        ', '.join([str(p) for p in missing_from_test_roots]))
+    status = 1
+missing_zig_tests = imported_in_test_roots - zig_files_with_tests
 if missing_zig_tests:
-    print('Imports in', main_test_file, 'without tests:', ', '.join(missing_zig_tests))
+    print('Imports in test roots without tests:',
+        ', '.join([str(p) for p in missing_zig_tests]))
     status = 1
 
 sys.exit(status)

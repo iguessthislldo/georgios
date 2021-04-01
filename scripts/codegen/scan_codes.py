@@ -25,7 +25,7 @@ control_raw = [
     (0x1, 'Escape'),
     (0x2a, 'Left_Shift'),
     (0x36, 'Right_Shift'),
-    (0x0E, 'Backspace'),
+    (0x0e, 'Backspace'),
     (0x38, 'Left_Alt'),
     (0x1d, 'Left_Control'),
 ]

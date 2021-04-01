@@ -1,6 +1,13 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
+const unicode = @import("unicode.zig");
+pub const utf8_to_utf32 = unicode.utf8_to_utf32;
+pub const UnicodeError = unicode.Error;
+pub const Utf8ToUtf32Result = unicode.Utf8ToUtf32Result;
+
+pub const Guid = @import("guid.zig");
+
 pub const Error = error {
     OutOfBounds,
     NotEnoughSource,

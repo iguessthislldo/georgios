@@ -8,8 +8,9 @@
 //   ELF on OSDev Wiki: https://wiki.osdev.org/ELF
 //   man elf
 
+const utils = @import("utils");
+
 const io = @import("io.zig");
-const util = @import("util.zig");
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const List = @import("list.zig").List;
@@ -126,14 +127,14 @@ const Header = packed struct {
 
     pub fn verify_elf(self: *const Header) Error!void {
         const invalid =
-            !util.memory_compare(self.magic[0..], expected_magic[0..]) or
-            !util.valid_enum(Class, self.class) or
+            !utils.memory_compare(self.magic[0..], expected_magic[0..]) or
+            !utils.valid_enum(Class, self.class) or
             self.class == .Invalid or
-            !util.valid_enum(Data, self.data) or
+            !utils.valid_enum(Data, self.data) or
             self.data == .Invalid or
-            !util.valid_enum(HeaderVersion, self.header_version) or
+            !utils.valid_enum(HeaderVersion, self.header_version) or
             self.header_version == .Invalid or
-            !util.valid_enum(ObjectVersion, self.object_version) or
+            !utils.valid_enum(ObjectVersion, self.object_version) or
             self.object_version == .Invalid;
         if (invalid) {
             return Error.InvalidElfFile;
@@ -174,7 +175,7 @@ pub const Object = struct {
         object.segments = Segments{.alloc = alloc};
 
         // Read Header
-        _ = try file.read(util.to_bytes(&object.header));
+        _ = try file.read(utils.to_bytes(&object.header));
         if (debug) print.format("Header Size: {}\n", .{@as(usize, @sizeOf(Header))});
         try object.header.verify_executable();
 
@@ -191,7 +192,7 @@ pub const Object = struct {
             const skip = @intCast(isize, size - @sizeOf(SectionHeader));
             object.section_headers = try alloc.alloc_array(SectionHeader, count);
             for (object.section_headers) |*section_header, i| {
-                _ = try file.read(util.to_bytes(section_header));
+                _ = try file.read(utils.to_bytes(section_header));
                 _ = try file.seek(skip, .FromHere);
             }
         }
@@ -213,7 +214,7 @@ pub const Object = struct {
             const skip = @intCast(isize, size - @sizeOf(ProgramHeader));
             object.program_headers = try alloc.alloc_array(ProgramHeader, count);
             for (object.program_headers) |*program_header, i| {
-                _ = try file.read(util.to_bytes(program_header));
+                _ = try file.read(utils.to_bytes(program_header));
                 _ = try file.seek(skip, .FromHere);
             }
         }

@@ -1,6 +1,6 @@
 const builtin = @import("builtin");
+const utils = @import("utils");
 
-const util = @import("util.zig");
 const io = @import("io.zig");
 const File = io.File;
 const FileError = io.FileError;
@@ -26,7 +26,7 @@ pub fn cstring(file: *File, str: [*]const u8) FileError!void {
 
 /// Print string stripped of trailing whitespace.
 pub fn stripped_string(file: *File, str: [*]const u8, size: usize) FileError!void {
-    try string(file, str[0..util.stripped_string_size(str[0..size])]);
+    try string(file, str[0..utils.stripped_string_size(str[0..size])]);
 }
 
 fn uint_recurse(comptime uint_type: type, file: *File, value: uint_type) FileError!void {
@@ -74,7 +74,7 @@ pub fn int_sign(file: *File, value: usize, show_positive: bool) FileError!void {
 }
 
 fn nibble(file: *File, value: u4) FileError!void {
-    try char(file, util.nibble_char(value));
+    try char(file, utils.nibble_char(value));
 }
 
 fn hex_recurse(file: *File, value: usize) FileError!void {
@@ -107,7 +107,7 @@ pub fn address(file: *File, value: usize) FileError!void {
 
     for (buffer[1..]) |*ptr, i| {
         const nibble_index: usize = (nibble_count - 1) - i;
-        ptr.* = util.nibble_char(util.select_nibble(usize, value, nibble_index));
+        ptr.* = utils.nibble_char(utils.select_nibble(usize, value, nibble_index));
     }
 
     try string(file, buffer[0..]);
@@ -118,13 +118,13 @@ test "address" {
     const BufferFile = io.BufferFile;
 
     var file_buffer: [128]u8 = undefined;
-    util.memory_set(file_buffer[0..], 0);
+    utils.memory_set(file_buffer[0..], 0);
     var buffer_file = BufferFile{};
     buffer_file.init(file_buffer[0..]);
     const file = &buffer_file.file;
 
     try address(file, 0x7bc75e39);
-    const length = util.string_length(file_buffer[0..]);
+    const length = utils.string_length(file_buffer[0..]);
 
     const expected = if (@sizeOf(usize) == 4)
         "@7bc75e39"
@@ -138,7 +138,7 @@ test "address" {
 /// Print a hexadecimal representation of a byte (no "0x" prefix)
 pub fn byte(file: *File, value: u8) FileError!void {
     var buffer: [2]u8 = undefined;
-    util.byte_buffer(buffer[0..], value);
+    utils.byte_buffer(buffer[0..], value);
     try string(file, buffer);
 }
 
@@ -199,7 +199,7 @@ pub fn any(file: *File, value: anytype) FileError!void {
             }
         },
         builtin.TypeId.Enum => {
-            if (util.enum_name(Type, value)) |name| {
+            if (utils.enum_name(Type, value)) |name| {
                 try string(file, name);
             } else {
                 try string(file, "<Invalid Value For " ++ @typeName(Type) ++ ">");
@@ -353,7 +353,8 @@ pub fn dump_memory(file: *File, ptr: usize, size: usize) FileError!void {
         print_buffer = !has_next;
         {
             const new_pos = buffer_pos + 2;
-            util.byte_buffer(buffer[buffer_pos..new_pos], @intToPtr(*allowzero u8, ptr + i).*);
+            utils.byte_buffer(buffer[buffer_pos..new_pos],
+                @intToPtr(*allowzero u8, ptr + i).*);
             buffer_pos = new_pos;
         }
         byte_i += 1;

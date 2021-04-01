@@ -1,12 +1,13 @@
 const builtin = @import("builtin");
 
+const utils = @import("utils");
+
 const paging = @import("paging.zig");
 const platform = @import("platform.zig");
 const vbe = @import("vbe.zig");
 
 const print = @import("../print.zig");
 const Range = @import("../memory.zig").Range;
-const util = @import("../util.zig");
 
 export var multiboot_info: []u32 = undefined;
 
@@ -40,7 +41,7 @@ const TagKind = enum (u32) {
     LoadBaseAddr = 21,
 
     pub fn from_u32(value: u32) ?TagKind {
-        return util.int_to_enum(TagKind, value);
+        return utils.int_to_enum(TagKind, value);
     }
 
     pub fn to_string(self: TagKind) []const u8 {
@@ -114,7 +115,7 @@ pub fn find_tag(find: TagKind) Error!Range {
             }
         }
         // Move to next tag
-        i += util.align_up(size, 8);
+        i += utils.align_up(size, 8);
         tag_count += 1;
     }
     if (list) {
