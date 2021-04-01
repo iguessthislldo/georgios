@@ -51,6 +51,10 @@ pub fn build(b: *std.build.Builder) void {
     // libcommon
     const libcommon = b.addStaticLibrary("common", "programs/common/common.zig");
     libcommon.setTarget(target);
+    var generate_system_calls_step = b.addSystemCommand(&[_][]const u8{
+        "scripts/codegen/generate_system_calls.py"
+    });
+    libcommon.step.dependOn(&generate_system_calls_step.step);
 
     // programs/echoer
     const echoer = b.addExecutable("echoer.elf", "programs/echoer/echoer.zig");

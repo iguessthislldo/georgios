@@ -24,7 +24,7 @@ const intel8042 = struct {
 };
 
 pub fn keyboard_event_occured(
-        interrupt_number: u32, interrupt_stack: *const interrupts.InterruptStack) void {
+        interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
     const scan_code_maybe = intel8042.get_scan_code();
     if (scan_code_maybe == null) return;
     const scan_code = scan_code_maybe.?;
