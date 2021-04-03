@@ -9,6 +9,7 @@ const PlatformMemory = platform.Memory;
 
 pub const AllocError = error {
     OutOfMemory,
+    ZeroSizedAlloc,
 };
 pub const FreeError = error {
     InvalidFree,
@@ -105,6 +106,9 @@ pub const Allocator = struct {
             self: *Allocator, comptime Type: type, count: usize) AllocError![]Type {
         if (alloc_debug) print.format(
             "Allocator.alloc_array: [{}]" ++ @typeName(Type) ++ "\n", .{count});
+        if (count == 0) {
+            return AllocError.ZeroSizedAlloc;
+        }
         const rv = @ptrCast([*]Type, @alignCast(@alignOf(Type),
             (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
         if (alloc_debug) print.format("Allocator.alloc_array: [{}]" ++ @typeName(Type) ++
@@ -122,6 +126,9 @@ pub const Allocator = struct {
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
         if (alloc_debug) print.format("Allocator.alloc_range: {}\n", .{size});
+        if (size == 0) {
+            return AllocError.ZeroSizedAlloc;
+        }
         const rv = Range{
             .start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
         if (alloc_debug) print.format("Allocator.alloc_range: {}: {:a}\n", .{size, rv.start});
