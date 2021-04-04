@@ -159,7 +159,16 @@ const Header = packed struct {
 
 pub const Object = struct {
     pub const Segment = struct {
-        data: []u8,
+        const WhatKind = enum {
+            Data,
+            UndefinedMemory,
+        };
+        const What = union(WhatKind) {
+            Data: []u8,
+            UndefinedMemory: usize,
+        };
+
+        what: What = undefined,
         address: usize,
     };
     pub const Segments = List(Segment);
@@ -228,14 +237,25 @@ pub const Object = struct {
             // Read the Program
             // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {
-                if (debug) print.format("segment at {}\n", .{program_header.virtual_address});
-                var segment = Segment{
-                    .data = try alloc.alloc_array(u8, program_header.size_in_file),
-                    .address = program_header.virtual_address,
-                };
-                _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
-                _ = try file.read_or_error(segment.data);
-                if (debug) print.dump_bytes(segment.data);
+                if (debug) print.format(
+                    "segment at {} kind {} file size {} memory size {}\n", .{
+                        program_header.virtual_address, program_header.kind,
+                        program_header.size_in_file, program_header.size_in_memory,
+                        });
+                var segment = Segment{.address = program_header.virtual_address};
+                const nonzero = program_header.size_in_memory > 0;
+                if (nonzero and program_header.size_in_memory == program_header.size_in_file) {
+                    segment.what = Segment.What{
+                        .Data = try alloc.alloc_array(u8, program_header.size_in_file)};
+                    _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
+                    _ = try file.read_or_error(segment.what.Data);
+                    if (debug) print.dump_bytes(segment.what.Data);
+                } else if (nonzero and program_header.size_in_file == 0) {
+                    segment.what = Segment.What{
+                        .UndefinedMemory = program_header.size_in_memory};
+                } else {
+                    @panic("elf unexpected situation with program header sizes");
+                }
                 try object.segments.push_back(segment);
             }
         }

@@ -12,9 +12,9 @@ const utils_pkg = std.build.Pkg{
     .name = "utils",
     .path = "libs/utils/utils.zig",
 };
-const common_pkg = std.build.Pkg{
-    .name = "common",
-    .path = "programs/common/common.zig",
+const georgios_pkg = std.build.Pkg{
+    .name = "georgios",
+    .path = "libs/georgios/georgios.zig",
     .dependencies = &[_]std.build.Pkg {
         utils_pkg,
     },
@@ -89,6 +89,7 @@ pub fn build(builder: *std.build.Builder) void {
     kernel.addBuildOption(bool, "debug_log", debug_log);
     // build_acpica();
     kernel.addPackage(utils_pkg);
+    kernel.addPackage(georgios_pkg);
     var generate_system_calls_step = b.addSystemCommand(&[_][]const u8{
         "scripts/codegen/generate_system_calls.py"
     });
@@ -97,9 +98,8 @@ pub fn build(builder: *std.build.Builder) void {
 
     // Programs
     build_program("shell");
-    build_program("echoer");
-    build_program("a");
-    build_program("b");
+    build_program("hello");
+    build_program("ls");
 }
 
 fn build_acpica() void {
@@ -153,8 +153,8 @@ fn build_program(name: []const u8) void {
     const bin = format("{s}{s}", .{bin_path, elf});
     const zig = format("programs/{s}/{s}.zig", .{name, name});
     const prog = b.addExecutable(elf, zig);
-    prog.setLinkerScriptPath("programs/common/linking.ld");
+    prog.setLinkerScriptPath("programs/linking.ld");
     prog.setTarget(target);
-    prog.addPackage(common_pkg);
+    prog.addPackage(georgios_pkg);
     prog.install();
 }

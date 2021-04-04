@@ -6,6 +6,8 @@
 //   https://www.nongnu.org/ext2-doc/ext2.html
 
 const utils = @import("utils");
+const georgios = @import("georgios");
+
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
@@ -318,7 +320,7 @@ const DirectoryEntry = packed struct {
 const DirectoryIterator = struct {
     pub const Value = struct {
         inode_number: u32,
-        name: []u8,
+        name: []const u8,
         inode: Inode,
     };
 
@@ -529,5 +531,97 @@ pub const Ext2 = struct {
         }
 
         return Error.FileNotFound;
+    }
+
+    pub fn open_dir(self: *Ext2, path: []const u8) Error!DirectoryIterator.Value {
+        if (!self.initialized) return Error.InvalidFilesystem;
+        var dir_inode: Inode = undefined;
+        try self.get_inode(Ext2.root_inode_number, &dir_inode);
+
+        if (path.len == 1 and path[0] == '.' or path[0] == '/') {
+            return DirectoryIterator.Value{
+                .inode_number = Ext2.root_inode_number,
+                .name = "/",
+                .inode = dir_inode,
+            };
+        }
+
+        var it = fs.PathIterator.new(path);
+        while (it.next()) |component| {
+            // See if That Component is in the Current Directory
+            var dir_iter = try DirectoryIterator.new(self, &dir_inode);
+            defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
+            var not_found = true;
+            while (not_found and try dir_iter.next()) {
+                if (utils.memory_compare(component, dir_iter.value.name)) {
+                    if (dir_iter.value.inode.is_directory()) {
+                        if (it.done()) {
+                            return dir_iter.value;
+                        }
+                        dir_inode = dir_iter.value.inode;
+                        not_found = false;
+                    } else {
+                        return Error.NotADirectory;
+                    }
+                }
+            }
+        }
+
+        return Error.FileNotFound;
+    }
+
+    pub fn next_dir_entry(self: *Ext2, dir_entry: *georgios.DirEntry) Error!void {
+        var in_dir: DirectoryIterator.Value = undefined;
+        if (dir_entry.dir_inode) |dir_inode| {
+            try self.get_inode(dir_inode, &in_dir.inode);
+            // Note: Leaving in_dir.inode_number undefined
+        } else {
+            in_dir = try self.open_dir(dir_entry.dir);
+            dir_entry.dir_inode = in_dir.inode_number;
+        }
+
+        var dir_iter = try DirectoryIterator.new(self, &in_dir.inode);
+        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
+        var get_next = false;
+        while (try dir_iter.next()) {
+            // print.format("dir_item: {} {}\n", .{dir_iter.value.inode_number, dir_iter.value.name});
+            var return_this = false;
+            if (get_next) {
+                if (dir_entry.current_entry_inode) |current| {
+                    // Case of listing / where . == ..
+                    // TODO: Also maybe if there are two or more hard links to
+                    // the same file in a row. This might be have be rethought
+                    // out though because it will get in a loop if identical
+                    // hard links are interspersed in the directory listing.
+                    if (current == dir_iter.value.inode_number) {
+                        continue;
+                    }
+                }
+                // print.format("get_next return this\n", .{});
+                return_this = true;
+            } else if (dir_entry.current_entry_inode) |current| {
+                // print.format("current: {}\n", .{current});
+                if (current == dir_iter.value.inode_number) {
+                    get_next = true;
+                    continue;
+                }
+            } else {
+                // print.format("return this\n", .{});
+                return_this = true;
+            }
+            if (return_this) {
+                dir_entry.current_entry_inode = dir_iter.value.inode_number;
+                const len = utils.memory_copy_truncate(
+                    dir_entry.current_entry_buffer[0..], dir_iter.value.name);
+                dir_entry.current_entry = dir_entry.current_entry_buffer[0..len];
+                return;
+            }
+        }
+
+        // print.format("done\n", .{});
+
+        dir_entry.current_entry.len = 0;
+        dir_entry.current_entry_inode = null;
+        dir_entry.done = true;
     }
 };

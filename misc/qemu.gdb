@@ -8,6 +8,7 @@ set logging on
 
 break kernel.panic
 # break platform.interrupts.BaseInterruptHandler(14,false,false).handler
+# break usermode_iret
 
 target remote | qemu-system-i386 \
     -S -gdb stdio \

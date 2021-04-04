@@ -1,4 +1,4 @@
-ENTRY(main_wrapper)
+ENTRY(_start)
 
 SECTIONS {
 	.text : ALIGN(4K)

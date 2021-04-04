@@ -1,6 +1,9 @@
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 
+const utils = @import("utils");
+const georgios = @import("georgios");
+
 pub const platform = @import("platform.zig");
 pub const print = @import("print.zig");
 pub const Memory = @import("memory.zig").Memory;
@@ -51,13 +54,17 @@ pub fn init() !void {
     try threading_manager.init();
 }
 
-pub fn exec(path: []const u8, kernel_mode: bool) !threading.Process.Id {
-    const process = try threading_manager.new_process(kernel_mode);
-    var ext2_file = try filesystem.open(path);
+pub fn exec(info: *const georgios.ProcessInfo) !threading.Process.Id {
+    const process = try threading_manager.new_process(info);
+    var ext2_file = try filesystem.open(info.path);
     var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
     var segments = elf_object.segments.iterator();
     while (segments.next()) |segment| {
-        try process.address_space_copy(segment.address, segment.data);
+        switch (segment.what) {
+            .Data => |data| try process.address_space_copy(segment.address, data),
+            .UndefinedMemory => |size| try process.address_space_set(segment.address, 0, size),
+        }
+
     }
     process.entry = elf_object.header.entry;
     try threading_manager.start_process(process);
@@ -67,7 +74,8 @@ pub fn exec(path: []const u8, kernel_mode: bool) !threading.Process.Id {
 pub fn run() !void {
     try init();
     platform.impl.cga_console.new_page();
-    threading_manager.yield_while_process_is_running(try exec("bin/shell.elf", false));
+    threading_manager.yield_while_process_is_running(
+        try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
 }
 
 pub fn kernel_main() void {

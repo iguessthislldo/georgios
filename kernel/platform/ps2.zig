@@ -3,6 +3,8 @@
 // ============================================================================
 
 const utils = @import("utils");
+const georgios = @import("georgios");
+const Key = georgios.Key;
 
 const print = @import("../print.zig");
 
@@ -11,9 +13,9 @@ const interrupts = @import("interrupts.zig");
 const segments = @import("segments.zig");
 const PS2_Scan_Code = @import("ps2_scan_codes.zig").PS2_Scan_Code;
 
-var modifiers = utils.Key.Modifiers{};
+var modifiers = Key.Modifiers{};
 
-var buffer = utils.CircularBuffer(utils.Key, 128){};
+var buffer = utils.CircularBuffer(Key, 128){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
@@ -72,7 +74,7 @@ pub fn get_char() ?u8 {
     return null;
 }
 
-pub fn get_key() ?utils.Key {
+pub fn get_key() ?Key {
     putil.disable_interrupts();
     defer putil.enable_interrupts();
     return buffer.pop();

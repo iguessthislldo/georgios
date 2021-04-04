@@ -10,7 +10,7 @@ import re
 
 debug = False
 impl_file = Path('kernel/platform/system_calls.zig')
-interface_file = Path('programs/common/system_calls.zig')
+interface_file = Path('libs/georgios/system_calls.zig')
 this_file = Path(__file__)
 
 int_num = None
@@ -159,7 +159,8 @@ with interface_file.open('w') as f:
         if debug:
             log(num, '=>', repr(name), 'args', args,
                 'return', repr(return_name), ':', repr(return_type))
-        has_return = return_type != 'void'
+        noreturn = return_type == 'noreturn'
+        has_return = not (return_type == 'void' or noreturn)
 
         required_regs = len(args) + 1 if has_return else 0
         avail_regs = len(syscall_regs)
@@ -203,4 +204,6 @@ with interface_file.open('w') as f:
 
         if has_return:
             print('    return {};'.format(return_name), file=f)
+        elif noreturn:
+            print('    unreachable;', file=f)
         print('}', file=f)

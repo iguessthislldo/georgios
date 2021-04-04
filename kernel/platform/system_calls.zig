@@ -1,6 +1,7 @@
 // System Call Handling
 
 const utils = @import("utils");
+const georgios = @import("georgios");
 
 const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
@@ -75,35 +76,55 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_manager.yield();
         },
 
-        // SYSCALL: exit(status: u8) void
+        // SYSCALL: exit(status: u8) noreturn
         3 => {
             // TODO: Use status
             if (kthreading.debug) print.string("\nE");
             kernel.threading_manager.remove_current_thread();
         },
 
-        // SYSCALL: exec(&path: []const u8) failure: bool
+        // SYSCALL: exec(info: *const georgios.ProcessInfo) failure: bool
+        // IMPORT: georgios "georgios.zig"
         4 => {
-            @intToPtr(*bool, arg2).* = false;
-            const pid = kernel.exec(@intToPtr(*[]const u8, arg1).*, false) catch |e| {
+            var info = @intToPtr(*const georgios.ProcessInfo, arg1).*;
+            info.kernel_mode = false;
+            const failure_ptr = @intToPtr(*bool, arg2);
+            failure_ptr.* = false;
+            const pid = kernel.exec(&info) catch |e| {
                 print.format("exec failed: {}\n", .{@errorName(e)});
-                @intToPtr(*bool, arg2).* = true;
+                failure_ptr.* = true;
                 return;
             };
             kernel.threading_manager.yield_while_process_is_running(pid);
         },
 
-        // SYSCALL: get_key() key: utils.Key
-        // IMPORT: utils "utils"
+        // SYSCALL: get_key() key: georgios.Key
+        // IMPORT: georgios "georgios.zig"
         5 => {
             while (true) {
                 if (ps2.get_key()) |key| {
-                    @intToPtr(*utils.Key, arg1).* = key;
+                    @intToPtr(*georgios.Key, arg1).* = key;
                     break;
                 }
                 kernel.threading_manager.yield();
             }
         },
+
+        // SYSCALL: next_dir_entry(iter: *georgios.DirEntry) bool
+        // IMPORT: georgios "georgios.zig"
+        6 => {
+            const failure_ptr = @intToPtr(*bool, arg2);
+            failure_ptr.* = false;
+            kernel.filesystem.impl.next_dir_entry(
+                    @intToPtr(*georgios.DirEntry, arg1)) catch |e| {
+                print.format("next_dir_iter failed: {}\n", .{@errorName(e)});
+                failure_ptr.* = true;
+                return;
+            };
+        },
+
+        // SYSCALL: print_hex(value: u32) void
+        7 => print.hex(arg1),
 
         else => @panic("Invalid System Call"),
     }

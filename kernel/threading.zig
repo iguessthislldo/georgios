@@ -1,3 +1,7 @@
+const utils = @import("utils");
+const georgios = @import("georgios");
+const Info = georgios.ProcessInfo;
+
 const platform = @import("platform.zig");
 const pthreading = platform.impl.threading;
 const kernel = @import("kernel.zig");
@@ -22,7 +26,7 @@ pub const Thread = struct {
 
     pub fn init(self: *Thread, boot_thread: bool) Error!void {
         if (self.process) |process| {
-            self.kernel_mode = process.kernel_mode;
+            self.kernel_mode = process.info.kernel_mode;
         }
         try self.impl.init(self, boot_thread);
     }
@@ -35,13 +39,37 @@ pub const Thread = struct {
 pub const Process = struct {
     pub const Id = u32;
 
+    info: Info,
     id: Id = undefined,
-    kernel_mode: bool = false,
     impl: pthreading.ProcessImpl = undefined,
     main_thread: Thread = Thread{},
     entry: usize = 0,
 
     pub fn init(self: *Process) Error!void {
+        // Duplicate info data because we can't trust it will stay.
+        const path_temp = try kernel.memory.small_alloc.alloc_array(u8, self.info.path.len);
+        _ = utils.memory_copy_truncate(path_temp, self.info.path);
+        self.info.path = path_temp;
+        if (self.info.name.len > 0) {
+            const name_temp =
+                try kernel.memory.small_alloc.alloc_array(u8, self.info.name.len);
+            _ = utils.memory_copy_truncate(name_temp, self.info.name);
+            self.info.name = name_temp;
+        }
+        if (self.info.args.len > 0) {
+            const args_temp =
+                try kernel.memory.small_alloc.alloc_array([]u8, self.info.args.len);
+            for (self.info.args) |arg, i| {
+                if (arg.len > 0) {
+                    args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
+                    _ = utils.memory_copy_truncate(args_temp[i], arg);
+                } else {
+                    args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
+                }
+            }
+            self.info.args = args_temp;
+        }
+
         try self.impl.init(self);
         self.main_thread.process = self;
         try self.main_thread.init(false);
@@ -92,9 +120,9 @@ pub const Manager = struct {
         platform.enable_interrupts();
     }
 
-    pub fn new_process(self: *Manager, kernel_mode: bool) Error!*Process {
+    pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
         const p = try kernel.memory.small_alloc.alloc(Process);
-        p.* = Process{.kernel_mode = kernel_mode};
+        p.* = Process{.info = info.*};
         try p.init();
         return p;
     }
