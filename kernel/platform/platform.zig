@@ -89,8 +89,7 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
 }
 
 fn console_read(file: *io.File, to: []u8) anyerror!usize {
-    const r = ps2.get_text(to[0..]);
-    return r.len;
+    return 0;
 }
 
 // Boot Stack =================================================================

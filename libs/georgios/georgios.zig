@@ -2,6 +2,7 @@ pub const utils = @import("utils");
 
 pub const system_calls = @import("system_calls.zig");
 pub const start = @import("start.zig");
+pub const keyboard = @import("keyboard.zig");
 
 const root = @import("root");
 const is_program = @hasDecl(root, "main");
@@ -13,30 +14,6 @@ comptime {
 }
 
 pub var proc_info: if (is_program) *const ProcessInfo else void = undefined;
-
-pub const Key = struct {
-    pub const Modifiers = struct {
-        right_shift_is_pressed: bool = false,
-        left_shift_is_pressed: bool = false,
-        alt_is_pressed: bool = false,
-        control_is_pressed: bool = false,
-
-        pub fn shifted(self: *const Modifiers) bool {
-            return self.right_shift_is_pressed or self.left_shift_is_pressed;
-        }
-    };
-
-    pub fn shifted_char(self: *const Key) ?u8 {
-        if (self.unshifted_char) |c| {
-            return if (!self.modifiers.shifted() and c >= 'A' and c <= 'Z')
-                c + 'a' - 'A' else c;
-        }
-        return null;
-    }
-
-    unshifted_char: ?u8,
-    modifiers: Modifiers,
-};
 
 pub const DirEntry = struct {
     dir: []const u8,

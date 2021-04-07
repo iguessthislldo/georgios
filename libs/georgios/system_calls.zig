@@ -9,15 +9,6 @@ pub inline fn print_string(s: []const u8) void {
         );
 }
 
-pub inline fn getc() u8 {
-    var c: u8 = undefined;
-    asm volatile ("int $100" ::
-        [syscall_number] "{eax}" (@as(u32, 1)),
-        [arg1] "{ebx}" (@ptrToInt(&c)),
-        );
-    return c;
-}
-
 pub inline fn yield() void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 2)),
@@ -42,8 +33,8 @@ pub inline fn exec(info: *const georgios.ProcessInfo) bool {
     return failure;
 }
 
-pub inline fn get_key() georgios.Key {
-    var key: georgios.Key = undefined;
+pub inline fn get_key() georgios.keyboard.Event {
+    var key: georgios.keyboard.Event = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 5)),
         [arg1] "{ebx}" (@ptrToInt(&key)),

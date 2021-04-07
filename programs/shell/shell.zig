@@ -36,9 +36,9 @@ pub fn main() void {
     while (running) {
         system_calls.print_string("% ");
         while (true) {
-            const key = system_calls.get_key();
-            if (key.shifted_char()) |c| {
-                if (c == 'd' and key.modifiers.control_is_pressed) {
+            const key_event = system_calls.get_key();
+            if (key_event.char) |c| {
+                if (c == 'd' and key_event.modifiers.control_is_pressed()) {
                     got = 0;
                     running = false;
                     break;

@@ -59,17 +59,6 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: print_string(&s: []const u8) void
         0 => print.string(@intToPtr(*[]const u8, arg1).*),
 
-        // SYSCALL: getc() c: u8
-        1 => {
-            while (true) {
-                if (ps2.get_char()) |c| {
-                    @intToPtr(*u8, arg1).* = c;
-                    break;
-                }
-                kernel.threading_manager.yield();
-            }
-        },
-
         // SYSCALL: yield() void
         2 => {
             if (kthreading.debug) print.string("\nY");
@@ -98,12 +87,12 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_manager.yield_while_process_is_running(pid);
         },
 
-        // SYSCALL: get_key() key: georgios.Key
+        // SYSCALL: get_key() key: georgios.keyboard.Event
         // IMPORT: georgios "georgios.zig"
         5 => {
             while (true) {
                 if (ps2.get_key()) |key| {
-                    @intToPtr(*georgios.Key, arg1).* = key;
+                    @intToPtr(*georgios.keyboard.Event, arg1).* = key;
                     break;
                 }
                 kernel.threading_manager.yield();
