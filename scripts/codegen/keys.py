@@ -20,6 +20,7 @@ keys.extend([k(*pair) for pair in [
     ('Enter', '\\n'),
     ('KeypadEnter', '\\n'),
     ('Tab', '\\t'),
+    ('Backspace', '\\x08'),
     ('Space', ' '),
     ('Slash', '/'),
     ('KeypadSlash', '/'),
@@ -63,7 +64,6 @@ keys.extend([k(*pair) for pair in [
 # Keys with no Printable Symbols
 keys.extend([k(name, None) for name in [
     'Escape',
-    'Backspace',
     'LeftShift',
     'RightShift',
     'LeftAlt',

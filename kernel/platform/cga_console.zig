@@ -1,5 +1,7 @@
 // Interface to use the IBM PC Color Graphics Adapter (CGA)'s 80x25 text mode.
 //
+// TODO: Create abstract console interface.
+//
 // For Reference See:
 //   "IBM Color/Graphics Monitor Adaptor"
 //   https://en.wikipedia.org/wiki/VGA_text_mode
@@ -156,6 +158,17 @@ pub fn print_all_characters() void {
     }
 }
 
+pub fn backspace() void {
+    place_char(' ', column, row);
+    cursor(column, row);
+    if (column == 0 and row > 0) {
+        column = width - 1;
+        row -= 1;
+    } else {
+        column -= 1;
+    }
+}
+
 // Print UTF8 Strings as Code Page 437 ========================================
 
 pub fn from_unicode(c: u32) ?u8 {
@@ -190,10 +203,12 @@ pub fn print_utf8_string(s: []const u8) void {
         r = utils.utf8_to_utf32(r.leftovers, b[0..])
             catch @panic("UTF-8 CGA Console Failure");
         for (r.fit_in_output[0..]) |i| {
-            if (i == '\n') {
-                new_line();
-            } else {
-                direct_print_char(if (from_unicode(i)) |c437| c437 else '?');
+            switch (i) {
+                '\n' => new_line(),
+                '\x08' => backspace(),
+                // TODO: Tab
+                // TODO: ASCII Escapes for Color and Cursor Control
+                else => direct_print_char(if (from_unicode(i)) |c437| c437 else '?'),
             }
         }
         if (r.leftovers.len == 0) break;

@@ -35,7 +35,8 @@ pub fn main() void {
     var running = true;
     while (running) {
         system_calls.print_string("% ");
-        while (true) {
+        var getline = true;
+        while (getline) {
             const key_event = system_calls.get_key();
             if (key_event.char) |c| {
                 if (c == 'd' and key_event.modifiers.control_is_pressed()) {
@@ -43,12 +44,21 @@ pub fn main() void {
                     running = false;
                     break;
                 }
-                system_calls.print_string(@ptrCast([*]const u8, &c)[0..1]);
+                var print = true;
                 if (c == '\n') {
-                    break;
+                    getline = false;
+                } else if (c == '\x08') {
+                    if (got > 0) {
+                        got -= 1;
+                    } else {
+                        print = false;
+                    }
                 } else {
                     buffer[got] = c;
                     got += 1;
+                }
+                if (print) {
+                    system_calls.print_string(@ptrCast([*]const u8, &c)[0..1]);
                 }
             }
         }
