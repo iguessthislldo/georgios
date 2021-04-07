@@ -207,7 +207,7 @@ pub fn print_utf8_string(s: []const u8) void {
                 '\n' => new_line(),
                 '\x08' => backspace(),
                 // TODO: Tab
-                // TODO: ASCII Escapes for Color and Cursor Control
+                // TODO: ANSI Escapes for Color and Cursor Control
                 else => direct_print_char(if (from_unicode(i)) |c437| c437 else '?'),
             }
         }
