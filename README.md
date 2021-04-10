@@ -1,10 +1,6 @@
 # Georgios
 
-![Saint George and the Dragon](misc/george_and_dragon.png)
-
-"ST. GEORGE OF MERRIE ENGLAND" Illustration by Arthur Rackham for 1927 "English
-Fairy Tales" by Flora Annie Webster Steel, [File
-Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
+![Screenshot](misc/screenshot.png)
 
 Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
 making for fun which currently targets i386/IA-32. The purpose of this project
