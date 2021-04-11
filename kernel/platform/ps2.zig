@@ -2,75 +2,173 @@
 // PS/2 Keyboard Interface
 // ============================================================================
 
-const kutil = @import("../util.zig");
+const utils = @import("utils");
+const georgios = @import("georgios");
+const keyboard = georgios.keyboard;
+const Key = keyboard.Key;
+const Event = keyboard.Event;
+
+const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
+const key_to_char = @import("../keys.zig").key_to_char;
 
 const putil = @import("util.zig");
 const interrupts = @import("interrupts.zig");
 const segments = @import("segments.zig");
-const PS2_Scan_Code = @import("ps2_scan_codes.zig").PS2_Scan_Code;
+const scan_codes = @import("ps2_scan_codes.zig");
 
-var modifiers = kutil.Key.Modifiers{};
+var modifiers = keyboard.Modifiers{};
 
-var buffer = kutil.CircularBuffer(kutil.Key, 128){};
+var buffer = utils.CircularBuffer(Event, 128){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
     const command_status_port: u16 = 0x64;
 
-    pub fn get_scan_code() callconv(.Inline) ?PS2_Scan_Code {
-        return kutil.int_to_enum(PS2_Scan_Code, putil.in8(data_port));
+    pub fn get_kb_byte() callconv(.Inline) u8 {
+        return putil.in8(data_port);
     }
 };
 
+/// Number of bytes into the current pattern.
+var byte_count: u8 = 0;
+
+const Pattern = enum {
+    TwoBytePrintScreen,
+    PrintScreenPressed,
+    PrintScreenReleased,
+    Pause,
+};
+
+/// Current multibyte patterns that are possible.
+var pattern: Pattern = undefined;
+
 pub fn keyboard_event_occured(
-        interrupt_number: u32, interrupt_stack: *const interrupts.InterruptStack) void {
-    const scan_code_maybe = intel8042.get_scan_code();
-    if (scan_code_maybe == null) return;
-    const scan_code = scan_code_maybe.?;
-    switch (scan_code) {
-        .Key_Left_Shift_Pressed => modifiers.left_shift_is_pressed = true,
-        .Key_Right_Shift_Pressed => modifiers.right_shift_is_pressed = true,
-        .Key_Left_Shift_Released => modifiers.left_shift_is_pressed = false,
-        .Key_Right_Shift_Released => modifiers.right_shift_is_pressed = false,
-        .Key_Left_Alt_Pressed => modifiers.alt_is_pressed = true,
-        .Key_Left_Alt_Released => modifiers.alt_is_pressed = false,
-        .Key_Left_Control_Pressed => modifiers.control_is_pressed = true,
-        .Key_Left_Control_Released => modifiers.control_is_pressed = false,
-        else => {
-            if (scan_code.to_char()) |c| {
-                buffer.push(.{.unshifted_char = c, .modifiers = modifiers});
-            }
+        interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
+    var event: ?Event = null;
+    const byte = intel8042.get_kb_byte();
+    // print.format("[{:x}]", .{byte});
+    var reset = false;
+    switch (byte_count) {
+        0 => switch (byte) {
+            // Towards Two Bytes or PrintScreen
+            0xe0 => pattern = .TwoBytePrintScreen,
+
+            // Towards Pause
+            0xe1 => pattern = .Pause,
+
+            // Reached One Byte
+            else => {
+                const entry = scan_codes.one_byte[byte];
+                if (entry.key) |key| {
+                    event = Event.new(key, entry.shifted_key, entry.kind.?, &modifiers);
+                }
+                reset = true;
+            },
         },
-    }
-}
 
-pub fn get_text(dest: []u8) []u8 {
-    putil.disable_interrupts();
-    var got: usize = 0;
-    while (buffer.len > 0 and got < dest.len) {
-        if (buffer.pop().?.shifted_char()) |c| {
-            dest[got] = c;
-            got += 1;
+        1 => switch (pattern) {
+            .TwoBytePrintScreen => switch (byte) {
+                // Towards PrintScreen Pressed
+                0x2a => pattern = .PrintScreenPressed,
+
+                // Towards PrintScreen Released
+                0xb7 => pattern = .PrintScreenReleased,
+
+                // Reached Two Bytes
+                else => {
+                    const entry = scan_codes.two_byte[byte];
+                    if (entry.key) |key| {
+                        event = Event.new(key, entry.shifted_key, entry.kind.?, &modifiers);
+                    }
+                    reset = true;
+                },
+            },
+
+            // Towards Pause
+            .Pause => reset = byte != 0x1d,
+
+            else => reset = true,
+        },
+
+        2 => switch (pattern) {
+            // Towards PrintScreen Pressed and Released
+            .PrintScreenPressed, .PrintScreenReleased => reset = byte != 0xe0,
+
+            // Towards Pause
+            .Pause => reset = byte != 0x45,
+
+            else => reset = true,
+        },
+
+        3 => switch (pattern) {
+            .PrintScreenPressed => {
+                if (byte == 0x37) {
+                    // Reached PrintScreen Pressed
+                    event = Event.new(.Key_PrintScreen, null, .Pressed, &modifiers);
+                }
+                reset = true;
+            },
+
+            .PrintScreenReleased => {
+                if (byte == 0xaa) {
+                    // Reached PrintScreen Released
+                    event = Event.new(.Key_PrintScreen, null, .Released, &modifiers);
+                }
+                reset = true;
+            },
+
+
+            // Towards Pause
+            .Pause => reset = byte != 0xe1,
+
+            else => reset = true,
+        },
+
+        4 => switch (pattern) {
+            // Towards Pause
+            .Pause => reset = byte != 0x9d,
+
+            else => reset = true,
+        },
+
+        5 => switch (pattern) {
+            // Towards Pause
+            .Pause => {
+                if (byte == 0xc5) {
+                    // Reached Pause
+                    event = Event.new(.Key_Pause, null, .Hit, &modifiers);
+                }
+                reset = true;
+            },
+
+            else => reset = true,
+        },
+
+        else => reset = true,
+    }
+
+    if (reset) {
+        byte_count = 0;
+    } else {
+        byte_count += 1;
+    }
+
+    if (event != null) {
+        const e = &event.?;
+        modifiers.update(e);
+        // print.format("<{}: {}>", .{@tagName(e.key), @tagName(e.kind)});
+        if (e.kind == .Pressed) {
+            if (key_to_char(e.key)) |c| {
+                e.char = c;
+            }
         }
+        buffer.push(e.*);
+        kernel.threading_manager.keyboard_event_occured();
     }
-    putil.enable_interrupts();
-    return dest[0..got];
 }
 
-pub fn get_char() ?u8 {
-    putil.disable_interrupts();
-    defer putil.enable_interrupts();
-    if (buffer.peek()) |key| {
-        if (key.shifted_char()) |c| {
-            _ = buffer.pop();
-            return c;
-        }
-    }
-    return null;
-}
-
-pub fn get_key() ?kutil.Key {
+pub fn get_key() ?Event {
     putil.disable_interrupts();
     defer putil.enable_interrupts();
     return buffer.pop();

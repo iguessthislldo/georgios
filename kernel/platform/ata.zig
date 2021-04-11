@@ -1,5 +1,15 @@
+// ATA Drive Interface
+//
+// Also known as Parallel ATA or IDE. This is a simple PIO-based driver.
+//
+// For Reference See:
+//   https://wiki.osdev.org/ATA_PIO_Mode
+//   https://en.wikipedia.org/wiki/Parallel_ATA
+//   FYSOS: Media Storage Devices https://www.amazon.com/dp/1514111888/
+
+const utils = @import("utils");
+
 const print = @import("../print.zig");
-const kutil = @import("../util.zig");
 const io = @import("../io.zig");
 const memory = @import("../memory.zig");
 const MemoryError = memory.MemoryError;
@@ -9,6 +19,7 @@ const kernel = @import("../kernel.zig");
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
+const timing = @import("timing.zig");
 
 pub const Error = error {
     FailedToSelectDrive,
@@ -119,7 +130,7 @@ const IndentifyResults = struct {
     };
 
     comptime {
-        const raw_bit_size = kutil.packed_bit_size(Raw);
+        const raw_bit_size = utils.packed_bit_size(Raw);
         const sector_bit_size = Sector.size * 8;
         if (raw_bit_size != sector_bit_size) {
             @compileLog("IndentifyResults.Raw is ", raw_bit_size, " bits");
@@ -153,7 +164,7 @@ const IndentifyResults = struct {
         for (raw.model) |*i| {
             i.* = @byteSwap(u16, i.*);
         }
-        results.model.len = kutil.stripped_string_size(results.model);
+        results.model.len = utils.stripped_string_size(results.model);
         // TODO: Other Strings
 
         if (raw.lba) {
@@ -205,7 +216,7 @@ const Controller = struct {
 
             try channel.read_command_status().assert_selectable();
             channel.write_select(self.id);
-            putil.wait_microseconds(1);
+            timing.wait_microseconds(1);
             _ = channel.read_command_status();
             try channel.read_command_status().assert_selectable();
             // self.selected = true;
@@ -224,7 +235,7 @@ const Controller = struct {
                     print.string("wait_while_busy Timeout\n");
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -239,7 +250,7 @@ const Controller = struct {
                         channel.read_control_status()});
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -253,7 +264,7 @@ const Controller = struct {
                     print.string("wait_for_data Timeout\n");
                     return Error.Timeout;
                 }
-                putil.wait_milliseconds(1);
+                timing.wait_milliseconds(1);
             }
         }
 
@@ -265,17 +276,17 @@ const Controller = struct {
             // Enable Reset
             channel.write_control(Control{.interrupts_disabled = true, .reset = true});
             // Wait 5+ us
-            putil.wait_microseconds(5);
+            timing.wait_microseconds(5);
 
             // Disable Reset
             channel.write_control(Control{.interrupts_disabled = true, .reset = false});
             // Wait 2+ ms
-            putil.wait_milliseconds(2);
+            timing.wait_milliseconds(2);
 
             // Wait for controller to stop being busy
             try self.wait_while_busy();
             // Wait 5+ ms
-            putil.wait_milliseconds(5);
+            timing.wait_milliseconds(5);
             _ = channel.read_error();
 
             // Read Expected Values
@@ -322,7 +333,7 @@ const Controller = struct {
             const channel = self.get_channel();
             try self.wait_for_drive();
             channel.write_lba48(self.id, address, 1);
-            putil.wait_microseconds(5);
+            timing.wait_microseconds(5);
             channel.read_sectors_command();
             _ = channel.read_command_status();
             const error_reg = channel.read_error();
@@ -462,7 +473,7 @@ const Controller = struct {
         }
 
         pub fn read_sector_impl(self: *Channel, data: []u8) void {
-            putil.insw(self.io_base_port + 0, data);
+            putil.in_bytes(self.io_base_port + 0, data);
         }
 
         pub fn init(self: *Channel) void {

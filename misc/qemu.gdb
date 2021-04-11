@@ -1,4 +1,4 @@
-symbol-file tmp/iso/boot/kernel.elf
+symbol-file tmp/root/boot/kernel.elf
 set disassemble-next-line on
 set confirm off
 set pagination off
@@ -6,8 +6,9 @@ set logging file tmp/gdb.log
 set logging overwrite on
 set logging on
 
-break panic
+break kernel.panic
 # break platform.interrupts.BaseInterruptHandler(14,false,false).handler
+# break usermode_iret
 
 target remote | qemu-system-i386 \
     -S -gdb stdio \
@@ -19,6 +20,7 @@ target remote | qemu-system-i386 \
     -no-reboot \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \
+    -soundhw pcspk \
     disk.img
 
 #    -trace 'ide_*' \

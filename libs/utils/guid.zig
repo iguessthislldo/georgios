@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const util = @import("util.zig");
+const utils = @import("utils.zig");
 
-pub const Error = util.Error;
+pub const Error = utils.Error;
 
 const Guid = @This();
 
@@ -21,7 +21,7 @@ pub fn is_null(self: *const Guid) bool {
 }
 
 pub fn equals(a: *const Guid, b: *const Guid) bool {
-    return util.memory_compare(&a.data, &b.data);
+    return utils.memory_compare(&a.data, &b.data);
 }
 
 pub fn from_be(self: *Guid, source: []const u8) Error!void {
@@ -104,26 +104,26 @@ pub fn to_string(self: *const Guid, buffer: []u8) Error!void {
     if (buffer.len < string_size) {
         return Error.NotEnoughDestination;
     }
-    util.byte_buffer(buffer[0..], self.data[0x0]);
-    util.byte_buffer(buffer[2..], self.data[0x1]);
-    util.byte_buffer(buffer[4..], self.data[0x2]);
-    util.byte_buffer(buffer[6..], self.data[0x3]);
+    utils.byte_buffer(buffer[0..], self.data[0x0]);
+    utils.byte_buffer(buffer[2..], self.data[0x1]);
+    utils.byte_buffer(buffer[4..], self.data[0x2]);
+    utils.byte_buffer(buffer[6..], self.data[0x3]);
     buffer[8] = '-';
-    util.byte_buffer(buffer[9..], self.data[0x4]);
-    util.byte_buffer(buffer[11..], self.data[0x5]);
+    utils.byte_buffer(buffer[9..], self.data[0x4]);
+    utils.byte_buffer(buffer[11..], self.data[0x5]);
     buffer[13] = '-';
-    util.byte_buffer(buffer[14..], self.data[0x6]);
-    util.byte_buffer(buffer[16..], self.data[0x7]);
+    utils.byte_buffer(buffer[14..], self.data[0x6]);
+    utils.byte_buffer(buffer[16..], self.data[0x7]);
     buffer[18] = '-';
-    util.byte_buffer(buffer[19..], self.data[0x8]);
-    util.byte_buffer(buffer[21..], self.data[0x9]);
+    utils.byte_buffer(buffer[19..], self.data[0x8]);
+    utils.byte_buffer(buffer[21..], self.data[0x9]);
     buffer[23] = '-';
-    util.byte_buffer(buffer[24..], self.data[0xa]);
-    util.byte_buffer(buffer[26..], self.data[0xb]);
-    util.byte_buffer(buffer[28..], self.data[0xc]);
-    util.byte_buffer(buffer[30..], self.data[0xd]);
-    util.byte_buffer(buffer[32..], self.data[0xe]);
-    util.byte_buffer(buffer[34..], self.data[0xf]);
+    utils.byte_buffer(buffer[24..], self.data[0xa]);
+    utils.byte_buffer(buffer[26..], self.data[0xb]);
+    utils.byte_buffer(buffer[28..], self.data[0xc]);
+    utils.byte_buffer(buffer[30..], self.data[0xd]);
+    utils.byte_buffer(buffer[32..], self.data[0xe]);
+    utils.byte_buffer(buffer[34..], self.data[0xf]);
 }
 
 const test_guid_source = "\x28\x73\x2a\xc1\x1f\xf8\xd2\x11\xba\x4b\x00\xa0\xc9\x3e\xc9\x3b";

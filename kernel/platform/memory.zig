@@ -1,7 +1,7 @@
 const std = @import("std");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
-const kutil = @import("../util.zig");
+const utils = @import("utils");
 const kmemory = @import("../memory.zig");
 const KernelMemory = kmemory.Memory;
 const RealMemoryMap = kmemory.RealMemoryMap;
@@ -13,11 +13,11 @@ const print = @import("../print.zig");
 const platform = @import("platform.zig");
 const to_virtual = platform.kernel_to_virtual;
 
-pub const frame_size = kutil.Ki(4);
+pub const frame_size = utils.Ki(4);
 pub const page_size = frame_size;
-const pages_per_table = kutil.Ki(1);
+const pages_per_table = utils.Ki(1);
 const table_pages_size = page_size * pages_per_table;
-const tables_per_directory = kutil.Ki(1);
+const tables_per_directory = utils.Ki(1);
 const table_size = @sizeOf(u32) * pages_per_table;
 
 export var active_page_directory: [tables_per_directory]u32
@@ -89,13 +89,13 @@ pub fn reload_active_page_directory() void {
     );
 }
 
-pub fn load_page_directory(new: []const u32, old: ?[]u32) kutil.Error!void {
+pub fn load_page_directory(new: []const u32, old: ?[]u32) utils.Error!void {
     const end = get_kernel_space_start_directory_index();
     if (old) |o| {
-        _ = try kutil.memory_copy_error(
+        _ = try utils.memory_copy_error(
             sliceAsBytes(o[0..end]), sliceAsBytes(active_page_directory[0..end]));
     }
-    _ = try kutil.memory_copy_error(
+    _ = try utils.memory_copy_error(
         sliceAsBytes(active_page_directory[0..end]), sliceAsBytes(new[0..end]));
     reload_active_page_directory();
 }
@@ -177,7 +177,7 @@ pub const Memory = struct {
         // }
         // print.format("total_count: {}, counted: {}\n", total_count, counted);
 
-        self.start_of_virtual_space = kutil.align_up(
+        self.start_of_virtual_space = utils.align_up(
             @ptrToInt(kernel_page_tables.ptr) + kernel_page_tables.len * table_size,
             table_pages_size);
     }
@@ -220,7 +220,7 @@ pub const Memory = struct {
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
         const table_index_start = get_table_index(start);
-        var rv = Range{.size = kutil.align_up(requested_size, page_size)};
+        var rv = Range{.size = utils.align_up(requested_size, page_size)};
         var range = Range{};
         var dir_index: usize = dir_index_start;
         while (dir_index < tables_per_directory) {
@@ -346,16 +346,18 @@ pub const Memory = struct {
         const end = get_kernel_space_start_directory_index();
         const page_directory =
             try self.kernel_memory.big_alloc.alloc_array(u32, tables_per_directory);
-        _ = kutil.memory_set(sliceAsBytes(page_directory[0..]), 0);
+        _ = utils.memory_set(sliceAsBytes(page_directory[0..]), 0);
         return page_directory;
     }
 
     pub fn page_directory_memory_copy(self: *Memory, page_directory: []u32,
             address: usize, data: []const u8) AllocError!void {
+        // print.format("page_directory_memory_copy: {} b to {:a}\n", .{data.len, address});
         const dir_index_start = get_directory_index(address);
         const table_index_start = get_table_index(address);
         var dir_index: usize = dir_index_start;
         var data_left = data;
+        var page_offset = address % page_size;
         while (data_left.len > 0 and dir_index < tables_per_directory) {
             if (!table_is_present(page_directory[dir_index])) {
                 try self.new_page_table(page_directory, dir_index, true);
@@ -375,8 +377,10 @@ pub const Memory = struct {
                     }
                 }
                 self.map_virtual_page(get_page_address(table[table_index]));
-                const page = @intToPtr([*]u8, self.virtual_page_address)[0..page_size];
-                const copied = kutil.memory_copy_truncate(page, data_left);
+                const page = @intToPtr([*]u8, self.virtual_page_address)
+                    [page_offset..page_size];
+                page_offset = 0;
+                const copied = utils.memory_copy_truncate(page, data_left);
                 data_left = data_left[copied..];
                 table_index += 1;
             }
@@ -388,9 +392,44 @@ pub const Memory = struct {
         }
     }
 
-    pub fn address_space_set(self: *Memory, page_directory: []u32,
+    pub fn page_directory_memory_set(self: *Memory, page_directory: []u32,
             address: usize, byte: u8, len: usize) AllocError!void {
-        // TODO
+        const dir_index_start = get_directory_index(address);
+        const table_index_start = get_table_index(address);
+        var dir_index: usize = dir_index_start;
+        var left = len;
+        var page_offset = address % page_size;
+        while (left > 0 and dir_index < tables_per_directory) {
+            if (!table_is_present(page_directory[dir_index])) {
+                try self.new_page_table(page_directory, dir_index, true);
+            }
+            var table_index: usize =
+                if (dir_index == dir_index_start) table_index_start else 0;
+            while (left > 0 and table_index < pages_per_table) {
+                self.map_virtual_page(get_table_address(page_directory[dir_index]));
+                const table = @intToPtr([*]u32, self.virtual_page_address);
+                if (!page_is_present(table[table_index])) {
+                    // TODO: Go through memory.Memory for pop_frame
+                    const frame = try self.pop_frame();
+                    self.map_virtual_page(get_table_address(page_directory[dir_index]));
+                    set_entry(&table[table_index], frame, true);
+                    if (&page_directory[0] == &active_page_directory[0]) {
+                        invalidate_page(get_address(dir_index, table_index));
+                    }
+                }
+                self.map_virtual_page(get_page_address(table[table_index]));
+                var page = @intToPtr([*]u8, self.virtual_page_address)
+                    [page_offset..page_size];
+                if (page.len > left) {
+                    page.len = left;
+                }
+                page_offset = 0;
+                utils.memory_set(page, byte);
+                left -= page.len;
+                table_index += 1;
+            }
+            dir_index += 1;
+        }
     }
 
     // TODO: This page structure iteration code is starting to seem very boiler

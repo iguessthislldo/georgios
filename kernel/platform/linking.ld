@@ -1,3 +1,12 @@
+/*
+ * This file defines the layout of the kernel itself and allows the kernel to
+ * access this information through symbols. The most important aspect of this
+ * is the real vs virtual kernel. Very early in boot this maps the lower real
+ * memory of the kernel into a much higher virtual address that becomes the
+ * start of the kernel mode memory space. See
+ * https://wiki.osdev.org/Higher_Half_Kernel for info.
+ */
+
 ENTRY(kernel_start)
 
 /* Basic constants */

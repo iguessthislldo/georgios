@@ -3,7 +3,6 @@
 
 const builtin = @import("builtin");
 
-const isspace = @import("util.zig").isspace;
 const fprint = @import("fprint.zig");
 const io = @import("io.zig");
 

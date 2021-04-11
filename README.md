@@ -1,10 +1,6 @@
 # Georgios
 
-![Saint George and the Dragon](misc/george_and_dragon.png)
-
-"ST. GEORGE OF MERRIE ENGLAND" Illustration by Arthur Rackham for 1927 "English
-Fairy Tales" by Flora Annie Webster Steel, [File
-Source](http://www.publicdomainfiles.com/show_file.php?id=13550814618613)
+![Screenshot](misc/screenshot.png)
 
 Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
 making for fun which currently targets i386/IA-32. The purpose of this project
@@ -23,8 +19,8 @@ Building Georgios requires a Unix-like environment with:
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
 `make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make
-bochs` respectively.  For the moment it assumes the exisitance of a IDE hard
-disk with certain files on it.
+bochs` respectively.  For the moment it assumes the existence of an IDE disk
+with certain files on it.
 
 ## Resources Used
 

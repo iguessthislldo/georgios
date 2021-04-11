@@ -1,6 +1,13 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
+const unicode = @import("unicode.zig");
+pub const utf8_to_utf32 = unicode.utf8_to_utf32;
+pub const UnicodeError = unicode.Error;
+pub const Utf8ToUtf32Result = unicode.Utf8ToUtf32Result;
+
+pub const Guid = @import("guid.zig");
+
 pub const Error = error {
     OutOfBounds,
     NotEnoughSource,
@@ -512,6 +519,29 @@ pub fn to_bytes(value: anytype) callconv(.Inline) []u8 {
     }
 }
 
+pub fn make_const_slice(
+        comptime Type: type, ptr: [*]const Type, len: usize) callconv(.Inline) []const Type {
+    var slice: []const Type = undefined;
+    slice.ptr = ptr;
+    slice.len = len;
+    return slice;
+}
+
+pub fn to_const_bytes(value: anytype) callconv(.Inline) []const u8 {
+    comptime const Type = @TypeOf(value);
+    comptime const Traits = @typeInfo(Type);
+    switch (Traits) {
+        builtin.TypeId.Pointer => |pointer_type| {
+            return make_const_slice(u8, @ptrCast([*]const u8, value),
+                @sizeOf(pointer_type.child));
+        },
+        else => {
+            @compileLog("Unsupported Type is ", @typeName(Type));
+            @compileError("Unsupported Type");
+        }
+    }
+}
+
 pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
     return struct {
         const Self = @This();
@@ -611,27 +641,3 @@ pub fn byte_buffer(buffer: []u8, value: u8) void {
     buffer[0] = nibble_char(@intCast(u4, value >> 4));
     buffer[1] = nibble_char(@intCast(u4, value % 0x10));
 }
-
-pub const Key = struct {
-    pub const Modifiers = struct {
-        right_shift_is_pressed: bool = false,
-        left_shift_is_pressed: bool = false,
-        alt_is_pressed: bool = false,
-        control_is_pressed: bool = false,
-
-        pub fn shifted(self: *const Modifiers) bool {
-            return self.right_shift_is_pressed or self.left_shift_is_pressed;
-        }
-    };
-
-    pub fn shifted_char(self: *const Key) ?u8 {
-        if (self.unshifted_char) |c| {
-            return if (!self.modifiers.shifted() and c >= 'A' and c <= 'Z')
-                c + 'a' - 'A' else c;
-        }
-        return null;
-    }
-
-    unshifted_char: ?u8,
-    modifiers: Modifiers,
-};

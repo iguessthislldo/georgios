@@ -11,9 +11,9 @@
 
 const builtin = @import("builtin");
 
+const utils = @import("utils");
+
 const print = @import("../print.zig");
-const kutil = @import("../util.zig");
-const zero_init = kutil.zero_init;
 
 const platform = @import("platform.zig");
 const kernel_to_virtual = platform.kernel_to_virtual;
@@ -159,7 +159,7 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
 }
 
 fn set_null_entry(index: u8) void {
-    _ = set("Null", index, 0, 0, zero_init(Access), zero_init(Flags));
+    _ = set("Null", index, 0, 0, utils.zero_init(Access), utils.zero_init(Flags));
     names[index] = "Null";
 }
 
@@ -197,7 +197,7 @@ pub var kernel_code_selector: u16 = 0;
 pub var kernel_data_selector: u16 = 0;
 pub var user_code_selector: u16 = 0;
 pub var user_data_selector: u16 = 0;
-pub var tss_selector: u16 = 0;
+export var tss_selector: u16 = 0;
 
 pub fn init() void {
     print.debug_string(" - Filling the Global Descriptor Table (GDT)\n");

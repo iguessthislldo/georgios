@@ -10,9 +10,11 @@
 
 const std = @import("std");
 
+const utils = @import("utils");
+const Guid = utils.Guid;
+
 const ext2 = @import("ext2.zig");
 const gpt = @import("gpt.zig");
-const Guid = @import("guid.zig");
 const io = @import("io.zig");
 const memory = @import("memory.zig");
 const print = @import("print.zig");

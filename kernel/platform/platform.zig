@@ -1,3 +1,5 @@
+// Platform Initialization and Public Interface
+
 const builtin = @import("builtin");
 
 const io = @import("../io.zig");
@@ -19,24 +21,21 @@ pub const acpi = @import("acpi.zig");
 pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
+pub const timing = @import("timing.zig");
 
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
+pub const done = util.done;
+pub const idle = util.idle;
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     asm volatile ("int $50");
     unreachable;
 }
 
-pub fn done() noreturn {
-    asm volatile ("cli");
-    while (true) {
-        asm volatile ("hlt");
-    }
-}
-
+// Kernel Boundaries ==========================================================
 extern var _REAL_START: u32;
 pub fn kernel_real_start() usize {
     return @ptrToInt(&_REAL_START);
@@ -81,6 +80,7 @@ pub fn kernel_range_virtual_start_available() usize {
         @intCast(usize, multiboot.kernel_range_start_available));
 }
 
+// Console Implementation =====================================================
 fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     for (from) |value| {
         serial_log.print_char(value);
@@ -90,16 +90,17 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
 }
 
 fn console_read(file: *io.File, to: []u8) anyerror!usize {
-    const r = ps2.get_text(to[0..]);
-    return r.len;
+    return 0;
 }
 
+// Boot Stack =================================================================
 extern var stack: [util.Ki(16)]u8 align(16) linksection(".bss");
 pub fn print_stack_left() void {
     print.format("stack left: {}\n",
         asm volatile ("mov %%esp, %[x]" : [x] "=r" (-> usize)) - @ptrToInt(&stack));
 }
 
+// Platform Initialization ====================================================
 pub fn init() !void {
     // Finish Setup of Console Logging
     serial_log.init();
@@ -110,7 +111,7 @@ pub fn init() !void {
     // Setup Basic CPU Utilities
     segments.init();
     interrupts.init();
-    util.estimate_cpu_speed();
+    timing.estimate_cpu_speed();
 
     // List Multiboot Tags
     if (print.debug_print) {
@@ -131,5 +132,7 @@ pub fn init() !void {
 
     acpi.init();
 
-    interrupts.pic.start_ticking(100);
+    // Start Ticking
+    timing.set_pit_freq(.Irq0, 10000);
+    interrupts.pic.allow_irq(0, true);
 }

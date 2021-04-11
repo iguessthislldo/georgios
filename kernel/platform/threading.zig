@@ -1,10 +1,12 @@
 const std = @import("std");
 
+const georgios = @import("georgios");
+const utils = @import("utils");
+
 const kernel = @import("../kernel.zig");
 const kthreading = @import("../threading.zig");
 const Thread = kthreading.Thread;
 const Process = kthreading.Process;
-const kutil = @import("../util.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
 const print = @import("../print.zig");
@@ -15,7 +17,7 @@ const interrupts = @import("interrupts.zig");
 const InterruptStack = interrupts.InterruptStack;
 const segments = @import("segments.zig");
 
-pub const Error = kutil.Error || kmemory.MemoryError;
+pub const Error = utils.Error || kmemory.MemoryError;
 
 const pmem = &kernel.memory.platform_memory;
 
@@ -37,6 +39,8 @@ fn usermode(ip: u32, sp: u32) noreturn {
         \\movl %%edx, (%%esp)
         \\pushl %[user_code_selector]
         \\pushl %[ip] // ip
+        \\.global usermode_iret
+        \\usermode_iret:
         \\iret // jump to ip as ring 3
     : :
         [user_code_selector] "{cx}" (@as(u32, segments.user_code_selector)),
@@ -51,13 +55,14 @@ pub const ThreadImpl = struct {
     context: usize,
     context_is_setup: bool,
     usermode_stack: Range,
+    usermode_stack_ptr: usize,
     kernelmode_stack: Range,
 
     pub fn init(self: *ThreadImpl, thread: *Thread, boot_thread: bool) Error!void {
         self.thread = thread;
         self.context_is_setup = boot_thread;
         if (!boot_thread) {
-            self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(kutil.Ki(4));
+            self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(utils.Ki(4));
         }
     }
 
@@ -65,14 +70,14 @@ pub const ThreadImpl = struct {
         const Type = @TypeOf(value);
         const size = @sizeOf(Type);
         self.context -= size;
-        _ = kutil.memory_copy_truncate(
+        _ = utils.memory_copy_truncate(
             @intToPtr([*]u8, self.context)[0..size], std.mem.asBytes(&value));
     }
 
     fn pop_from_context(self: *ThreadImpl, comptime Type: type) Type {
         const size = @sizeOf(Type);
         var value: Type = undefined;
-        _ = kutil.memory_copy_truncate(
+        _ = utils.memory_copy_truncate(
             std.mem.asBytes(&value), @intToPtr([*]const u8, self.context)[0..size]);
         self.context += size;
         return value;
@@ -106,19 +111,14 @@ pub const ThreadImpl = struct {
         // Setup Usermode Stack
         if (!self.thread.kernel_mode) {
             if (self.thread.process) |process| {
-                self.usermode_stack = Range{
-                    .start = platform.kernel_to_virtual(0) - platform.frame_size,
-                    .size = platform.frame_size};
-                pmem.mark_virtual_memory_present(
-                    process.impl.page_directory, self.usermode_stack, true)
-                    catch @panic("setup_context: mark_virtual_memory_present");
+                process.impl.setup(self);
             }
         }
 
         // Setup Initial Kernel Mode Stack/Context
         const sp = self.kernelmode_stack.end() - 1;
         self.context = sp;
-        var frame = kutil.zero_init(SwitchToFrame);
+        var frame = utils.zero_init(SwitchToFrame);
         frame.esp = sp;
         // TODO: Zig Bug? @ptrToInt(&run) results in weird address
         frame.func_return = @ptrToInt(run);
@@ -174,7 +174,7 @@ pub const ThreadImpl = struct {
             platform.enable_interrupts();
             asm volatile ("call *%[entry]" : : [entry] "{ax}" (self.thread.entry));
         } else {
-            usermode(self.thread.entry, self.usermode_stack.end() - 1);
+            usermode(self.thread.entry, self.usermode_stack_ptr);
         }
     }
 
@@ -195,6 +195,61 @@ pub const ProcessImpl = struct {
     }
 
     // TODO: Cleanup
+
+    fn copy_string_to_user_stack(self: *ProcessImpl, thread: *ThreadImpl,
+            s: []const u8) []const u8 {
+        thread.usermode_stack_ptr -= s.len;
+        const usermode_slice = @intToPtr([*]const u8, thread.usermode_stack_ptr)[0..s.len];
+        pmem.page_directory_memory_copy(
+            self.page_directory, thread.usermode_stack_ptr,
+            s) catch unreachable;
+        return usermode_slice;
+    }
+
+    pub fn setup(self: *ProcessImpl, thread: *ThreadImpl) void {
+        thread.usermode_stack = Range{
+            .start = platform.kernel_to_virtual(0) - platform.frame_size,
+            .size = platform.frame_size};
+        pmem.mark_virtual_memory_present(
+            self.page_directory, thread.usermode_stack, true)
+            catch @panic("setup_context: mark_virtual_memory_present");
+        thread.usermode_stack_ptr = thread.usermode_stack.end();
+        if (&self.process.main_thread == thread.thread) {
+            thread.usermode_stack_ptr -= @sizeOf(u32);
+            const stack_end: u32 = 0xc000dead;
+            pmem.page_directory_memory_copy(
+                self.page_directory, thread.usermode_stack_ptr,
+                utils.to_const_bytes(&stack_end)) catch unreachable;
+
+            var info = self.process.info;
+
+            // ProcessInfo path and name
+            info.path = self.copy_string_to_user_stack(thread, info.path);
+            info.name = self.copy_string_to_user_stack(thread, info.name);
+
+            // ProcessInfo.args
+            thread.usermode_stack_ptr = utils.align_down(thread.usermode_stack_ptr -
+                @sizeOf([]const u8) * info.args.len, @sizeOf([]const u8));
+            const args_array = thread.usermode_stack_ptr;
+            var arg_slice_ptr = args_array;
+            for (info.args) |arg, i| {
+                const arg_slice = self.copy_string_to_user_stack(thread, arg);
+                pmem.page_directory_memory_copy(
+                    self.page_directory, arg_slice_ptr,
+                    utils.to_const_bytes(&arg_slice)) catch unreachable;
+                arg_slice_ptr += @sizeOf([]const u8);
+            }
+            info.args = @intToPtr([*]const []const u8, args_array)[0..info.args.len];
+
+            // ProcessInfo
+            thread.usermode_stack_ptr -= utils.align_up(
+                @sizeOf(georgios.ProcessInfo), @alignOf(georgios.ProcessInfo));
+            const info_ptr = thread.usermode_stack_ptr;
+            pmem.page_directory_memory_copy(
+                self.page_directory, thread.usermode_stack_ptr,
+                utils.to_const_bytes(&info)) catch unreachable;
+        }
+    }
 
     pub fn switch_to(self: *ProcessImpl) Error!void {
         var current_page_directory: ?[]u32 = null;

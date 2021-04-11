@@ -1,3 +1,7 @@
+// Management and Base Handler Code for Interrupts
+//
+// TODO: More Info
+
 const builtin = @import("builtin");
 
 const kernel = @import("../kernel.zig");
@@ -13,8 +17,10 @@ const putil = @import("util.zig");
 const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 const ps2 = @import("ps2.zig");
+const system_calls = @import("system_calls.zig");
 
-pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
+// Stack When the Interrupt is Handled ========================================
+pub fn StackTemplate(comptime include_error_code: bool) type {
     return packed struct {
         const has_error_code = include_error_code;
 
@@ -36,74 +42,8 @@ pub fn InterruptStackTemplate(comptime include_error_code: bool) type {
         eflags: u32,
     };
 }
-pub const InterruptStack = InterruptStackTemplate(false);
-pub const InterruptStackEc = InterruptStackTemplate(true);
-
-// System Calls ==============================================================
-
-const system_call_interrupt_number: u8 = 100;
-fn handle_system_call(interrupt_number: u32, interrupt_stack: *const InterruptStack) void {
-    const call_number = interrupt_stack.eax;
-    const arg1 = interrupt_stack.ebx;
-    const arg2 = interrupt_stack.ecx;
-
-    // TODO: Using pointers for args can cause Zig's alignment checks to fail.
-    // Find a way around this without turning off safety?
-    @setRuntimeSafety(false);
-
-    switch (call_number) {
-        // print_string(s: []const u8) void
-        0 => print.string(@intToPtr(*[]const u8, arg1).*),
-
-        // getc() u8
-        1 => {
-            while (true) {
-                if (ps2.get_char()) |c| {
-                    @intToPtr(*u8, arg1).* = c;
-                    break;
-                }
-                kernel.threading_manager.yield();
-            }
-        },
-
-        // yield() void
-        2 => {
-            if (kthreading.debug) print.string("\nY");
-            kernel.threading_manager.yield();
-        },
-
-        // exit(status: u8) void
-        3 => {
-            if (kthreading.debug) print.string("\nE");
-            kernel.threading_manager.remove_current_thread();
-        },
-
-        // exec(path: []const u8) bool
-        4 => {
-            @intToPtr(*bool, arg2).* = false;
-            const pid = kernel.exec(@intToPtr(*[]const u8, arg1).*, false) catch |e| {
-                print.format("exec failed: {}\n", .{@errorName(e)});
-                @intToPtr(*bool, arg2).* = true;
-                return;
-            };
-            kernel.threading_manager.yield_while_process_is_running(pid);
-        },
-
-        // get_key() Key
-        5 => {
-            while (true) {
-                if (ps2.get_key()) |key| {
-                    @intToPtr(*kutil.Key, arg1).* = key;
-                    break;
-                }
-                kernel.threading_manager.yield();
-            }
-        },
-
-
-        else => @panic("Invalid System Call"),
-    }
-}
+pub const Stack = StackTemplate(false);
+pub const StackEc = StackTemplate(true);
 
 // Interrupt Descriptor Table ================================================
 
@@ -165,15 +105,15 @@ pub const user_flags: u8 = kernel_flags | (3 << 5);
 
 // Interrupt Handler Generation ==============================================
 
-pub fn PanicMessage(comptime InterruptStackType: type) type {
+pub fn PanicMessage(comptime StackType: type) type {
     return struct {
-        pub fn show(interrupt_number: u32, interrupt_stack: *const InterruptStackType) void {
+        pub fn show(interrupt_number: u32, interrupt_stack: *const StackType) void {
             const Color = cga_console.Color;
             cga_console.disable_cursor();
             cga_console.new_page();
             cga_console.set_colors(Color.Black, Color.Red);
             cga_console.fill_screen(' ');
-            const has_ec = InterruptStackType.has_error_code;
+            const has_ec = StackType.has_error_code;
             const ec = interrupt_stack.error_code;
             print.format(
                 \\==============================<!>Kernel Panic<!>==============================
@@ -278,19 +218,19 @@ pub fn PanicMessage(comptime InterruptStackType: type) type {
                 segments.get_name(interrupt_stack.cs / 8),
             });
 
-            putil.halt_forever();
+            putil.done();
         }
     };
 }
 
 fn BaseInterruptHandler(
-        comptime i: u32, comptime InterruptStackType: type, comptime irq: bool,
-        impl: fn(u32, *const InterruptStackType) void) type {
+        comptime i: u32, comptime StackType: type, comptime irq: bool,
+        impl: fn(u32, *const StackType) void) type {
     return struct {
         const index: u8 = i;
         const irq_number: u32 = if (irq) i - pic.irq_0_7_interrupt_offset else 0;
 
-        fn inner_handler(interrupt_stack: *const InterruptStackType) void {
+        fn inner_handler(interrupt_stack: *const StackType) void {
             const spurious =
                 if (irq_number == 7 or irq_number == 15)
                     pic.is_spurious_irq(irq_number)
@@ -313,10 +253,10 @@ fn BaseInterruptHandler(
             asm volatile ("pushal");
 
             inner_handler(asm volatile ("mov %%esp, %[interrupt_stack]"
-                : [interrupt_stack] "={eax}" (-> *const InterruptStackType)));
+                : [interrupt_stack] "={eax}" (-> *const StackType)));
 
             asm volatile ("popal"); // Restore Registers
-            if (InterruptStackType.has_error_code) {
+            if (StackType.has_error_code) {
                 asm volatile ("addl $4, %%esp"); // Pop Error Code
             }
             asm volatile ("iret");
@@ -335,19 +275,19 @@ fn BaseInterruptHandler(
 
 fn HardwareErrorInterruptHandler(
         comptime i: u32, comptime error_code: bool) type {
-    const InterruptStackType = InterruptStackTemplate(error_code);
+    const StackType = StackTemplate(error_code);
     return BaseInterruptHandler(
-        i, InterruptStackType, false, PanicMessage(InterruptStackType).show);
+        i, StackType, false, PanicMessage(StackType).show);
 }
 
 pub fn IrqInterruptHandler(
-        comptime irq_number: u32, impl: fn(u32, *const InterruptStack) void) type {
+        comptime irq_number: u32, impl: fn(u32, *const Stack) void) type {
     return BaseInterruptHandler(irq_number + pic.irq_0_7_interrupt_offset,
-        InterruptStack, true, impl);
+        Stack, true, impl);
 }
 
-fn InterruptHandler(comptime i: u32, impl: fn(u32, *const InterruptStack) void) type {
-    return BaseInterruptHandler(i, InterruptStack, false, impl);
+fn InterruptHandler(comptime i: u32, impl: fn(u32, *const Stack) void) type {
+    return BaseInterruptHandler(i, Stack, false, impl);
 }
 
 // CPU Exception Interrupts ==================================================
@@ -388,8 +328,6 @@ pub const pic = struct {
     const irq_0_7_interrupt_offset: u8 = 32;
     const irq_8_15_interrupt_offset: u8 = irq_0_7_interrupt_offset + 8;
 
-    const channel_port: u16 = 0x40;
-    const mode_port: u16 = 0x43;
     const irq_0_7_command_port: u16 = 0x20;
     const irq_0_7_data_port: u16 = 0x21;
     const irq_8_15_command_port: u16 = 0xA0;
@@ -479,20 +417,11 @@ pub const pic = struct {
         // Enable Interrupts
         putil.enable_interrupts();
     }
-
-    pub fn start_ticking(frequency: u32) void {
-        // TODO: Magic Numbers
-        const div = @intCast(u16, 1193180 / frequency);
-        putil.out8(mode_port, 0x36);
-        putil.out8(channel_port, @truncate(u8, div));
-        putil.out8(channel_port, @truncate(u8, div >> 8));
-        pic.allow_irq(0, true);
-    }
 };
 
 pub var in_tick = false;
 
-fn tick(irq_number: u32, interrupt_stack: *const InterruptStack) void {
+fn tick(irq_number: u32, interrupt_stack: *const Stack) void {
     in_tick = true;
     if (kthreading.debug) print.char('!');
     kernel.threading_manager.yield();
@@ -529,10 +458,10 @@ pub fn init() void {
             ex.name, kernel_code_selector, kernel_flags);
     }
 
-    InterruptHandler(50, PanicMessage(InterruptStack).show).set(
+    InterruptHandler(50, PanicMessage(Stack).show).set(
         "Software Panic", kernel_code_selector, kernel_flags);
 
-    InterruptHandler(system_call_interrupt_number, handle_system_call).set(
+    InterruptHandler(system_calls.interrupt_number, system_calls.handle).set(
         "System Call", kernel_code_selector, user_flags);
 
     IrqInterruptHandler(0, tick).set(

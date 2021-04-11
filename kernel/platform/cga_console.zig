@@ -1,8 +1,16 @@
 // Interface to use the IBM PC Color Graphics Adapter (CGA)'s 80x25 text mode.
+//
+// TODO: Create abstract console interface.
+//
+// For Reference See:
+//   "IBM Color/Graphics Monitor Adaptor"
+//   https://en.wikipedia.org/wiki/VGA_text_mode
+//   https://en.wikipedia.org/wiki/Code_page_437
+//   https://wiki.osdev.org/Printing_to_Screen
 
 const builtin = @import("builtin");
 
-const unicode = @import("../unicode.zig");
+const utils = @import("utils");
 
 const util = @import("util.zig");
 const out8 = util.out8;
@@ -150,6 +158,19 @@ pub fn print_all_characters() void {
     }
 }
 
+pub fn backspace() void {
+    place_char(' ', column, row);
+    cursor(column, row);
+    if (column == 0 and row > 0) {
+        column = width - 1;
+        row -= 1;
+    } else {
+        column -= 1;
+    }
+}
+
+// Print UTF8 Strings as Code Page 437 ========================================
+
 pub fn from_unicode(c: u32) ?u8 {
     // Code Page 437 Doesn't Have Any Points Past 2^16
     if (c > 0xFFFF) return null;
@@ -162,7 +183,8 @@ pub fn from_unicode(c: u32) ?u8 {
     const hash = c16 % code_point_437.bucket_count;
     if (hash > code_point_437.max_hash_used) return null;
     const offset = hash * code_point_437.max_bucket_length;
-    const bucket = code_point_437.hash_table[offset..offset + code_point_437.max_bucket_length];
+    const bucket = code_point_437.hash_table[offset..offset +
+        code_point_437.max_bucket_length];
     for (bucket[0..]) |entry| {
         const valid = @intCast(u8, entry >> 24);
         if (valid == 0) return null;
@@ -176,15 +198,17 @@ pub fn from_unicode(c: u32) ?u8 {
 
 pub fn print_utf8_string(s: []const u8) void {
     var b: [128]u32 = undefined;
-    var r = unicode.Utf8ToUtf32Result{.leftovers=s[0..]};
+    var r = utils.Utf8ToUtf32Result{.leftovers=s[0..]};
     while (true) {
-        r = unicode.utf8_to_utf32(r.leftovers, b[0..])
+        r = utils.utf8_to_utf32(r.leftovers, b[0..])
             catch @panic("UTF-8 CGA Console Failure");
         for (r.fit_in_output[0..]) |i| {
-            if (i == '\n') {
-                new_line();
-            } else {
-                direct_print_char(if (from_unicode(i)) |c437| c437 else '?');
+            switch (i) {
+                '\n' => new_line(),
+                '\x08' => backspace(),
+                // TODO: Tab
+                // TODO: ANSI Escapes for Color and Cursor Control
+                else => direct_print_char(if (from_unicode(i)) |c437| c437 else '?'),
             }
         }
         if (r.leftovers.len == 0) break;

@@ -8,8 +8,9 @@
 //   ELF on OSDev Wiki: https://wiki.osdev.org/ELF
 //   man elf
 
+const utils = @import("utils");
+
 const io = @import("io.zig");
-const util = @import("util.zig");
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const List = @import("list.zig").List;
@@ -126,14 +127,14 @@ const Header = packed struct {
 
     pub fn verify_elf(self: *const Header) Error!void {
         const invalid =
-            !util.memory_compare(self.magic[0..], expected_magic[0..]) or
-            !util.valid_enum(Class, self.class) or
+            !utils.memory_compare(self.magic[0..], expected_magic[0..]) or
+            !utils.valid_enum(Class, self.class) or
             self.class == .Invalid or
-            !util.valid_enum(Data, self.data) or
+            !utils.valid_enum(Data, self.data) or
             self.data == .Invalid or
-            !util.valid_enum(HeaderVersion, self.header_version) or
+            !utils.valid_enum(HeaderVersion, self.header_version) or
             self.header_version == .Invalid or
-            !util.valid_enum(ObjectVersion, self.object_version) or
+            !utils.valid_enum(ObjectVersion, self.object_version) or
             self.object_version == .Invalid;
         if (invalid) {
             return Error.InvalidElfFile;
@@ -158,8 +159,24 @@ const Header = packed struct {
 
 pub const Object = struct {
     pub const Segment = struct {
-        data: []u8,
+        const WhatKind = enum {
+            Data,
+            UndefinedMemory,
+        };
+        const What = union(WhatKind) {
+            Data: []u8,
+            UndefinedMemory: usize,
+        };
+
+        what: What = undefined,
         address: usize,
+
+        pub fn teardown(self: *Segment, alloc: *Allocator) !void {
+            switch (self.what) {
+                .Data => |data| try alloc.free_array(data),
+                else => {},
+            }
+        }
     };
     pub const Segments = List(Segment);
 
@@ -174,7 +191,7 @@ pub const Object = struct {
         object.segments = Segments{.alloc = alloc};
 
         // Read Header
-        _ = try file.read(util.to_bytes(&object.header));
+        _ = try file.read(utils.to_bytes(&object.header));
         if (debug) print.format("Header Size: {}\n", .{@as(usize, @sizeOf(Header))});
         try object.header.verify_executable();
 
@@ -191,7 +208,7 @@ pub const Object = struct {
             const skip = @intCast(isize, size - @sizeOf(SectionHeader));
             object.section_headers = try alloc.alloc_array(SectionHeader, count);
             for (object.section_headers) |*section_header, i| {
-                _ = try file.read(util.to_bytes(section_header));
+                _ = try file.read(utils.to_bytes(section_header));
                 _ = try file.seek(skip, .FromHere);
             }
         }
@@ -213,7 +230,7 @@ pub const Object = struct {
             const skip = @intCast(isize, size - @sizeOf(ProgramHeader));
             object.program_headers = try alloc.alloc_array(ProgramHeader, count);
             for (object.program_headers) |*program_header, i| {
-                _ = try file.read(util.to_bytes(program_header));
+                _ = try file.read(utils.to_bytes(program_header));
                 _ = try file.seek(skip, .FromHere);
             }
         }
@@ -227,19 +244,40 @@ pub const Object = struct {
             // Read the Program
             // TODO: Remove/Make More Proper?
             if (program_header.kind == 0x1) {
-                if (debug) print.format("segment at {}\n", .{program_header.virtual_address});
-                var segment = Segment{
-                    .data = try alloc.alloc_array(u8, program_header.size_in_file),
-                    .address = program_header.virtual_address,
-                };
-                _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
-                _ = try file.read_or_error(segment.data);
-                if (debug) print.dump_bytes(segment.data);
+                if (debug) print.format(
+                    "segment at {} kind {} file size {} memory size {}\n", .{
+                        program_header.virtual_address, program_header.kind,
+                        program_header.size_in_file, program_header.size_in_memory,
+                        });
+                var segment = Segment{.address = program_header.virtual_address};
+                const nonzero = program_header.size_in_memory > 0;
+                if (nonzero and program_header.size_in_memory == program_header.size_in_file) {
+                    segment.what = Segment.What{
+                        .Data = try alloc.alloc_array(u8, program_header.size_in_file)};
+                    _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
+                    _ = try file.read_or_error(segment.what.Data);
+                    if (debug) print.dump_bytes(segment.what.Data);
+                } else if (nonzero and program_header.size_in_file == 0) {
+                    segment.what = Segment.What{
+                        .UndefinedMemory = program_header.size_in_memory};
+                } else {
+                    @panic("elf unexpected situation with program header sizes");
+                }
                 try object.segments.push_back(segment);
             }
         }
         if (object.segments.len == 0) @panic("No LOADs in ELF!");
 
         return object;
+    }
+
+    pub fn teardown(self: *Object) !void {
+        try self.alloc.free_array(self.section_headers);
+        try self.alloc.free_array(self.program_headers);
+        var iter = self.segments.iterator();
+        while (iter.next()) |*segment| {
+            try segment.teardown(self.alloc);
+        }
+        try self.segments.clear();
     }
 };

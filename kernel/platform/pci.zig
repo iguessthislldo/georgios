@@ -3,7 +3,8 @@
 
 const builtin = @import("builtin");
 
-const kutil = @import("../util.zig");
+const utils = @import("utils");
+
 const print = @import("../print.zig");
 const fprint = @import("../fprint.zig");
 const io = @import("../io.zig");
@@ -26,7 +27,7 @@ const Class = enum (u16) {
     Unknown = 0xFFFF,
 
     pub fn from_u16(value: u16) ?Class {
-        return kutil.int_to_enum(@This(), value);
+        return utils.int_to_enum(@This(), value);
     }
 
     pub fn to_string(self: Class) []const u8 {
@@ -94,7 +95,7 @@ pub const Header = packed struct {
         MultiFunctionCardBusBridge = 0x82,
 
         pub fn from_u8(value: u8) ?Kind {
-            return kutil.int_to_enum(@This(), value);
+            return utils.int_to_enum(@This(), value);
         }
 
         pub fn to_string(self: Kind) []const u8 {
@@ -144,7 +145,7 @@ pub const Header = packed struct {
         Coprocessor = 0x40,
 
         pub fn from_u8(value: u8) ?SuperClass {
-            return kutil.int_to_enum(@This(), value);
+            return utils.int_to_enum(@This(), value);
         }
 
         pub fn to_string(self: SuperClass) []const u8 {

@@ -8,13 +8,15 @@
 //   https://en.wikipedia.org/wiki/Buddy_memory_allocation
 //
 // TODO: Make Resizable
+// TODO: Space optimize allocations that are smaller then FreeBlock, maybe by
+// lumping them together in shared blocks?
 
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
 const MemoryError = memory.MemoryError;
 const AllocError = memory.AllocError;
 const FreeError = memory.FreeError;
-const util = @import("util.zig");
+const util = @import("utils");
 const print = @import("print.zig");
 
 const BlockStatus = packed enum(u2) {
@@ -133,8 +135,9 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             return max_size >> @truncate(util.UsizeLog2Type, level);
         }
 
-        fn block_size_to_level(size: usize) usize {
-            return level_count - util.int_log2(usize, size / min_size) - 1;
+        fn size_to_level(size: usize) usize {
+            const target_size = util.max(usize, min_size, util.pow2_round_up(usize, size));
+            return level_count - util.int_log2(usize, target_size / min_size) - 1;
         }
 
         fn unique_id(level: usize, index: usize) usize {
@@ -196,8 +199,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 return AllocError.OutOfMemory;
             }
 
-            const target_size = util.pow2_round_up(usize, size);
-            const target_level = block_size_to_level(target_size);
+            const target_level = size_to_level(size);
 
             // Figure out how many (if any) levels we need to split a block in
             // to get a free block in our target level.
@@ -274,8 +276,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             const address = @ptrToInt(value.ptr);
             const block = @intToPtr(FreeBlock.Ptr, address);
             {
-                const size = util.pow2_round_up(usize, value.len);
-                const level = block_size_to_level(size);
+                const level = size_to_level(value.len);
                 const index = self.get_index(level, block);
                 const id = unique_id(level, index);
                 const status = self.block_statuses.get(id) catch unreachable;
@@ -386,6 +387,12 @@ test "BuddyAllocator" {
         "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         m[0..]);
     try a.free_array((try al.pop_front()).?);
+
+    const byte: u8 = 0xaa;
+    try test_helper(a, &al, @as(usize, 1), byte);
+    std.testing.expectEqual(byte, m[32 * 2]);
+    try a.free_array((try al.pop_front()).?);
+
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x88));
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x77));
     std.testing.expectEqualSlices(u8,

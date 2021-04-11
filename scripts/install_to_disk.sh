@@ -25,7 +25,7 @@ fi
 
 echo Create Blank Image =======================================================
 rm -f disk.img
-dd if=/dev/zero of=disk.img iflag=fullblock bs=1M count=10
+dd if=/dev/zero of=disk.img iflag=fullblock bs=1M count=20
 sync
 
 echo Create Loop Device =======================================================
@@ -51,19 +51,18 @@ then
     echo "$root_dev is an invalid block device"
     exit 1
 fi
-sudo mke2fs -L '' -N 0 -O none -d tmp/disk -r 1 -t ext2 $root_dev
+sudo mke2fs -L '' -N 0 -O none -d tmp/root -r 1 -t ext2 $root_dev
 
 echo Mount Ext2 Partition =====================================================
 mkdir -p tmp/mount_point
 sudo mount $root_dev tmp/mount_point
 
-echo Copy Files ===============================================================
-sudo mkdir -p tmp/mount_point/boot/grub
-sudo cp tmp/zig-cache/bin/kernel.elf tmp/mount_point/boot
+echo Copy Extra Files =========================================================
 sudo cp misc/grub_hd.cfg tmp/mount_point/boot/grub/grub.cfg
 
 echo Install GRUB =============================================================
-sudo grub-install --target=i386-pc --root-directory=tmp/mount_point --boot-directory=tmp/mount_point/boot $dev
+sudo grub-install --target=i386-pc \
+    --root-directory=tmp/mount_point --boot-directory=tmp/mount_point/boot $dev
 
 echo Unmount Ext2 Partition ===================================================
 sync

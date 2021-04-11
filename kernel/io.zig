@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const util = @import("util.zig");
+const utils = @import("utils");
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
 const MemoryError = memory.MemoryError;
@@ -12,7 +12,7 @@ pub const FileError = error {
     Unsupported,
     /// An Implementation-Related Error Occured.
     Internal,
-} || MemoryError || util.Error;
+} || MemoryError || utils.Error;
 
 /// File IO Interface
 pub const File = struct {
@@ -162,7 +162,7 @@ pub const File = struct {
             .FromHere => position,
             .FromEnd => end,
         };
-        if (util.add_isize_to_usize(from, offset)) |result| {
+        if (utils.add_isize_to_usize(from, offset)) |result| {
             if (result != position and limit != null and result >= limit.?) {
                 return FileError.OutOfBounds;
             }
@@ -205,8 +205,8 @@ test "File.generic_seek" {
     try generic_seek_subtest(.FromEnd, 4);
 
     // We should be able to go to max_usize.
-    const max_usize = util.max_of_int(usize);
-    const max_isize = util.max_of_int(isize);
+    const max_usize = utils.max_of_int(usize);
+    const max_isize = utils.max_of_int(isize);
     const max_isize_as_usize = @bitCast(usize, max_isize);
     std.testing.expectEqual(max_usize,
         max_isize_as_usize + max_isize_as_usize + 1); // Just a sanity check
@@ -246,7 +246,7 @@ pub const BufferFile = struct {
         const self = @fieldParentPtr(Self, "file", file);
         if (self.written_up_until > self.position) {
             const read_size = self.written_up_until - self.position;
-            _ = util.memory_copy_truncate(to[0..read_size],
+            _ = utils.memory_copy_truncate(to[0..read_size],
                 self.buffer[self.position..self.written_up_until]);
             self.position = self.written_up_until;
             return read_size;
@@ -256,17 +256,17 @@ pub const BufferFile = struct {
 
     fn fill_unwritten(self: *Self, pos: usize) void {
         if (pos > self.written_up_until) {
-            util.memory_set(self.buffer[self.written_up_until..pos], 0);
+            utils.memory_set(self.buffer[self.written_up_until..pos], 0);
         }
     }
 
     pub fn write(file: *File, from: []const u8) FileError!usize {
         const self = @fieldParentPtr(Self, "file", file);
-        const write_size = util.min(usize, from.len, self.buffer.len - self.position);
+        const write_size = utils.min(usize, from.len, self.buffer.len - self.position);
         if (write_size > 0) {
             self.fill_unwritten(self.position);
             const new_position = self.position + write_size;
-            _ = util.memory_copy_truncate(self.buffer[self.position..new_position],
+            _ = utils.memory_copy_truncate(self.buffer[self.position..new_position],
                 from[0..write_size]);
             self.position = new_position;
             self.written_up_until = new_position;
@@ -284,10 +284,10 @@ pub const BufferFile = struct {
     }
 
     pub fn set_contents(
-            self: *Self, offset: usize, new_contents: []const u8) util.Error!void {
+            self: *Self, offset: usize, new_contents: []const u8) utils.Error!void {
         self.fill_unwritten(offset);
         self.written_up_until = offset +
-            try util.memory_copy_error(self.buffer[offset..], new_contents);
+            try utils.memory_copy_error(self.buffer[offset..], new_contents);
     }
 
     pub fn get_contents(self: *Self) []u8 {
@@ -422,7 +422,7 @@ pub const BlockStore = struct {
 
     pub fn read(self: *BlockStore, address: AddressType, to: []u8) BlockError!void {
         const start_block = address / self.block_size;
-        const block_count = util.div_round_up(
+        const block_count = utils.div_round_up(
             AddressType, @intCast(AddressType, to.len), self.block_size);
         const end_block = start_block + block_count;
         var block_address = start_block;
@@ -431,9 +431,9 @@ pub const BlockStore = struct {
         while (block_address < end_block) {
             var block = Block{.address = block_address};
             try self.read_block(&block);
-            const new_dest_offset = dest_offset + util.min(usize,
+            const new_dest_offset = dest_offset + utils.min(usize,
                 @intCast(usize, self.block_size), to.len - dest_offset);
-            _ = util.memory_copy_truncate(
+            _ = utils.memory_copy_truncate(
                 to[dest_offset..new_dest_offset], block.data.?[src_offset..]);
             src_offset = 0;
             dest_offset = new_dest_offset;
