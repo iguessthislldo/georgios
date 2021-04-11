@@ -117,8 +117,13 @@ pub fn List(comptime Type: type) type {
             self.push_back_node(node);
         }
 
+        pub fn clear(self: *Self) memory.MemoryError!void {
+            while (self.pop_back_node()) |node| {
+                try self.alloc.free(node);
+            }
+        }
+
         pub const Iterator = struct {
-            list: *Self,
             node: ?*Node,
 
             pub fn next(self: *Iterator) ?Type {
@@ -131,7 +136,7 @@ pub fn List(comptime Type: type) type {
         };
 
         pub fn iterator(self: *Self) Iterator {
-            return Iterator{.list = self, .node = self.head};
+            return Iterator{.node = self.head};
         }
     };
 }
@@ -202,6 +207,18 @@ test "List" {
     equal(@as(usize, 2), (try list.pop_front()).?);
 
     // It's empty yet again
+    equal(@as(usize, 0), list.len);
+    equal(nilv, try list.pop_back());
+    equal(nilv, try list.pop_front());
+    equal(niln, list.head);
+    equal(niln, list.tail);
+
+    // Clear
+    try list.push_back(12);
+    try list.push_front(6);
+    try list.clear();
+
+    // It's empty ... again
     equal(@as(usize, 0), list.len);
     equal(nilv, try list.pop_back());
     equal(nilv, try list.pop_front());

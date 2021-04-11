@@ -170,6 +170,13 @@ pub const Object = struct {
 
         what: What = undefined,
         address: usize,
+
+        pub fn teardown(self: *Segment, alloc: *Allocator) !void {
+            switch (self.what) {
+                .Data => |data| try alloc.free_array(data),
+                else => {},
+            }
+        }
     };
     pub const Segments = List(Segment);
 
@@ -262,5 +269,15 @@ pub const Object = struct {
         if (object.segments.len == 0) @panic("No LOADs in ELF!");
 
         return object;
+    }
+
+    pub fn teardown(self: *Object) !void {
+        try self.alloc.free_array(self.section_headers);
+        try self.alloc.free_array(self.program_headers);
+        var iter = self.segments.iterator();
+        while (iter.next()) |*segment| {
+            try segment.teardown(self.alloc);
+        }
+        try self.segments.clear();
     }
 };

@@ -156,6 +156,13 @@ pub const Manager = struct {
         self.tail_thread = thread;
     }
 
+    pub fn remove_process(self: *Manager, process: *Process) void {
+        _ = self.process_list.find_remove(process.id)
+            catch @panic("remove_process: process_list.find_remove");
+        kernel.memory.small_alloc.free(process)
+            catch @panic("remove_process: free(process)");
+    }
+
     pub fn remove_thread(self: *Manager, thread: *Thread) void {
         if (thread.next_in_system) |nt| {
             nt.prev_in_system = thread.prev_in_system;
@@ -171,8 +178,7 @@ pub const Manager = struct {
         }
         if (thread.process) |process| {
             if (thread == &process.main_thread) {
-                _ = self.process_list.find_remove(process.id)
-                    catch @panic("remove_thread: process_list.find_remove");
+                self.remove_process(process);
             }
         }
     }

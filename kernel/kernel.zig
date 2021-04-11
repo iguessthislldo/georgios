@@ -64,9 +64,9 @@ pub fn exec(info: *const georgios.ProcessInfo) !threading.Process.Id {
             .Data => |data| try process.address_space_copy(segment.address, data),
             .UndefinedMemory => |size| try process.address_space_set(segment.address, 0, size),
         }
-
     }
     process.entry = elf_object.header.entry;
+    try elf_object.teardown();
     try threading_manager.start_process(process);
     return process.id;
 }
