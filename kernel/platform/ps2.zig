@@ -8,6 +8,7 @@ const keyboard = georgios.keyboard;
 const Key = keyboard.Key;
 const Event = keyboard.Event;
 
+const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
 const key_to_char = @import("../keys.zig").key_to_char;
 
@@ -163,6 +164,7 @@ pub fn keyboard_event_occured(
             }
         }
         buffer.push(e.*);
+        kernel.threading_manager.keyboard_event_occured();
     }
 }
 

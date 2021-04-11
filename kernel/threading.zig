@@ -16,7 +16,15 @@ pub const Error = pthreading.Error;
 pub const Thread = struct {
     pub const Id = u32;
 
+    pub const State = enum {
+        Run,
+        Wait,
+    };
+
     id: Id = undefined,
+    state: State = .Run,
+    // TODO: Support multiple waits?
+    wake_on_exit: ?*Thread = null,
     kernel_mode: bool = false,
     impl: pthreading.ThreadImpl = undefined,
     process: ?*Process = null,
@@ -33,6 +41,12 @@ pub const Thread = struct {
 
     pub fn start(self: *Thread) Error!void {
         try self.impl.start();
+    }
+
+    pub fn finish(self: *Thread) void {
+        if (self.wake_on_exit) |other| {
+            other.state = .Run;
+        }
     }
 };
 
@@ -102,7 +116,8 @@ pub const Manager = struct {
 
     const ProcessList = MappedList(Process.Id, *Process, pid_eql, pid_cmp);
 
-    boot_thread: Thread = .{.id = 0, .kernel_mode = true},
+    idle_thread: Thread = .{.kernel_mode = true, .state = .Wait},
+    boot_thread: Thread = .{.kernel_mode = true},
     next_thread_id: Thread.Id = 0,
     current_thread: ?*Thread = null,
     head_thread: ?*Thread = null,
@@ -110,12 +125,16 @@ pub const Manager = struct {
     process_list: ProcessList = undefined,
     next_process_id: Process.Id = 0,
     current_process: ?*Process = null,
+    waiting_for_keyboard: ?*Thread = null,
 
     pub fn init(self: *Manager) Error!void {
         self.process_list = .{.alloc = kernel.memory.small_alloc};
+        try self.idle_thread.init(false);
+        self.idle_thread.entry = @ptrToInt(platform.idle);
         try self.boot_thread.init(true);
         self.current_thread = &self.boot_thread;
         platform.disable_interrupts();
+        self.insert_thread(&self.idle_thread);
         self.insert_thread(&self.boot_thread);
         platform.enable_interrupts();
     }
@@ -176,6 +195,7 @@ pub const Manager = struct {
         if (self.tail_thread == thread) {
             self.tail_thread = thread.prev_in_system;
         }
+        thread.finish();
         if (thread.process) |process| {
             if (thread == &process.main_thread) {
                 self.remove_process(process);
@@ -199,14 +219,39 @@ pub const Manager = struct {
     }
 
     fn next_from(self: *const Manager, thread_maybe: ?*Thread) ?*Thread {
-        var next_thread: ?*Thread = null;
         if (thread_maybe) |thread| {
-            next_thread = thread.next_in_system;
-            if (next_thread == null) {
-                next_thread = self.head_thread;
-            }
-            if (next_thread != null and next_thread.? == thread) {
-                next_thread = null;
+            const nt = thread.next_in_system orelse self.head_thread;
+            if (debug) print.format("+{}->{}+", .{thread.id, nt.?.id});
+            return nt;
+        }
+        return null;
+    }
+
+    fn next(self: *Manager) ?*Thread {
+        var next_thread: ?*Thread = null;
+        var thread = self.current_thread;
+        while (next_thread == null) {
+            thread = self.next_from(thread);
+            if (thread) |t| {
+                if (t == self.current_thread.?) {
+                    if (self.current_thread.?.state != .Run) {
+                        if (debug) print.string("&I&");
+                        self.idle_thread.state = .Run;
+                        next_thread = &self.idle_thread;
+                    } else {
+                        if (debug) print.string("&C&");
+                    }
+                    break;
+                }
+                if (t.state == .Run) {
+                    next_thread = t;
+                }
+            } else break;
+        }
+        if (next_thread) |nt| {
+            if (nt != &self.idle_thread and self.idle_thread.state == .Run) {
+                if (debug) print.string("&i&");
+                self.idle_thread.state = .Wait;
             }
         }
         if (debug) {
@@ -217,10 +262,6 @@ pub const Manager = struct {
             }
         }
         return next_thread;
-    }
-
-    pub fn next(self: *Manager) ?*Thread {
-        return self.next_from(self.current_thread);
     }
 
     pub fn yield(self: *Manager) void {
@@ -234,11 +275,32 @@ pub const Manager = struct {
         return self.process_list.find(id) != null;
     }
 
-    pub fn yield_while_process_is_running(self: *Manager, id: Process.Id) void {
+    pub fn wait_for_process(self: *Manager, id: Process.Id) void {
+        if (debug) print.format("<Wait for pid {}>\n", .{id});
         platform.disable_interrupts();
-        while (self.process_is_running(id)) {
+        if (self.process_list.find(id)) |proc| {
+            if (debug) print.string("<pid found>");
+            if (proc.main_thread.wake_on_exit != null)
+                @panic("yield_while_process_is_running: wake_on_exit not null");
+            self.current_thread.?.state = .Wait;
+            proc.main_thread.wake_on_exit = self.current_thread;
             self.yield();
-            platform.disable_interrupts();
+        }
+        if (debug) print.format("<Wait for pid {} is done>\n", .{id});
+    }
+
+    // TODO Make this and keyboard_event_occured generic
+    pub fn wait_for_keyboard(self: *Manager) void {
+        platform.disable_interrupts();
+        self.current_thread.?.state = .Wait;
+        self.waiting_for_keyboard = self.current_thread;
+        self.yield();
+    }
+
+    pub fn keyboard_event_occured(self: *Manager) void {
+        if (self.waiting_for_keyboard) |t| {
+            t.state = .Run;
+            self.waiting_for_keyboard = null;
         }
     }
 };

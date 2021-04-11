@@ -53,12 +53,21 @@ pub fn disable_interrupts() void {
     asm volatile ("cli");
 }
 
+// Halt =======================================================================
 
 pub fn halt() void {
     asm volatile ("hlt");
 }
 
-pub fn halt_forever() noreturn {
+pub fn idle() noreturn {
+    while (true) {
+        enable_interrupts();
+        halt();
+    }
+    unreachable;
+}
+
+pub fn done() noreturn {
     disable_interrupts();
     while (true) {
         halt();

@@ -27,7 +27,8 @@ pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
-pub const done = util.halt_forever;
+pub const done = util.done;
+pub const idle = util.idle;
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     asm volatile ("int $50");

@@ -84,7 +84,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
                 failure_ptr.* = true;
                 return;
             };
-            kernel.threading_manager.yield_while_process_is_running(pid);
+            kernel.threading_manager.wait_for_process(pid);
         },
 
         // SYSCALL: get_key() key: georgios.keyboard.Event
@@ -95,7 +95,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
                     @intToPtr(*georgios.keyboard.Event, arg1).* = key;
                     break;
                 }
-                kernel.threading_manager.yield();
+                kernel.threading_manager.wait_for_keyboard();
             }
         },
 
