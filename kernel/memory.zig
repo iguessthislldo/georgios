@@ -1,20 +1,15 @@
 const std = @import("std");
 
+const georgios = @import("georgios");
 const utils = @import("utils");
+
 const print = @import("print.zig");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
 const PlatformMemory = platform.Memory;
 
-pub const AllocError = error {
-    OutOfMemory,
-    ZeroSizedAlloc,
-};
-pub const FreeError = error {
-    InvalidFree,
-};
-pub const MemoryError = AllocError || FreeError;
+usingnamespace georgios.memory;
 
 pub const Range = struct {
     start: usize = 0,

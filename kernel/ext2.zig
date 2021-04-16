@@ -14,12 +14,7 @@ const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
 const fs = @import("fs.zig");
 
-pub const Error = error {
-    FileNotFound,
-    NotADirectory,
-    NotAFile,
-    InvalidFilesystem,
-} || io.BlockError || MemoryError || utils.Error;
+pub const Error = fs.Error || io.BlockError || MemoryError || utils.Error;
 
 const Superblock = packed struct {
     const expected_magic: u16 = 0xef53;
@@ -333,9 +328,9 @@ const DirectoryIterator = struct {
     initial: bool = true,
     value: Value = undefined,
 
-    pub fn new(ext2: *Ext2, inode: *Inode) Error!DirectoryIterator {
+    pub fn new(ext2: *Ext2, inode: *Inode) fs.Error!DirectoryIterator {
         if (!inode.is_directory()) {
-            return Error.NotADirectory;
+            return fs.Error.NotADirectory;
         }
         return DirectoryIterator{
             .ext2 = ext2,
@@ -346,7 +341,7 @@ const DirectoryIterator = struct {
         };
     }
 
-    pub fn next(self: *DirectoryIterator) Error!bool {
+    pub fn next(self: *DirectoryIterator) fs.Error!bool {
         const get_next_block = self.buffer_pos >= self.ext2.block_size;
         if (get_next_block) {
             self.buffer_pos = 0;
@@ -357,9 +352,9 @@ const DirectoryIterator = struct {
         }
         if (get_next_block or self.initial) {
             self.initial = false;
-            // Zig Bug? Should try have higher precedence in order of
-            // operations? (at least more than ==)
-            if ((try self.data_block_iter.next(self.buffer)) == null) {
+            const result = self.data_block_iter.next(self.buffer) catch
+                return fs.Error.Internal;
+            if (result == null) {
                 return false;
             }
         }
@@ -368,7 +363,8 @@ const DirectoryIterator = struct {
         self.buffer_pos += entry.next_entry_offset;
         self.value.inode_number = entry.inode;
         self.value.name = self.buffer[name_pos..name_pos + entry.name_size];
-        try self.ext2.get_inode(entry.inode, &self.value.inode);
+        self.ext2.get_inode(entry.inode, &self.value.inode) catch
+            return fs.Error.Internal;
         return true;
     }
 
@@ -380,8 +376,6 @@ const DirectoryIterator = struct {
 
 pub const File = struct {
     const Self = @This();
-
-    const FileError = Error || io.FileError;
 
     ext2: *Ext2 = undefined,
     inode: Inode = undefined,
@@ -403,7 +397,13 @@ pub const File = struct {
         };
     }
 
-    pub fn read(file: *io.File, to: []u8) FileError!usize {
+    pub fn close(self: *File) MemoryError!void {
+        if (self.buffer) |buffer| {
+            try self.ext2.alloc.free_array(buffer);
+        }
+    }
+
+    pub fn read(file: *io.File, to: []u8) io.FileError!usize {
         const self = @fieldParentPtr(Self, "io_file", file);
         if (self.buffer == null) {
             self.buffer = try self.ext2.alloc.alloc_array(u8, self.ext2.block_size);
@@ -411,8 +411,15 @@ pub const File = struct {
         var got: usize = 0;
         while (got < to.len) {
             // TODO: See if buffer already has the data we need!!!
-            try self.data_block_iter.set_position(self.position / self.ext2.block_size);
-            const block = try self.data_block_iter.next(self.buffer.?);
+            self.data_block_iter.set_position(self.position / self.ext2.block_size)
+                    catch |e| {
+                print.format("ERROR: ext2.File.read: set_position: {}\n", .{@errorName(e)});
+                return io.FileError.Internal;
+            };
+            const block = self.data_block_iter.next(self.buffer.?) catch |e| {
+                print.format("ERROR: ext2.File.read: next: {}\n", .{@errorName(e)});
+                return io.FileError.Internal;
+            };
             if (block == null) break;
             const read_size = utils.memory_copy_truncate(
                 to[got..], block.?[self.position % self.ext2.block_size..]);
@@ -495,10 +502,10 @@ pub const Ext2 = struct {
         self.initialized = true;
     }
 
-    pub fn open(self: *Ext2, path: []const u8) Error!*File {
-        if (!self.initialized) return Error.InvalidFilesystem;
+    pub fn open(self: *Ext2, path: []const u8) fs.Error!*File {
+        if (!self.initialized) return fs.Error.InvalidFilesystem;
         var dir_inode: Inode = undefined;
-        try self.get_inode(Ext2.root_inode_number, &dir_inode);
+        self.get_inode(Ext2.root_inode_number, &dir_inode) catch return fs.Error.Internal;
 
         var it = fs.PathIterator.new(path);
         while (it.next()) |component| {
@@ -511,26 +518,33 @@ pub const Ext2 = struct {
                 if (utils.memory_compare(component, dir_iter.value.name)) {
                     if (dir_iter.value.inode.is_file()) {
                         if (!it.done()) {
-                            return Error.NotADirectory;
+                            return fs.Error.NotADirectory;
                         }
                         const file = try self.alloc.alloc(File);
-                        try file.init(self, dir_iter.value.inode_number);
+                        file.init(self, dir_iter.value.inode_number) catch
+                            return fs.Error.Internal;
                         return file;
                     } else if (dir_iter.value.inode.is_directory()) {
                         if (it.done()) {
-                            return Error.NotAFile;
+                            return fs.Error.NotAFile;
                         }
                         dir_inode = dir_iter.value.inode;
                         not_found = false;
                     } else {
                         // Don't know how to handle this is yet
-                        return if (it.done()) Error.NotAFile else Error.NotADirectory;
+                        return if (it.done()) fs.Error.NotAFile else fs.Error.NotADirectory;
                     }
                 }
             }
         }
 
-        return Error.FileNotFound;
+        return fs.Error.FileNotFound;
+    }
+
+    pub fn close(self: *Ext2, file: *File) io.FileError!void {
+        if (!self.initialized) return io.FileError.InvalidFileId;
+        try file.close();
+        try self.alloc.free(file);
     }
 
     pub fn open_dir(self: *Ext2, path: []const u8) Error!DirectoryIterator.Value {

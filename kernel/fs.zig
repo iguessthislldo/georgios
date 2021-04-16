@@ -10,6 +10,7 @@
 
 const std = @import("std");
 
+const georgios = @import("georgios");
 const utils = @import("utils");
 const Guid = utils.Guid;
 
@@ -18,18 +19,34 @@ const gpt = @import("gpt.zig");
 const io = @import("io.zig");
 const memory = @import("memory.zig");
 const print = @import("print.zig");
+const MappedList = @import("mapped_list.zig").MappedList;
 
-pub const Error = ext2.Error || gpt.Error || Guid.Error;
+pub const Error = georgios.fs.Error;
+pub const InitError = ext2.Error || gpt.Error || Guid.Error;
+
+const FileId = io.File.Id;
+
+fn file_id_eql(a: FileId, b: FileId) bool {
+    return a == b;
+}
+
+fn file_id_cmp(a: FileId, b: FileId) bool {
+    return a > b;
+}
 
 /// TODO: Make Abstract
 pub const File = ext2.File;
 
 /// TODO: Make Abstract
 pub const Filesystem = struct {
+    const OpenFiles = MappedList(FileId, *File, file_id_eql, file_id_cmp);
+
     impl: ext2.Ext2 = ext2.Ext2{},
+    open_files: OpenFiles = undefined,
+    next_file_id: FileId = 0,
 
     pub fn init(self: *Filesystem,
-            alloc: *memory.Allocator, block_store: *io.BlockStore) Error!void {
+            alloc: *memory.Allocator, block_store: *io.BlockStore) InitError!void {
         if (gpt.Disk.new(block_store)) |disk| {
             var disk_guid: [Guid.string_size]u8 = undefined;
             try disk.guid.to_string(disk_guid[0..]);
@@ -80,10 +97,32 @@ pub const Filesystem = struct {
         }
 
         try self.impl.init(alloc, block_store);
+
+        self.open_files = OpenFiles{.alloc = alloc};
     }
 
     pub fn open(self: *Filesystem, path: []const u8) Error!*File {
-        return self.impl.open(path);
+        const file = try self.impl.open(path);
+        file.io_file.id = self.next_file_id;
+        self.next_file_id += 1;
+        try self.open_files.push_front(file.io_file.id.?, file);
+        return file;
+    }
+
+    pub fn file_id_read(self: *Filesystem, id: FileId, to: []u8) io.FileError!usize {
+        if (self.open_files.find(id)) |file| {
+            return file.io_file.read(to);
+        } else {
+            return io.FileError.InvalidFileId;
+        }
+    }
+
+    pub fn file_id_close(self: *Filesystem, id: FileId) io.FileError!void {
+        if (try self.open_files.find_remove(id)) |file| {
+            try self.impl.close(file);
+        } else {
+            return io.FileError.InvalidFileId;
+        }
     }
 };
 

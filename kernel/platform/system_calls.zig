@@ -115,6 +115,32 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: print_hex(value: u32) void
         7 => print.hex(arg1),
 
+        // SYSCALL: file_open(&path: []const u8) georgios.fs.Error!georgios.io.File.Id
+        8 => {
+            const path = @intToPtr(*[]const u8, arg1);
+            const rv = @intToPtr(*georgios.fs.Error!georgios.io.File.Id, arg2);
+            const fs_file = kernel.filesystem.open(path.*) catch |e| {
+                rv.* = e;
+                return;
+            };
+            rv.* = fs_file.io_file.id.?;
+        },
+
+        // SYSCALL: file_read(id: georgios.io.File.Id, &to: []u8) georgios.io.FileError!usize
+        9 => {
+            const id = arg1;
+            const to = @intToPtr(*[]u8, arg2);
+            const rv = @intToPtr(*georgios.io.FileError!usize, arg3);
+            rv.* = kernel.filesystem.file_id_read(id, to.*);
+        },
+
+        // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
+        10 => {
+            const id = arg1;
+            const rv = @intToPtr(*georgios.io.FileError!void, arg2);
+            rv.* = kernel.filesystem.file_id_close(id);
+        },
+
         else => @panic("Invalid System Call"),
     }
 }

@@ -35,6 +35,7 @@ fn add_tests(source: []const u8) void {
     const tests = b.addTest(source);
     tests.setBuildMode(build_mode);
     tests.addPackage(utils_pkg);
+    tests.addPackage(georgios_pkg);
     test_step.dependOn(&tests.step);
 }
 
@@ -75,6 +76,7 @@ pub fn build(builder: *std.build.Builder) void {
     // Tests
     test_step = b.step("test", "Run Tests");
     add_tests("libs/utils/test.zig");
+    add_tests("libs/georgios/test.zig");
     add_tests("kernel/test.zig");
 
     // Kernel
@@ -100,6 +102,7 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("shell");
     build_program("hello");
     build_program("ls");
+    build_program("cat");
 }
 
 fn build_acpica() void {

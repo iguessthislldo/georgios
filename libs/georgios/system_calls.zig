@@ -58,3 +58,34 @@ pub inline fn print_hex(value: u32) void {
         [arg1] "{ebx}" (value),
         );
 }
+
+pub inline fn file_open(path: []const u8) georgios.fs.Error!georgios.io.File.Id {
+    var rv: georgios.fs.Error!georgios.io.File.Id = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 8)),
+        [arg1] "{ebx}" (@ptrToInt(&path)),
+        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub inline fn file_read(id: georgios.io.File.Id, to: []u8) georgios.io.FileError!usize {
+    var rv: georgios.io.FileError!usize = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 9)),
+        [arg1] "{ebx}" (id),
+        [arg2] "{ecx}" (@ptrToInt(&to)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub inline fn file_close(id: georgios.io.File.Id) georgios.io.FileError!void {
+    var rv: georgios.io.FileError!void = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 10)),
+        [arg1] "{ebx}" (id),
+        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}

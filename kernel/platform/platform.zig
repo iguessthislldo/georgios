@@ -89,7 +89,7 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     return from.len;
 }
 
-fn console_read(file: *io.File, to: []u8) anyerror!usize {
+fn console_read(file: *io.File, to: []u8) io.FileError!usize {
     return 0;
 }
 
