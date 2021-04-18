@@ -44,6 +44,14 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // a should be read from arg1, b should be read from arg2, and the
         // return value should be written to arg3.
         //
+        // System calls that return Zig errors should use ValueOrError and must
+        // set something. This type exists because Zig errors can only safely
+        // be used within the same compilation. To get around that this type
+        // translates the kernel Zig errors to ABI-stable values to pass across
+        // the system call boundary. In user space, the same type tries to
+        // translate the values back to Zig errors. If the kernel error type is
+        // unknown to the user program it gets the utils.Error.Unknown error.
+        //
         // The following must come after a SYSCALL comment and before the
         // system call implementation:
         //
@@ -72,19 +80,21 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_manager.remove_current_thread();
         },
 
-        // SYSCALL: exec(info: *const georgios.ProcessInfo) failure: bool
+        // SYSCALL: exec(info: *const georgios.ProcessInfo) georgios.ExecError!void
         // IMPORT: georgios "georgios.zig"
         4 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(void, georgios.ExecError);
+            // Should not be able to create kernel mode process from a system
+            // call that can be called from user mode.
             var info = @intToPtr(*const georgios.ProcessInfo, arg1).*;
             info.kernel_mode = false;
-            const failure_ptr = @intToPtr(*bool, arg2);
-            failure_ptr.* = false;
-            const pid = kernel.exec(&info) catch |e| {
-                print.format("exec failed: {}\n", .{@errorName(e)});
-                failure_ptr.* = true;
-                return;
-            };
-            kernel.threading_manager.wait_for_process(pid);
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.exec(&info)) |pid| {
+                kernel.threading_manager.wait_for_process(pid);
+                rv.set_value(.{});
+            } else |e| {
+                rv.set_error(e);
+            }
         },
 
         // SYSCALL: get_key() key: georgios.keyboard.Event
@@ -99,6 +109,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
+        // TODO: Return Zig Error
         // SYSCALL: next_dir_entry(iter: *georgios.DirEntry) bool
         // IMPORT: georgios "georgios.zig"
         6 => {
@@ -117,28 +128,42 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: file_open(&path: []const u8) georgios.fs.Error!georgios.io.File.Id
         8 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                georgios.io.File.Id, georgios.fs.Error);
             const path = @intToPtr(*[]const u8, arg1);
-            const rv = @intToPtr(*georgios.fs.Error!georgios.io.File.Id, arg2);
-            const fs_file = kernel.filesystem.open(path.*) catch |e| {
-                rv.* = e;
-                return;
-            };
-            rv.* = fs_file.io_file.id.?;
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.filesystem.open(path.*)) |fs_file| {
+                rv.set_value(fs_file.io_file.id.?);
+            } else |e| {
+                rv.set_error(e);
+            }
         },
 
         // SYSCALL: file_read(id: georgios.io.File.Id, &to: []u8) georgios.io.FileError!usize
         9 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                usize, georgios.io.FileError);
             const id = arg1;
             const to = @intToPtr(*[]u8, arg2);
-            const rv = @intToPtr(*georgios.io.FileError!usize, arg3);
-            rv.* = kernel.filesystem.file_id_read(id, to.*);
+            const rv = @intToPtr(*ValueOrError, arg3);
+            if (kernel.filesystem.file_id_read(id, to.*)) |read| {
+                rv.set_value(read);
+            } else |e| {
+                rv.set_error(e);
+            }
         },
 
         // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
         10 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                void, georgios.io.FileError);
             const id = arg1;
-            const rv = @intToPtr(*georgios.io.FileError!void, arg2);
-            rv.* = kernel.filesystem.file_id_close(id);
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.filesystem.file_id_close(id)) {
+                rv.set_value(.{});
+            } else |e| {
+                rv.set_error(e);
+            }
         },
 
         else => @panic("Invalid System Call"),

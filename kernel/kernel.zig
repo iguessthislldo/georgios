@@ -54,7 +54,7 @@ pub fn init() !void {
     try threading_manager.init();
 }
 
-pub fn exec(info: *const georgios.ProcessInfo) !threading.Process.Id {
+pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_manager.new_process(info);
     var ext2_file = try filesystem.open(info.path);
     var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);

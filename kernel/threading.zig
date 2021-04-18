@@ -11,7 +11,7 @@ const MappedList = @import("mapped_list.zig").MappedList;
 
 pub const debug = false;
 
-pub const Error = pthreading.Error;
+pub const Error = georgios.threading.Error;
 
 pub const Thread = struct {
     pub const Id = u32;

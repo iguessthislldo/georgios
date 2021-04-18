@@ -50,3 +50,17 @@ pub const fs = struct {
         return io.File{.valid = true, .id = try system_calls.file_open(path)};
     }
 };
+
+pub const threading = struct {
+    pub const Error = utils.Error || memory.MemoryError;
+};
+
+pub const elf = struct {
+    pub const Error = error {
+        InvalidElfFile,
+        InvalidElfObjectType,
+        InvalidElfPlatform,
+    };
+};
+
+pub const ExecError = fs.Error || threading.Error || elf.Error;

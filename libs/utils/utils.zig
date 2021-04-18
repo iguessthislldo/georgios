@@ -9,6 +9,7 @@ pub const Utf8ToUtf32Result = unicode.Utf8ToUtf32Result;
 pub const Guid = @import("guid.zig");
 
 pub const Error = error {
+    Unknown,
     OutOfBounds,
     NotEnoughSource,
     NotEnoughDestination,

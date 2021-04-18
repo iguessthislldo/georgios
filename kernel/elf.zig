@@ -8,6 +8,7 @@
 //   ELF on OSDev Wiki: https://wiki.osdev.org/ELF
 //   man elf
 
+const georgios = @import("georgios");
 const utils = @import("utils");
 
 const io = @import("io.zig");
@@ -17,11 +18,7 @@ const List = @import("list.zig").List;
 
 const debug = false;
 
-pub const Error = error {
-    InvalidElfFile,
-    InvalidElfObjectType,
-    InvalidElfPlatform,
-};
+pub const Error = georgios.elf.Error;
 
 // TODO: Create Seperate 32 and 64 bit Versions ([ui]size -> [ui]32, [ui]64)
 const SectionHeader = packed struct {

@@ -17,7 +17,7 @@ const interrupts = @import("interrupts.zig");
 const InterruptStack = interrupts.InterruptStack;
 const segments = @import("segments.zig");
 
-pub const Error = utils.Error || kmemory.MemoryError;
+pub const Error = georgios.threading.Error;
 
 const pmem = &kernel.memory.platform_memory;
 

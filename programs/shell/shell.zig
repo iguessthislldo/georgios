@@ -90,15 +90,17 @@ pub fn main() void {
                 if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {
                     command_path = path[0..];
                 }
-                if (system_calls.exec(&georgios.ProcessInfo{
-                        .path = command_path,
-                        .name = command_parts[0],
-                        .args = command_parts[1..command_part_count],
-                        })) {
-                    system_calls.print_string("Command: ");
+                system_calls.exec(&georgios.ProcessInfo{
+                    .path = command_path,
+                    .name = command_parts[0],
+                    .args = command_parts[1..command_part_count],
+                }) catch |e| {
+                    system_calls.print_string("Command: \"");
                     system_calls.print_string(command);
-                    system_calls.print_string(" failed\n");
-                }
+                    system_calls.print_string("\" failed: ");
+                    system_calls.print_string(@errorName(e));
+                    system_calls.print_string("\n");
+                };
             }
             got = 0;
         }
