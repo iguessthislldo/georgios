@@ -196,13 +196,14 @@ pub fn from_unicode(c: u32) ?u8 {
     return null;
 }
 
+var utf32_buffer: [128]u32 = undefined;
+var utf8_to_utf32 = utils.Utf8ToUtf32{.input = undefined, .buffer = utf32_buffer[0..]};
+
 pub fn print_utf8_string(s: []const u8) void {
-    var b: [128]u32 = undefined;
-    var r = utils.Utf8ToUtf32Result{.leftovers=s[0..]};
-    while (true) {
-        r = utils.utf8_to_utf32(r.leftovers, b[0..])
-            catch @panic("UTF-8 CGA Console Failure");
-        for (r.fit_in_output[0..]) |i| {
+    utf8_to_utf32.input = s;
+    while (utf8_to_utf32.input.len > 0) {
+        const utf32_str = utf8_to_utf32.next() catch @panic("UTF-8 CGA Console Failure");
+        for (utf32_str) |i| {
             switch (i) {
                 '\n' => new_line(),
                 '\x08' => backspace(),
@@ -211,6 +212,5 @@ pub fn print_utf8_string(s: []const u8) void {
                 else => direct_print_char(if (from_unicode(i)) |c437| c437 else '?'),
             }
         }
-        if (r.leftovers.len == 0) break;
     }
 }
