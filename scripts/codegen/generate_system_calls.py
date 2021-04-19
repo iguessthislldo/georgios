@@ -13,6 +13,7 @@ debug = False
 impl_file = Path('kernel/platform/system_calls.zig')
 interface_file = Path('libs/georgios/system_calls.zig')
 this_file = Path(__file__)
+syscall_error_values_file = Path('tmp/syscall_error_values.zig')
 
 int_num = None
 syscall = None
@@ -153,8 +154,9 @@ for call in syscalls.values():
         error_types[error_type] = []
 
 # Get all the error values/codes of the error types used by the system calls.
+syscall_error_values_file.parent.mkdir(parents=True, exist_ok=True)
 for error_type in error_types:
-    with open('tmp/syscall_error_values.zig', 'w') as f:
+    with syscall_error_values_file.open('w') as f:
         print('''\
             const std = @import("std");
             const georgios = @import("georgios");
@@ -170,7 +172,7 @@ for error_type in error_types:
         'zig', 'run',
         '--pkg-begin', 'georgios', 'libs/georgios/georgios.zig',
         '--pkg-begin', 'utils', 'libs/utils/utils.zig',
-        'tmp/syscall_error_values.zig',
+        str(syscall_error_values_file),
         '--pkg-end',
         '--pkg-end']).decode('utf-8').split('\n') if s]
 
