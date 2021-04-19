@@ -34,7 +34,7 @@ pub fn main() void {
     var got: usize = 0;
     var running = true;
     while (running) {
-        system_calls.print_string("% ");
+        system_calls.print_string("░▒▓\x1b[7m%\x1b[7m");
         var getline = true;
         while (getline) {
             const key_event = system_calls.get_key();
@@ -85,22 +85,25 @@ pub fn main() void {
             if (command_part_count > 0) {
                 if (utils.memory_compare(command_parts[0], "exit")) {
                     break;
+                } else if (utils.memory_compare(command_parts[0], "reset")) {
+                    system_calls.print_string("\x1bc"); // Reset Console
+                } else {
+                    var command_path = command_parts[0];
+                    if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {
+                        command_path = path[0..];
+                    }
+                    system_calls.exec(&georgios.ProcessInfo{
+                        .path = command_path,
+                        .name = command_parts[0],
+                        .args = command_parts[1..command_part_count],
+                    }) catch |e| {
+                        system_calls.print_string("Command: \"");
+                        system_calls.print_string(command);
+                        system_calls.print_string("\" failed: ");
+                        system_calls.print_string(@errorName(e));
+                        system_calls.print_string("\n");
+                    };
                 }
-                var command_path = command_parts[0];
-                if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {
-                    command_path = path[0..];
-                }
-                system_calls.exec(&georgios.ProcessInfo{
-                    .path = command_path,
-                    .name = command_parts[0],
-                    .args = command_parts[1..command_part_count],
-                }) catch |e| {
-                    system_calls.print_string("Command: \"");
-                    system_calls.print_string(command);
-                    system_calls.print_string("\" failed: ");
-                    system_calls.print_string(@errorName(e));
-                    system_calls.print_string("\n");
-                };
             }
             got = 0;
         }

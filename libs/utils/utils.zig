@@ -5,6 +5,8 @@ const unicode = @import("unicode.zig");
 pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
 pub const UnicodeError = unicode.Error;
 
+pub const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
+
 pub const Guid = @import("guid.zig");
 
 pub const Error = error {

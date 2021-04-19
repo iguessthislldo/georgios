@@ -73,7 +73,7 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
 
 pub fn run() !void {
     try init();
-    platform.impl.cga_console.new_page();
+    print.string("\x1bc"); // Reset Console
     threading_manager.wait_for_process(
         try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
 }

@@ -1,3 +1,5 @@
+const utils = @import("utils");
+
 const util = @import("util.zig");
 const out8 = util.out8;
 const in8 = util.in8;
@@ -14,7 +16,16 @@ pub fn init() void {
     out8(com1_port + 4, 0x0B); // IRQs enabled, RTS/DSR set
 }
 
-pub fn print_char(c: u8) void {
+pub fn output_char(c: u8) void {
     while ((in8(com1_port + 5) & 0x20) == 0) {}
     out8(com1_port, c);
+}
+
+var ansi_esc_processor = utils.AnsiEscProcessor{
+    .print_char = output_char,
+};
+
+pub fn print_char(c: u8) void {
+    // ansi_esc_processor.feed_char(c);
+    output_char(c);
 }
