@@ -511,11 +511,11 @@ const Controller = struct {
         self.device_interface.deinit_impl = Controller.deinit;
 
         // Make sure this is Triton II controller emulated by QEMU
-        if (header.vendor_id != 0x8086 or header.device_id != 0x7010 or
-                header.prog_if != 0x80) {
-            print.string(log_indent ++ "- Unknown IDE Controller\n");
-            return;
-        }
+        // if (header.vendor_id != 0x8086 or header.device_id != 0x7010 or
+        //         header.prog_if != 0x80) {
+        //     print.string(log_indent ++ "- Unknown IDE Controller\n");
+        //     return;
+        // }
 
         // Would use to access PCI provided information if needed
         // const normal_header = pci.NormalHeader.get(location);

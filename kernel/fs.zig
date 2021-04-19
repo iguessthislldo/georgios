@@ -47,6 +47,7 @@ pub const Filesystem = struct {
 
     pub fn init(self: *Filesystem,
             alloc: *memory.Allocator, block_store: *io.BlockStore) InitError!void {
+        var found = false;
         if (gpt.Disk.new(block_store)) |disk| {
             var disk_guid: [Guid.string_size]u8 = undefined;
             try disk.guid.to_string(disk_guid[0..]);
@@ -81,10 +82,9 @@ pub const Filesystem = struct {
                     // TODO: Acutally see if this the right partition
                     print.string("     - Is Linux!\n");
                     self.impl.offset = part.start * block_store.block_size;
+                    found = true;
                 }
             }
-
-            // TODO: If partition isn't found?
 
         } else |e| {
             if (e != gpt.Error.InvalidMbr) {
@@ -93,10 +93,16 @@ pub const Filesystem = struct {
                 print.string(" - Disk doesn't have a MBR, going to try to use whole " ++
                     "disk as a ext2 filesystem.\n");
                 // Else try to use whole disk
+                found = true;
             }
         }
 
-        try self.impl.init(alloc, block_store);
+        if (found) {
+            print.string(" - Filesystem\n");
+            try self.impl.init(alloc, block_store);
+        } else {
+            print.string(" - No Filesystem\n");
+        }
 
         self.open_files = OpenFiles{.alloc = alloc};
     }
