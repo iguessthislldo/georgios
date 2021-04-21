@@ -337,7 +337,7 @@ pub const Memory = struct {
         return range.to_slice(u8);
     }
 
-    fn page_free(allocator: *kmemory.Allocator, value: []u8) FreeError!void {
+    fn page_free(allocator: *kmemory.Allocator, value: []const u8) FreeError!void {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
         // TODO
     }

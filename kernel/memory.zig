@@ -78,7 +78,7 @@ pub const RealMemoryMap = struct {
 var alloc_debug = false;
 pub const Allocator = struct {
     alloc_impl: fn(self: *Allocator, size: usize) AllocError![]u8,
-    free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
+    free_impl: fn(self: *Allocator, value: []const u8) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
         if (alloc_debug) print.string(

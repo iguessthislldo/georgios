@@ -268,7 +268,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             try self.block_statuses.set(new_unique_id, .Free);
         }
 
-        fn free(allocator: *Allocator, value: []u8) FreeError!void {
+        fn free(allocator: *Allocator, value: []const u8) FreeError!void {
             const self = @fieldParentPtr(Self, "allocator", allocator);
 
             if (value.len > max_size) return FreeError.InvalidFree;
