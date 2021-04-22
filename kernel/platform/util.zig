@@ -32,6 +32,24 @@ pub fn in32(port: u16) u32 {
         [rv] "={al}" (-> u32) : [port] "N{dx}" (port) );
 }
 
+pub fn out(comptime Type: type, port: u16, val: Type) void {
+    switch (Type) {
+        u8 => out8(port, val),
+        u16 => out16(port, val),
+        u32 => out32(port, val),
+        else => @compileError("Invalid Type: " ++ @typeName(Type)),
+    }
+}
+
+pub fn in(comptime Type: type, port: u16) Type {
+    return switch (Type) {
+        u8 => in8(port),
+        u16 => in16(port),
+        u32 => in32(port),
+        else => @compileError("Invalid Type: " ++ @typeName(Type)),
+    };
+}
+
 /// Copy a series of bytes into destination, like using in8 over the slice.
 ///
 /// https://c9x.me/x86/html/file_module_x86_id_141.html

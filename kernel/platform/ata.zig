@@ -488,7 +488,6 @@ const Controller = struct {
         }
     };
 
-    pci_location: pci.Location = undefined,
     primary: Channel = Channel{
         .id = Channel.Id.Primary,
         .io_base_port = default_primary_io_base_port,
@@ -504,9 +503,7 @@ const Controller = struct {
     device_interface: devices.Device = undefined,
     alloc: *Allocator = undefined,
 
-    pub fn init(self: *Controller,
-            alloc: *Allocator, location: pci.Location, header: *const pci.Header) void {
-        self.pci_location = location;
+    pub fn init(self: *Controller, alloc: *Allocator) void {
         self.alloc = alloc;
         self.device_interface.deinit_impl = Controller.deinit;
 
@@ -516,10 +513,6 @@ const Controller = struct {
         //     print.string(log_indent ++ "- Unknown IDE Controller\n");
         //     return;
         // }
-
-        // Would use to access PCI provided information if needed
-        // const normal_header = pci.NormalHeader.get(location);
-        // _ = normal_header.print(print.get_console_file().?) catch {};
 
         // TODO Better error handling
         const temp_sector = alloc.alloc(Sector) catch @panic("ATA init alloc error");
@@ -539,12 +532,12 @@ const Controller = struct {
     }
 };
 
-pub fn init(location: pci.Location, header: *const pci.Header) void {
+pub fn init(dev: *const pci.Dev) void {
     var controller = kernel.memory.small_alloc.alloc(Controller) catch {
         @panic("Failure");
     };
     controller.* = Controller{};
-    controller.init(kernel.memory.small_alloc, location, header);
+    controller.init(kernel.memory.small_alloc);
     kernel.devices.add_device(&controller.device_interface) catch {
         @panic("Failure");
     };

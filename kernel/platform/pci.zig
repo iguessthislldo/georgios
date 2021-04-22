@@ -8,6 +8,7 @@ const utils = @import("utils");
 const print = @import("../print.zig");
 const fprint = @import("../fprint.zig");
 const io = @import("../io.zig");
+const memory = @import("../memory.zig");
 
 const putil = @import("util.zig");
 const ata = @import("ata.zig");
@@ -53,36 +54,35 @@ pub const Device = u5;
 pub const Function = u3;
 pub const Offset = u8;
 
-pub const Location = struct {
-    bus: Bus,
-    device: Device,
+pub const Location = packed struct {
     function: Function,
+    device: Device,
+    bus: Bus,
 };
 
-inline fn read_config16(location: Location, offset: Offset) u16 {
-    const Config = packed struct {
-        offset: Offset,
-        function: Function,
-        device: Device,
-        bus: Bus,
-        reserved: u7 = 0,
-        enabled: bool = true,
-    };
-    const config = Config{
-        .bus = location.bus,
-        .device = location.device,
-        .function = location.function,
-        .offset = offset & 0xFC,
-    };
-    putil.out32(0x0CF8, @bitCast(u32, config));
+const Config = packed struct {
+    offset: Offset,
+    location: Location,
+    reserved: u7 = 0,
+    enabled: bool = true,
+};
 
-    return @intCast(u16, (putil.in32(0x0CFC) >>
-        @intCast(u5, (offset & 2) * 8) & 0xFFFF) & 0xFFFF);
+inline fn config_port(comptime Type: type, location: Location, offset: Offset) u16 {
+    const config = Config{
+        .offset = offset & 0xFC,
+        .location = location,
+    };
+    putil.out(u32, 0x0CF8, @bitCast(u32, config));
+    return 0x0CFC + @intCast(u16, if (Type == u32) 0 else (offset & 3));
 }
 
-inline fn read_config8(location: Location, offset: Offset) u8 {
-    return @intCast(u8, (read_config16(
-        location, offset) >> @intCast(u4, (offset *% 8) & 0xF)) & 0xFF);
+inline fn read_config(comptime Type: type, location: Location, offset: Offset) Type {
+    return putil.in(Type, config_port(Type, location, offset));
+}
+
+inline fn write_config(
+        comptime Type: type, location: Location, offset: Offset, value: Type) void {
+    putil.out(Type, config_port(Type, location, offset), value);
 }
 
 pub const Header = packed struct {
@@ -251,40 +251,68 @@ pub const Header = packed struct {
         const Self = @This();
         var rv: [@sizeOf(Self)]u8 = undefined;
         for (rv[0..]) |*ptr, i| {
-            ptr.* = read_config8(location, @intCast(Offset, i));
+            ptr.* = read_config(u8, location, @intCast(Offset, i));
         }
         return @bitCast(Self, rv);
     }
 };
 
-pub const NormalHeader = packed struct {
-    bars: [6]u32 = undefined,
+pub const Dev = struct {
+    pub const BaseAddress = union(enum) {
+        // TODO
+        // Io: struct {
+        //     port: u16,
+        // },
+        memory: struct {
+            range: memory.Range,
+            // TODO
+            // prefetchable: bool,
+            // is64b: bool,
+        },
+    };
 
-    pub fn print(self: *const NormalHeader, file: *io.File) io.FileError!void {
-        try fprint.format(file,
-            \\     - bar0: {:x}
-            \\     - bar1: {:x}
-            \\     - bar2: {:x}
-            \\     - bar3: {:x}
-            \\     - bar4: {:x}
-            \\     - bar5: {:x}
-            \\
-            , .{
-            self.bars[0],
-            self.bars[1],
-            self.bars[2],
-            self.bars[3],
-            self.bars[4],
-            self.bars[5]});
+    location: Location,
+    header: Header,
+    base_addresses: [6]?BaseAddress = [_]?BaseAddress {null} ** 6,
+
+    fn read_base_addresses(self: *Dev) void {
+        for (self.base_addresses[0..]) |*ptr, i| {
+            const offset = @sizeOf(Header) + 4 * @intCast(Offset, i);
+            const raw_entry = read_config(u32, self.location, offset);
+            if (raw_entry == 0) {
+                continue;
+            }
+            if (raw_entry & 1 == 1) {
+                // TODO
+                print.format("       - BAR {}: I/O Entry (TODO)\n", .{i});
+                continue;
+            }
+
+            const address = raw_entry & ~@as(u32, 0xf);
+
+            write_config(u32, self.location, offset, 0xffffffff);
+            const size = ~(read_config(u32, self.location, offset) & ~@as(u32, 1)) +% 1;
+            write_config(u32, self.location, offset, raw_entry);
+
+            print.format("       - BAR {}: {:a}+{:x}\n", .{i, address, size}, );
+            ptr.* = BaseAddress{.memory = .{.range = .{.start = address, .size = size}}};
+        }
     }
 
-    pub fn get(location: Location) NormalHeader {
-        const Self = @This();
-        var rv: [@sizeOf(Self)]u8 = undefined;
-        for (rv[0..]) |*ptr, i| {
-            ptr.* = read_config8(location, @sizeOf(Header) + @intCast(Offset, i));
+    pub fn init(self: *Dev) void {
+        if (self.header.get_header_type()) |header_type| {
+            if (header_type == .Normal) {
+                self.read_base_addresses();
+            }
         }
-        return @bitCast(Self, rv);
+    }
+
+    pub fn read(self: *Dev, comptime Type: type, offset: Offset) Type {
+        return read_config(Type, self.location, offset);
+    }
+
+    pub fn write(self: *Dev, comptime Type: type, offset: Offset, value: Type) void {
+        write_config(Type, self.location, offset, value);
     }
 };
 
@@ -294,11 +322,12 @@ fn check_function(location: Location, header: *const Header) void {
         .{location.bus, location.device, location.function});
     _ = header.print(print.get_console_file().?) catch {};
     if (header.get_class()) |class| {
-        if (class == .BridgeDevice and header.subclass == 0x04) {
-            check_bus(read_config8(location, 0x19));
-        }
+        var dev = Dev{.location = location, .header = header.*};
+        dev.init();
         if (class == .MassStorageController and header.subclass == 0x01) {
-            ata.init(location, header);
+            ata.init(&dev);
+        } else if (class == .BridgeDevice and header.subclass == 0x04) {
+            check_bus(read_config(u8, location, 0x19));
         }
     }
 }
