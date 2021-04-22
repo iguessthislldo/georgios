@@ -164,7 +164,7 @@ pub const UnitTestAllocator = struct {
         return self.impl.allocator.alloc(u8, size) catch return AllocError.OutOfMemory;
     }
 
-    pub fn free(allocator: *Allocator, value: []u8) FreeError!void {
+    pub fn free(allocator: *Allocator, value: []const u8) FreeError!void {
         const self = @fieldParentPtr(Self, "allocator", allocator);
         std.testing.expectEqual(true, self.allocated >= value.len);
         self.allocated -= value.len;
