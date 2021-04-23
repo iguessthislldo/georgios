@@ -139,18 +139,18 @@ inline fn wait_ticks(ticks: u64) void {
     }
 }
 
-pub fn wait_seconds(seconds: u64) void {
-    wait_ticks(seconds * estimated_ticks_per_second);
+pub fn wait_seconds(s: u64) void {
+    wait_ticks(s * estimated_ticks_per_second);
 }
 
-pub fn wait_milliseconds(seconds: u64) void {
-    wait_ticks(seconds * estimated_ticks_per_millisecond);
+pub fn wait_milliseconds(ms: u64) void {
+    wait_ticks(ms * estimated_ticks_per_millisecond);
 }
 
-pub fn wait_microseconds(seconds: u64) void {
-    wait_ticks(seconds * estimated_ticks_per_microsecond);
+pub fn wait_microseconds(us: u64) void {
+    wait_ticks(us * estimated_ticks_per_microsecond);
 }
 
-pub fn wait_nanoseconds(seconds: u64) void {
-    wait_ticks(seconds * estimated_ticks_per_nanosecond);
+pub fn wait_nanoseconds(ns : u64) void {
+    wait_ticks(ns * estimated_ticks_per_nanosecond);
 }
