@@ -52,8 +52,12 @@ pub const fs = struct {
 };
 
 pub const threading = struct {
-    pub const Error = utils.Error || memory.MemoryError;
+    pub const Error = error {
+        NoCurrentProcess,
+    } || utils.Error || memory.MemoryError;
 };
+
+pub const ThreadingOrFsError = fs.Error || threading.Error;
 
 pub const elf = struct {
     pub const Error = error {
@@ -63,4 +67,4 @@ pub const elf = struct {
     };
 };
 
-pub const ExecError = fs.Error || threading.Error || elf.Error;
+pub const ExecError = ThreadingOrFsError || elf.Error;

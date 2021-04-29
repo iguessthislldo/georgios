@@ -31,18 +31,32 @@ pub fn main() void {
     system_calls.print_string("Type Ctrl-D or \"exit\" to Exit\n");
     var buffer: [128]u8 = undefined;
     var path_buffer: [123]u8 = undefined;
+    var cwd_buffer: [128]u8 = undefined;
     var got: usize = 0;
     var running = true;
     while (running) {
-        system_calls.print_string("░▒▓\x1b[7m%\x1b[7m");
+        system_calls.print_string("░▒▓\x1b[7m");
+        if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
+            if (!(dir.len == 1 and dir[0] == '/')) {
+                system_calls.print_string(dir);
+            }
+        } else |e| {
+            system_calls.print_string("???");
+        }
+        system_calls.print_string("%\x1b[7m");
         var getline = true;
         while (getline) {
             const key_event = system_calls.get_key();
             if (key_event.char) |c| {
-                if (c == 'd' and key_event.modifiers.control_is_pressed()) {
-                    got = 0;
-                    running = false;
-                    break;
+                if (key_event.modifiers.control_is_pressed()) {
+                    switch (c) {
+                        'd' => {
+                            got = 0;
+                            running = false;
+                            break;
+                        },
+                        else => {},
+                    }
                 }
                 var print = true;
                 if (c == '\n') {
@@ -87,6 +101,27 @@ pub fn main() void {
                     break;
                 } else if (utils.memory_compare(command_parts[0], "reset")) {
                     system_calls.print_string("\x1bc"); // Reset Console
+                } else if (utils.memory_compare(command_parts[0], "pwd")) {
+                    if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
+                        system_calls.print_string(dir);
+                        system_calls.print_string("\n");
+                    } else |e| {
+                        system_calls.print_string("Couldn't get current working directory: ");
+                        system_calls.print_string(@errorName(e));
+                        system_calls.print_string("\n");
+                    }
+                } else if (utils.memory_compare(command_parts[0], "cd")) {
+                    if (command_part_count != 2) {
+                        system_calls.print_string("cd requires exactly one argument\n");
+                    } else {
+                        system_calls.set_cwd(command_parts[1]) catch |e| {
+                            system_calls.print_string("Couldn't change current working directory to \"");
+                            system_calls.print_string(command_parts[1]);
+                            system_calls.print_string("\": ");
+                            system_calls.print_string(@errorName(e));
+                            system_calls.print_string("\n");
+                        };
+                    }
                 } else {
                     var command_path = command_parts[0];
                     if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {

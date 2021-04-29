@@ -17,6 +17,8 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
     const arg1 = interrupt_stack.ebx;
     const arg2 = interrupt_stack.ecx;
     const arg3 = interrupt_stack.edx;
+    const arg4 = interrupt_stack.edi;
+    const arg5 = interrupt_stack.esi;
 
     // TODO: Using pointers for args can cause Zig's alignment checks to fail.
     // Find a way around this without turning off safety?
@@ -154,12 +156,38 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         },
 
         // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
-        10 => {
+        12 => {
             const ValueOrError = georgios.system_calls.ValueOrError(
                 void, georgios.io.FileError);
             const id = arg1;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.filesystem.file_id_close(id)) {
+                rv.set_value(.{});
+            } else |e| {
+                rv.set_error(e);
+            }
+        },
+
+        // SYSCALL: get_cwd(&buffer: []u8) georgios.threading.Error![]const u8
+        13 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                []const u8, georgios.threading.Error);
+            const buffer = @intToPtr(*[]u8, arg1).*;
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.threading_manager.get_cwd(buffer)) |dir| {
+                rv.set_value(dir);
+            } else |e| {
+                rv.set_error(e);
+            }
+        },
+
+        // SYSCALL: set_cwd(&dir: []const u8) georgios.ThreadingOrFsError!void
+        14 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                void, georgios.ThreadingOrFsError);
+            const dir = @intToPtr(*[]const u8, arg1).*;
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.threading_manager.set_cwd(dir)) {
                 rv.set_value(.{});
             } else |e| {
                 rv.set_error(e);

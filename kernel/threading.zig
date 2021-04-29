@@ -62,8 +62,10 @@ pub const Process = struct {
     main_thread: Thread = .{},
     /// Address of First Instruction for Main Thread
     entry: usize = 0,
+    /// Current Working Directory
+    cwd: ?[]const u8 = null,
 
-    pub fn init(self: *Process) Error!void {
+    pub fn init(self: *Process, current: ?*Process) Error!void {
         // TODO: Cleanup on failure
 
         if (self.info) |*info| {
@@ -92,6 +94,8 @@ pub const Process = struct {
             }
         }
 
+        try self.set_cwd(if (current) |c| c.cwd.? else "/");
+
         try self.impl.init(self);
         self.main_thread.process = self;
         try self.main_thread.init(false);
@@ -110,6 +114,15 @@ pub const Process = struct {
     pub fn address_space_set(self: *Process,
             address: usize, byte: u8, len: usize) memory.AllocError!void {
         try self.impl.address_space_set(address, byte, len);
+    }
+
+    pub fn set_cwd(self: *Process, dir: []const u8) Error!void {
+        const new_cwd = try kernel.memory.small_alloc.alloc_array(u8, dir.len);
+        _ = utils.memory_copy_truncate(new_cwd, dir);
+        if (self.cwd) |cwd| {
+            try kernel.memory.small_alloc.free_array(cwd);
+        }
+        self.cwd = new_cwd;
     }
 };
 
@@ -156,7 +169,7 @@ pub const Manager = struct {
     pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
         const p = try self.new_process_i();
         p.info = info.*;
-        try p.init();
+        try p.init(self.current_process);
         return p;
     }
 
@@ -315,6 +328,22 @@ pub const Manager = struct {
         if (self.waiting_for_keyboard) |t| {
             t.state = .Run;
             self.waiting_for_keyboard = null;
+        }
+    }
+
+    pub fn get_cwd(self: *Manager, buffer: []u8) Error![]const u8 {
+        if (self.current_process) |proc| {
+            return buffer[0..try utils.memory_copy_error(buffer, proc.cwd.?)];
+        } else {
+            return Error.NoCurrentProcess;
+        }
+    }
+
+    pub fn set_cwd(self: *Manager, dir: []const u8) georgios.ThreadingOrFsError!void {
+        if (self.current_process) |proc| {
+            try proc.set_cwd(dir);
+        } else {
+            return Error.NoCurrentProcess;
         }
     }
 };

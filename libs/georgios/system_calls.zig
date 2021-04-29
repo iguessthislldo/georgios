@@ -21,6 +21,7 @@ const ErrorCode = enum(u32) {
     InvalidElfFile = 15,
     InvalidElfObjectType = 16,
     InvalidElfPlatform = 17,
+    NoCurrentProcess = 18,
     _,
 };
 
@@ -52,6 +53,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ExecError.OutOfMemory => ErrorCode.OutOfMemory,
                     georgios.ExecError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
                     georgios.ExecError.InvalidFree => ErrorCode.InvalidFree,
+                    georgios.ExecError.NoCurrentProcess => ErrorCode.NoCurrentProcess,
                     georgios.ExecError.InvalidElfFile => ErrorCode.InvalidElfFile,
                     georgios.ExecError.InvalidElfObjectType => ErrorCode.InvalidElfObjectType,
                     georgios.ExecError.InvalidElfPlatform => ErrorCode.InvalidElfPlatform,
@@ -84,6 +86,33 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.io.FileError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
                     georgios.io.FileError.InvalidFree => ErrorCode.InvalidFree,
                 },
+                georgios.threading.Error => switch (err) {
+                    georgios.threading.Error.NoCurrentProcess => ErrorCode.NoCurrentProcess,
+                    georgios.threading.Error.Unknown => ErrorCode.Unknown,
+                    georgios.threading.Error.OutOfBounds => ErrorCode.OutOfBounds,
+                    georgios.threading.Error.NotEnoughSource => ErrorCode.NotEnoughSource,
+                    georgios.threading.Error.NotEnoughDestination => ErrorCode.NotEnoughDestination,
+                    georgios.threading.Error.OutOfMemory => ErrorCode.OutOfMemory,
+                    georgios.threading.Error.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
+                    georgios.threading.Error.InvalidFree => ErrorCode.InvalidFree,
+                },
+                georgios.ThreadingOrFsError => switch (err) {
+                    georgios.ThreadingOrFsError.FileNotFound => ErrorCode.FileNotFound,
+                    georgios.ThreadingOrFsError.NotADirectory => ErrorCode.NotADirectory,
+                    georgios.ThreadingOrFsError.NotAFile => ErrorCode.NotAFile,
+                    georgios.ThreadingOrFsError.InvalidFilesystem => ErrorCode.InvalidFilesystem,
+                    georgios.ThreadingOrFsError.Unsupported => ErrorCode.Unsupported,
+                    georgios.ThreadingOrFsError.Internal => ErrorCode.Internal,
+                    georgios.ThreadingOrFsError.InvalidFileId => ErrorCode.InvalidFileId,
+                    georgios.ThreadingOrFsError.Unknown => ErrorCode.Unknown,
+                    georgios.ThreadingOrFsError.OutOfBounds => ErrorCode.OutOfBounds,
+                    georgios.ThreadingOrFsError.NotEnoughSource => ErrorCode.NotEnoughSource,
+                    georgios.ThreadingOrFsError.NotEnoughDestination => ErrorCode.NotEnoughDestination,
+                    georgios.ThreadingOrFsError.OutOfMemory => ErrorCode.OutOfMemory,
+                    georgios.ThreadingOrFsError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
+                    georgios.ThreadingOrFsError.InvalidFree => ErrorCode.InvalidFree,
+                    georgios.ThreadingOrFsError.NoCurrentProcess => ErrorCode.NoCurrentProcess,
+                },
                 else => @compileError(
                     "Invalid ErrorType for " ++ @typeName(Self) ++ ".set_error: " ++
                     @typeName(ErrorType)),
@@ -109,6 +138,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .OutOfMemory => georgios.ExecError.OutOfMemory,
                         .ZeroSizedAlloc => georgios.ExecError.ZeroSizedAlloc,
                         .InvalidFree => georgios.ExecError.InvalidFree,
+                        .NoCurrentProcess => georgios.ExecError.NoCurrentProcess,
                         .InvalidElfFile => georgios.ExecError.InvalidElfFile,
                         .InvalidElfObjectType => georgios.ExecError.InvalidElfObjectType,
                         .InvalidElfPlatform => georgios.ExecError.InvalidElfPlatform,
@@ -142,6 +172,35 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .OutOfMemory => georgios.io.FileError.OutOfMemory,
                         .ZeroSizedAlloc => georgios.io.FileError.ZeroSizedAlloc,
                         .InvalidFree => georgios.io.FileError.InvalidFree,
+                        else => utils.Error.Unknown,
+                    },
+                    georgios.threading.Error => switch (error_code) {
+                        .NoCurrentProcess => georgios.threading.Error.NoCurrentProcess,
+                        .Unknown => georgios.threading.Error.Unknown,
+                        .OutOfBounds => georgios.threading.Error.OutOfBounds,
+                        .NotEnoughSource => georgios.threading.Error.NotEnoughSource,
+                        .NotEnoughDestination => georgios.threading.Error.NotEnoughDestination,
+                        .OutOfMemory => georgios.threading.Error.OutOfMemory,
+                        .ZeroSizedAlloc => georgios.threading.Error.ZeroSizedAlloc,
+                        .InvalidFree => georgios.threading.Error.InvalidFree,
+                        else => utils.Error.Unknown,
+                    },
+                    georgios.ThreadingOrFsError => switch (error_code) {
+                        .FileNotFound => georgios.ThreadingOrFsError.FileNotFound,
+                        .NotADirectory => georgios.ThreadingOrFsError.NotADirectory,
+                        .NotAFile => georgios.ThreadingOrFsError.NotAFile,
+                        .InvalidFilesystem => georgios.ThreadingOrFsError.InvalidFilesystem,
+                        .Unsupported => georgios.ThreadingOrFsError.Unsupported,
+                        .Internal => georgios.ThreadingOrFsError.Internal,
+                        .InvalidFileId => georgios.ThreadingOrFsError.InvalidFileId,
+                        .Unknown => georgios.ThreadingOrFsError.Unknown,
+                        .OutOfBounds => georgios.ThreadingOrFsError.OutOfBounds,
+                        .NotEnoughSource => georgios.ThreadingOrFsError.NotEnoughSource,
+                        .NotEnoughDestination => georgios.ThreadingOrFsError.NotEnoughDestination,
+                        .OutOfMemory => georgios.ThreadingOrFsError.OutOfMemory,
+                        .ZeroSizedAlloc => georgios.ThreadingOrFsError.ZeroSizedAlloc,
+                        .InvalidFree => georgios.ThreadingOrFsError.InvalidFree,
+                        .NoCurrentProcess => georgios.ThreadingOrFsError.NoCurrentProcess,
                         else => utils.Error.Unknown,
                     },
                     else => @compileError(
@@ -235,8 +294,28 @@ pub inline fn file_read(id: georgios.io.File.Id, to: []u8) georgios.io.FileError
 pub inline fn file_close(id: georgios.io.File.Id) georgios.io.FileError!void {
     var rv: ValueOrError(void, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::
-        [syscall_number] "{eax}" (@as(u32, 10)),
+        [syscall_number] "{eax}" (@as(u32, 12)),
         [arg1] "{ebx}" (id),
+        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
+pub inline fn get_cwd(buffer: []u8) georgios.threading.Error![]const u8 {
+    var rv: ValueOrError([]const u8, georgios.threading.Error) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 13)),
+        [arg1] "{ebx}" (@ptrToInt(&buffer)),
+        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
+pub inline fn set_cwd(dir: []const u8) georgios.ThreadingOrFsError!void {
+    var rv: ValueOrError(void, georgios.ThreadingOrFsError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 14)),
+        [arg1] "{ebx}" (@ptrToInt(&dir)),
         [arg2] "{ecx}" (@ptrToInt(&rv)),
         );
     return rv.get();

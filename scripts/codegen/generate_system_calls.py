@@ -36,7 +36,7 @@ def error(*args, **kwargs):
     sys.exit(1)
 
 
-decompose_sig_re = re.compile(r'^(\w+)\((.*)\) (?:([^ :]+): )?((?:([^ !]+)!)?([\w\.]+))$')
+decompose_sig_re = re.compile(r'^(\w+)\((.*)\) (?:([^ :]+): )?((?:([^ !]+)!)?([ \[\]\w\.]+))$')
 error_re = re.compile(r'^(.*)!')
 def decompose_sig(sig):
     m = decompose_sig_re.match(sig)
@@ -296,8 +296,8 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
         required_regs = len(args) + 1 if has_return else 0
         avail_regs = len(syscall_regs)
         if required_regs > avail_regs:
-            error('System call {} requires {} registers, but the max is',
-                repr(sig), required_regs, avail_regs)
+            error('System call {} requires {} registers, but the max is {}'.format(
+                repr(sig), required_regs, avail_regs))
 
         print('\npub inline fn {}({}) {} {{'.format(
             name,
