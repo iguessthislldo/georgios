@@ -51,6 +51,9 @@ pub fn build(builder: *std.build.Builder) void {
     const debug_log = b.option(bool, "debug_log",
         \\Print debug information by default
         ) orelse true;
+    const wait_for_anykey = b.option(bool, "wait_for_anykey",
+        \\Wait for key press at important events
+        ) orelse false;
 
     target = b.standardTargetOptions(.{
         .default_target = std.zig.CrossTarget.parse(.{
@@ -89,6 +92,7 @@ pub fn build(builder: *std.build.Builder) void {
     kernel.addBuildOption(bool,
         "multiboot_vga_request", multiboot_vga_request);
     kernel.addBuildOption(bool, "debug_log", debug_log);
+    kernel.addBuildOption(bool, "wait_for_anykey", wait_for_anykey);
     // build_acpica();
     kernel.addPackage(utils_pkg);
     kernel.addPackage(georgios_pkg);

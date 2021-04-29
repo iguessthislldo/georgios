@@ -16,6 +16,8 @@ pub const fs = @import("fs.zig");
 pub var panic_message: []const u8 = "";
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    print.format("panic: {}\n", .{msg});
+    platform.impl.ps2.anykey();
     panic_message = msg;
     if (trace) |t| {
         print.format("index: {}\n", .{t.index});

@@ -13,6 +13,7 @@ DEBUGGER:=gdb
 
 multiboot_vga_request?=false
 debug_log?=true
+wait_for_anykey?=false
 
 all: $(ISO) $(DISK)
 
@@ -22,6 +23,7 @@ build_georgios:
 	$(ZIG) build \
 		-Dmultiboot_vga_request=$(multiboot_vga_request) \
 		-Ddebug_log=$(debug_log) \
+		-Dwait_for_anykey=$(wait_for_anykey) \
 
 	grub-file --is-x86-multiboot2 $(KERNEL)
 	nm --print-size --numeric-sort $(KERNEL) | grep -v '__' > tmp/annotated_kernel

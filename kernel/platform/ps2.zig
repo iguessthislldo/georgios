@@ -2,6 +2,8 @@
 // PS/2 Keyboard Interface
 // ============================================================================
 
+const build_options = @import("build_options");
+
 const utils = @import("utils");
 const georgios = @import("georgios");
 const keyboard = georgios.keyboard;
@@ -179,4 +181,16 @@ pub fn init() void {
         "IRQ1: Keyboard", segments.kernel_code_selector, interrupts.kernel_flags);
     interrupts.load();
     interrupts.pic.allow_irq(1, true);
+}
+
+pub fn anykey() void {
+    if (build_options.wait_for_anykey) {
+        while (true) {
+            if (get_key()) |key| {
+                if (key.kind == .Released) {
+                    break;
+                }
+            }
+        }
+    }
 }

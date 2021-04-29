@@ -126,8 +126,8 @@ pub fn init() !void {
 
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
-    pci.find_pci_devices();
     ps2.init();
+    pci.find_pci_devices();
     vbe.init(&kernel.memory);
 
     // acpi.init();
