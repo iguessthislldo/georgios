@@ -123,6 +123,17 @@ pub const Filesystem = struct {
         }
     }
 
+    pub fn file_id_write(self: *Filesystem, id: FileId, from: []const u8) io.FileError!usize {
+        if (self.open_files.find(id)) |file| {
+            // TODO
+            @panic("Filesystem.file_id_write called");
+        } else {
+            return io.FileError.InvalidFileId;
+        }
+    }
+
+    // TODO: file_id_seek
+
     pub fn file_id_close(self: *Filesystem, id: FileId) io.FileError!void {
         if (try self.open_files.find_remove(id)) |file| {
             try self.impl.close(file);

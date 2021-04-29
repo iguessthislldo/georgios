@@ -291,6 +291,29 @@ pub inline fn file_read(id: georgios.io.File.Id, to: []u8) georgios.io.FileError
     return rv.get();
 }
 
+pub inline fn file_write(id: georgios.io.File.Id, from: []const u8) georgios.io.FileError!usize {
+    var rv: ValueOrError(usize, georgios.io.FileError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 10)),
+        [arg1] "{ebx}" (id),
+        [arg2] "{ecx}" (@ptrToInt(&from)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
+pub inline fn file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.File.SeekType) georgios.io.FileError!usize {
+    var rv: ValueOrError(usize, georgios.io.FileError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 11)),
+        [arg1] "{ebx}" (id),
+        [arg2] "{ecx}" (offset),
+        [arg3] "{edx}" (seek_type),
+        [arg4] "{edi}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
 pub inline fn file_close(id: georgios.io.File.Id) georgios.io.FileError!void {
     var rv: ValueOrError(void, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::

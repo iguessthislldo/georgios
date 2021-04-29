@@ -155,6 +155,27 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
+        // SYSCALL: file_write(id: georgios.io.File.Id, &from: []const u8) georgios.io.FileError!usize
+        10 => {
+            const ValueOrError = georgios.system_calls.ValueOrError(
+                usize, georgios.io.FileError);
+            const id = arg1;
+            const from = @intToPtr(*[]const u8, arg2);
+            const rv = @intToPtr(*ValueOrError, arg3);
+            if (kernel.filesystem.file_id_write(id, from.*)) |written| {
+                rv.set_value(written);
+            } else |e| {
+                rv.set_error(e);
+            }
+        },
+
+        // SYSCALL: file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.File.SeekType) georgios.io.FileError!usize
+        11 => {
+            // TODO
+            @panic("file_seek called");
+        },
+
+
         // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
         12 => {
             const ValueOrError = georgios.system_calls.ValueOrError(

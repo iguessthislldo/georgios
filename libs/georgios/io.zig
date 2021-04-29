@@ -69,11 +69,13 @@ pub const File = struct {
         }
 
         pub fn write_impl(file: *File, from: []const u8) FileError!usize {
-            return FileError.Unsupported;
+            return georgios.system_calls.file_write(file.id.?, from);
         }
 
         pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
+            // TODO: Causes Zig to crash:
+            // return georgios.system_calls.file_seek(file.id.?, offset, seek_type);
             return FileError.Unsupported;
         }
 
