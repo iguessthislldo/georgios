@@ -21,7 +21,26 @@ pub const Error = georgios.threading.Error;
 
 const pmem = &kernel.memory.platform_memory;
 
-fn usermode(ip: u32, sp: u32) noreturn {
+fn v86(ss: u32, esp: u32, cs: u32, eip: u32) noreturn {
+    asm volatile ("push %[ss]" :: [ss] "{ax}" (ss));
+    asm volatile ("push %[esp]" :: [esp] "{ax}" (esp));
+    asm volatile (
+        \\pushf
+        \\orl $0x20000, (%%esp)
+    );
+    asm volatile ("push %[cs]" :: [cs] "{ax}" (cs));
+    asm volatile ("push %[eip]" :: [eip] "{ax}" (eip));
+    asm volatile ("iret");
+    unreachable;
+    // asm volatile (
+    //     \\push
+    // ::
+    //     [old_context_ptr] "{ax}" (@ptrToInt(&last.impl.context)),
+    //     [new_context] "{bx}" (self.context));
+    // );
+}
+
+fn usermode(ip: u32, sp: u32, v8086: bool) noreturn {
     asm volatile (
         \\// Load User Data Selector into Data Segment Registers
         \\movw %[user_data_selector], %%ds
@@ -36,17 +55,24 @@ fn usermode(ip: u32, sp: u32) noreturn {
         \\pushf
         \\movl (%%esp), %%edx
         \\orl $0x0200, %%edx
+        \\cmpl $0, %[v8086]
+        \\jz no_v8086
+        \\orl $0x20000, %%edx
+        \\no_v8086:
         \\movl %%edx, (%%esp)
         \\pushl %[user_code_selector]
         \\pushl %[ip] // ip
-        \\.global usermode_iret
+        \\
+        \\.global usermode_iret // Breakpoint for Debugging
         \\usermode_iret:
         \\iret // jump to ip as ring 3
     : :
         [user_code_selector] "{cx}" (@as(u32, segments.user_code_selector)),
         [user_data_selector] "{dx}" (@as(u32, segments.user_data_selector)),
         [sp] "{bx}" (sp),
-        [ip] "{ax}" (ip));
+        [ip] "{ax}" (ip),
+        [v8086] "{si}" (@as(u32, @boolToInt(v8086))),
+    );
     unreachable;
 }
 
@@ -57,6 +83,7 @@ pub const ThreadImpl = struct {
     usermode_stack: Range,
     usermode_stack_ptr: usize,
     kernelmode_stack: Range,
+    v8086: bool,
 
     pub fn init(self: *ThreadImpl, thread: *Thread, boot_thread: bool) Error!void {
         self.thread = thread;
@@ -64,6 +91,7 @@ pub const ThreadImpl = struct {
         if (!boot_thread) {
             self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(utils.Ki(4));
         }
+        self.v8086 = if (thread.process) |process| process.impl.v8086 else false;
     }
 
     fn push_to_context(self: *ThreadImpl, value: anytype) void {
@@ -174,7 +202,7 @@ pub const ThreadImpl = struct {
             platform.enable_interrupts();
             asm volatile ("call *%[entry]" : : [entry] "{ax}" (self.thread.entry));
         } else {
-            usermode(self.thread.entry, self.usermode_stack_ptr);
+            usermode(self.thread.entry, self.usermode_stack_ptr, self.v8086);
         }
     }
 
@@ -186,8 +214,11 @@ pub const ThreadImpl = struct {
 };
 
 pub const ProcessImpl = struct {
-    process: *Process,
-    page_directory: []u32,
+    const main_bios_memory = Range{.start = 0x00080000, .size = 0x00080000};
+
+    process: *Process = undefined,
+    page_directory: []u32 = undefined,
+    v8086: bool = false,
 
     pub fn init(self: *ProcessImpl, process: *Process) Error!void {
         self.process = process;
@@ -207,21 +238,38 @@ pub const ProcessImpl = struct {
     }
 
     pub fn setup(self: *ProcessImpl, thread: *ThreadImpl) void {
-        thread.usermode_stack = Range{
-            .start = platform.kernel_to_virtual(0) - platform.frame_size,
+        const main_thread = &self.process.main_thread == thread.thread;
+        if (!main_thread) {
+            // TODO: This code won't work if we want to call multiple threads per process.
+            // We need to allocate a different stack for each thread.
+            @panic("TODO: Support multiple threads per process");
+        }
+
+        const stack_bottom: usize =
+            if (self.v8086) main_bios_memory.start else platform.kernel_to_virtual(0);
+        thread.usermode_stack = .{
+            .start = stack_bottom - platform.frame_size,
             .size = platform.frame_size};
         pmem.mark_virtual_memory_present(
             self.page_directory, thread.usermode_stack, true)
             catch @panic("setup_context: mark_virtual_memory_present");
         thread.usermode_stack_ptr = thread.usermode_stack.end();
-        if (&self.process.main_thread == thread.thread) {
+
+        if (self.v8086) {
+            // Map Real-Mode Interrupt Vector Table (IVT) and BIOS Data Area (BDA)
+            pmem.map(.{.start = 0, .size = platform.frame_size}, 0, true)
+                catch @panic("ProcessImpl.setup: v8086 map IVT and BDA");
+            // Map the Main BIOS Region of Memory
+            pmem.map(main_bios_memory, main_bios_memory.start, true)
+                catch @panic("ProcessImpl.setup: v8086 map main bios memory");
+        } else if (main_thread) {
             thread.usermode_stack_ptr -= @sizeOf(u32);
             const stack_end: u32 = 0xc000dead;
             pmem.page_directory_memory_copy(
                 self.page_directory, thread.usermode_stack_ptr,
                 utils.to_const_bytes(&stack_end)) catch unreachable;
 
-            var info = self.process.info;
+            var info = self.process.info.?;
 
             // ProcessInfo path and name
             info.path = self.copy_string_to_user_stack(thread, info.path);
@@ -276,3 +324,18 @@ pub const ProcessImpl = struct {
             self.page_directory, address, byte, len);
     }
 };
+
+pub fn new_v8086_process() !*Process {
+    const p = try kernel.threading_manager.new_process_i();
+    p.info = null;
+    p.impl.v8086 = true;
+    p.entry = platform.frame_size;
+    try p.init(null);
+    return p;
+}
+
+// const process = try platform.impl.threading.new_v8086_process();
+// try process.address_space_copy(process.entry,
+//     @intToPtr([*]const u8, @ptrToInt(exc))[0..@ptrToInt(&exc_end) - @ptrToInt(exc)]);
+// try threading_manager.start_process(process);
+// threading_manager.wait_for_process(process.id);

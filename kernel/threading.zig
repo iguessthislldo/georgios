@@ -30,11 +30,14 @@ pub const Thread = struct {
     process: ?*Process = null,
     prev_in_system: ?*Thread = null,
     next_in_system: ?*Thread = null,
+    /// Address of First Instruction
     entry: usize = 0,
 
     pub fn init(self: *Thread, boot_thread: bool) Error!void {
         if (self.process) |process| {
-            self.kernel_mode = process.info.kernel_mode;
+            if (process.info) |*info| {
+                self.kernel_mode = info.kernel_mode;
+            }
         }
         try self.impl.init(self, boot_thread);
     }
@@ -53,35 +56,40 @@ pub const Thread = struct {
 pub const Process = struct {
     pub const Id = u32;
 
-    info: Info,
+    info: ?Info = null,
     id: Id = undefined,
-    impl: pthreading.ProcessImpl = undefined,
-    main_thread: Thread = Thread{},
+    impl: pthreading.ProcessImpl = .{},
+    main_thread: Thread = .{},
+    /// Address of First Instruction for Main Thread
     entry: usize = 0,
 
     pub fn init(self: *Process) Error!void {
-        // Duplicate info data because we can't trust it will stay.
-        const path_temp = try kernel.memory.small_alloc.alloc_array(u8, self.info.path.len);
-        _ = utils.memory_copy_truncate(path_temp, self.info.path);
-        self.info.path = path_temp;
-        if (self.info.name.len > 0) {
-            const name_temp =
-                try kernel.memory.small_alloc.alloc_array(u8, self.info.name.len);
-            _ = utils.memory_copy_truncate(name_temp, self.info.name);
-            self.info.name = name_temp;
-        }
-        if (self.info.args.len > 0) {
-            const args_temp =
-                try kernel.memory.small_alloc.alloc_array([]u8, self.info.args.len);
-            for (self.info.args) |arg, i| {
-                if (arg.len > 0) {
-                    args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
-                    _ = utils.memory_copy_truncate(args_temp[i], arg);
-                } else {
-                    args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
-                }
+        // TODO: Cleanup on failure
+
+        if (self.info) |*info| {
+            // Duplicate info data because we can't trust it will stay.
+            const path_temp = try kernel.memory.small_alloc.alloc_array(u8, info.path.len);
+            _ = utils.memory_copy_truncate(path_temp, info.path);
+            info.path = path_temp;
+            if (info.name.len > 0) {
+                const name_temp =
+                    try kernel.memory.small_alloc.alloc_array(u8, info.name.len);
+                _ = utils.memory_copy_truncate(name_temp, info.name);
+                info.name = name_temp;
             }
-            self.info.args = args_temp;
+            if (info.args.len > 0) {
+                const args_temp =
+                    try kernel.memory.small_alloc.alloc_array([]u8, info.args.len);
+                for (info.args) |arg, i| {
+                    if (arg.len > 0) {
+                        args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
+                        _ = utils.memory_copy_truncate(args_temp[i], arg);
+                    } else {
+                        args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
+                    }
+                }
+                info.args = args_temp;
+            }
         }
 
         try self.impl.init(self);
@@ -139,9 +147,15 @@ pub const Manager = struct {
         platform.enable_interrupts();
     }
 
-    pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
+    pub fn new_process_i(self: *Manager) Error!*Process {
         const p = try kernel.memory.small_alloc.alloc(Process);
-        p.* = Process{.info = info.*};
+        p.* = .{.info = undefined};
+        return p;
+    }
+
+    pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
+        const p = try self.new_process_i();
+        p.info = info.*;
         try p.init();
         return p;
     }

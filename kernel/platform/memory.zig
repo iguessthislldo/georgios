@@ -120,8 +120,13 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
             const range_end = range_start + range_size;
             if (range_start >= platform.kernel_real_start() and
                     platform.kernel_real_end() <= range_end) {
+                // This is the kernel, remove it from the range.
                 range_size = range_end - kernel_range_start_available;
                 range_start = kernel_range_start_available;
+            }
+            if (range_start < frame_size) {
+                // This is the Real Mode IVT and BDA, remove it from the range.
+                range_start = frame_size;
             }
             map.add_frame_group(range_start, range_size);
         }
@@ -182,7 +187,7 @@ pub const Memory = struct {
             table_pages_size);
     }
 
-    fn map_virtual_page(self: *Memory, address: usize) void {
+    pub fn map_virtual_page(self: *Memory, address: usize) void {
         // print.format("map_virtual_page: {:a}\n", address);
         if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
             set_entry(&kernel_page_tables[self.virtual_page_index], address, false);
