@@ -13,6 +13,7 @@ const memory = @import("../memory.zig");
 const putil = @import("util.zig");
 const ata = @import("ata.zig");
 const ps2 = @import("ps2.zig");
+const usb = @import("usb.zig");
 
 const Class = enum (u16) {
     IDE_Controller = 0x0101,
@@ -327,6 +328,9 @@ fn check_function(location: Location, header: *const Header) void {
         dev.init();
         if (class == .MassStorageController and header.subclass == 0x01) {
             ata.init(&dev);
+        } else if (class == .SerialBusController and header.subclass == 0x03 and
+                header.prog_if == 0x20) {
+            usb.init(&dev);
         }
         ps2.anykey();
         if (class == .BridgeDevice and header.subclass == 0x04) {
