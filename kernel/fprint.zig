@@ -96,16 +96,19 @@ pub fn hex(file: *File, value: usize) FileError!void {
 }
 
 /// Print a unsigned integer as a hexadecimal number a padded to usize and
-/// prefixed with "@".
+/// prefixed with "@0x".
 pub fn address(file: *File, value: usize) FileError!void {
-    // For 32b: @XXXXXXXX
-    // For 64b: @XXXXXXXXXXXXXXXX
+    const prefix = "@0x";
+    // For 32b: @0xXXXXXXXX
+    // For 64b: @0xXXXXXXXXXXXXXXXX
     const nibble_count = @sizeOf(usize) * 2;
-    const char_count = 1 + nibble_count;
+    const char_count = prefix.len + nibble_count;
     var buffer: [char_count]u8 = undefined;
-    buffer[0] = '@';
+    for (prefix) |c, i| {
+        buffer[i] = c;
+    }
 
-    for (buffer[1..]) |*ptr, i| {
+    for (buffer[prefix.len..]) |*ptr, i| {
         const nibble_index: usize = (nibble_count - 1) - i;
         ptr.* = utils.nibble_char(utils.select_nibble(usize, value, nibble_index));
     }
@@ -127,9 +130,9 @@ test "address" {
     const length = utils.string_length(file_buffer[0..]);
 
     const expected = if (@sizeOf(usize) == 4)
-        "@7bc75e39"
+        "@0x7bc75e39"
     else if (@sizeOf(usize) == 8)
-        "@000000007bc75e39"
+        "@0x000000007bc75e39"
     else
         @compileError("usize size missing in this test");
     std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
