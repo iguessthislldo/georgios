@@ -11,7 +11,8 @@ GRUB_CFG:=$(BOOT_DIR)/grub/grub.cfg
 
 DEBUGGER:=gdb
 
-multiboot_vga_request?=false
+multiboot_vbe?=false
+vbe?=$(multiboot_vbe)
 debug_log?=true
 wait_for_anykey?=false
 
@@ -21,7 +22,8 @@ all: $(ISO) $(DISK)
 build_georgios:
 	python3 scripts/lint.py
 	$(ZIG) build \
-		-Dmultiboot_vga_request=$(multiboot_vga_request) \
+		-Dmultiboot_vbe=$(multiboot_vbe) \
+		-Dvbe=$(vbe) \
 		-Ddebug_log=$(debug_log) \
 		-Dwait_for_anykey=$(wait_for_anykey) \
 

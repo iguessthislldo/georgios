@@ -116,7 +116,7 @@ pub const Allocator = struct {
         if (alloc_debug) print.format(
             "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
             .{array.len, @ptrToInt(array.ptr)});
-        try self.free_impl(self, std.mem.sliceAsBytes(array));
+        try self.free_impl(self, utils.to_const_bytes(array));
     }
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {

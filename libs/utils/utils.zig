@@ -512,7 +512,16 @@ pub inline fn to_bytes(value: anytype) []u8 {
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
-            return make_slice(u8, @ptrCast([*]u8, value), @sizeOf(pointer_type.child));
+            const count = switch (pointer_type.size) {
+                .One => 1,
+                .Slice => value.len,
+                else => {
+                    @compileLog("Unsupported Type is ", @typeName(Type));
+                    @compileError("Unsupported Type");
+                }
+            };
+            return make_slice(u8, @ptrCast([*]u8, value),
+                @sizeOf(pointer_type.child) * count);
         },
         else => {
             @compileLog("Unsupported Type is ", @typeName(Type));
@@ -533,7 +542,16 @@ pub inline fn to_const_bytes(value: anytype) []const u8 {
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
-            return make_const_slice(u8, @ptrCast([*]const u8, value), @sizeOf(pointer_type.child));
+            const count = switch (pointer_type.size) {
+                .One => 1,
+                .Slice => value.len,
+                else => {
+                    @compileLog("Unsupported Type is ", @typeName(Type));
+                    @compileError("Unsupported Type");
+                }
+            };
+            return make_const_slice(u8, @ptrCast([*]const u8, value),
+                @sizeOf(pointer_type.child) * count);
         },
         else => {
             @compileLog("Unsupported Type is ", @typeName(Type));

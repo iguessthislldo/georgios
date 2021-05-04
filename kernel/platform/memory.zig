@@ -100,13 +100,6 @@ pub fn load_page_directory(new: []const u32, old: ?[]u32) utils.Error!void {
     reload_active_page_directory();
 }
 
-pub fn unmap_low_kernel() void {
-    for (active_page_directory[0..kernel_page_table_count]) |*ptr| {
-        ptr.* = 0;
-    }
-    reload_active_page_directory();
-}
-
 /// Add Frame Groups to Our Memory Map from Multiboot Memory Map
 pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
     const entry_size = @intToPtr(*u32, tag.start + 8).*;
@@ -160,10 +153,6 @@ pub const Memory = struct {
         kernel_memory.big_alloc = &self.page_allocator;
         self.virtual_page_address = @ptrToInt(&_VIRTUAL_LOW_START);
         self.virtual_page_index = get_table_index(self.virtual_page_address);
-
-        // Unmap low kernel left over from the start. We don't need it anymore
-        // and we can recycle the memory.
-        unmap_low_kernel();
 
         // var total_count: usize = 0;
         for (memory_map.frame_groups[0..memory_map.frame_group_count]) |*i| {

@@ -22,6 +22,7 @@ pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
 pub const timing = @import("timing.zig");
+pub const bios_int = @import("bios_int.zig");
 
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
@@ -128,7 +129,8 @@ pub fn init() !void {
     kernel.devices.init(kernel.memory.small_alloc);
     ps2.init();
     pci.find_pci_devices();
-    vbe.init(&kernel.memory);
+    bios_int.init();
+    vbe.init();
 
     // acpi.init();
 

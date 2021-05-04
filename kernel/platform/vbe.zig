@@ -4,31 +4,49 @@
 // https://wiki.osdev.org/VESA_Video_Modes
 
 const std = @import("std");
+const build_options = @import("build_options");
 
 const utils = @import("utils");
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
+const bios_int = @import("bios_int.zig");
 
+const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
 const font = @import("../font.zig");
+
+// TODO Make these not fixed
+// 1024x768x32
+const find_width = 1024;
+const find_height = 768;
+const find_bpp = 32;
+
+const RealModePtr = packed struct {
+    offset: u16,
+    segment: u16,
+
+    pub fn get(self: *const RealModePtr) u32 {
+        return self.segment * 0x10 + self.offset;
+    }
+};
 
 const Info = packed struct {
     const magic_expected = "VESA";
 
     magic: [4]u8,
     version: u16,
-    oem_ptr: [2]u16,
+    oem_ptr: RealModePtr,
     capabilities: u32,
-    video_mode_ptr: [2]u16,
+    video_modes_ptr: RealModePtr,
     memory: u16,
     software_rev: u16,
-    vendor: [2]u16,
-    product_name: [2]u16,
-    product_rev: [2]u16,
+    vendor: RealModePtr,
+    product_name: RealModePtr,
+    product_rev: RealModePtr,
 
     const Version = enum (u8) {
         V1 = 1,
@@ -36,8 +54,24 @@ const Info = packed struct {
         V3 = 3,
     };
 
-    pub fn get_version(self: @This()) ?Version {
+    pub fn get_version(self: *const Info) ?Version {
         return utils.int_to_enum(Version, @intCast(u8, self.version >> 8));
+    }
+
+    pub fn get_modes(self: *const Info) []const u16 {
+        var mode_count: usize = 0;
+        const modes_ptr = @intToPtr([*]const u16, self.video_modes_ptr.get());
+        while (modes_ptr[mode_count] != 0xffff) {
+            mode_count += 1;
+        }
+        const modes = kernel.memory.small_alloc.alloc_array(u16, mode_count) catch
+            @panic("vbe.Info.get_modes: alloc mode array failed");
+        var mode_i: usize = 0;
+        while (modes_ptr[mode_i] != 0xffff) {
+            modes[mode_i] = modes_ptr[mode_i];
+            mode_i += 1;
+        }
+        return modes;
     }
 };
 
@@ -76,9 +110,10 @@ const Mode = packed struct {
     off_screen_mem_size: u16,
 };
 
-var info: *Info = undefined;
-var mode: *Mode = undefined;
-var mem: *kmemory.Memory = undefined;
+var vbe_setup = false;
+var info: Info = undefined;
+var mode: Mode = undefined;
+var mode_id: ?u16 = null;
 
 inline fn video_memory_offset(x: u32, y: u32) u32 {
     return y * mode.pitch + x * bytes_per_pixel;
@@ -236,19 +271,102 @@ pub fn flush_buffer() void {
     buffer_clean = true;
 }
 
-pub fn init(memory: *kmemory.Memory) void {
+pub fn init() void {
+    if (!build_options.vbe) {
+        return;
+    }
+
+    print.string(" - See if we can use VESA graphics..\n");
+
+    // First see GRUB setup VBE
     if (multiboot.get_vbe_info()) |vbe| {
-        print.string(" - Got VBE info from Multiboot...\n");
+        print.string("   - Got VBE info from Multiboot...\n");
+        info = @ptrCast(*Info, &vbe.control_info[0]).*;
+        mode_id = vbe.mode;
+        mode = @ptrCast(*Mode, &vbe.mode_info[0]).*;
+        vbe_setup = true;
+    }
 
-        mem = memory;
+    // Then see if we can set it up usng BIOS
+    if (!vbe_setup) {
+        // Get Info
+        print.string("   - Trying to get VBE info directly from BIOS...\n");
+        const result_ptr: u32 = 0x1000;
+        var params = bios_int.Params{
+            .interrupt = 0x10,
+            .eax = 0x4f00,
+            .edi = result_ptr,
+        };
+        bios_int.run(&params) catch {
+            print.string("   - get info bios_int.run failed\n");
+            return;
+        };
+        if (params.eax != 0x4f) {
+            print.format("   - get info failed eax: {}\n", .{params.eax});
+            return;
+        }
+        info = @intToPtr(*Info, result_ptr).*;
+        print.format("{}\n", .{info});
 
-        info = @ptrCast(*Info, &vbe.control_info[0]);
+        // Find the Mode We're Looking For
+        const supported_modes = info.get_modes();
+        defer kernel.memory.small_alloc.free_array(supported_modes) catch unreachable;
+        for (supported_modes) |supported_mode| {
+            print.format("   - mode {}\n", .{supported_mode});
+            params.eax = 0x4f01;
+            params.ecx = supported_mode;
+            params.edi = result_ptr;
+            bios_int.run(&params) catch {
+                print.string("   - get mode bios_int.run failed\n");
+                return;
+            };
+            if (params.eax != 0x4f) {
+                print.format("   - get mode details failed eax: {}\n", .{params.eax});
+                return;
+            }
+            const mode_ptr = @intToPtr(*const Mode, result_ptr);
+            print.format("     - {}x{}x{}\n", .{
+                mode_ptr.width, mode_ptr.height, mode_ptr.bpp});
+            if ((mode_ptr.attributes & (1 << 7)) == 0) {
+                print.string("     - Non-linear, skipping...\n");
+                continue;
+            }
+            if (mode_ptr.width == find_width and mode_ptr.height == find_height and
+                    mode_ptr.bpp == find_bpp) {
+                mode = mode_ptr.*;
+                mode_id = supported_mode;
+                break;
+            }
+        }
+        if (mode_id == null) {
+            print.string("     - Didn't Find VBE Mode\n");
+            return;
+        }
+
+        // Set the Mode
+        params.eax = 0x4f02;
+        params.ebx = mode_id.? | 0x4000; // Use Linear Buffer
+        params.slow = true;
+        bios_int.run(&params) catch {
+            print.string("   - set mode bios_int.run failed\n");
+            return;
+        };
+        if (params.eax != 0x4f) {
+            print.format("   - set mode failed eax: {}\n", .{params.eax});
+            return;
+        }
+
+        vbe_setup = true;
+    }
+
+    if (vbe_setup) {
+        print.string("   - Got VBE info\n");
+
         if (info.get_version()) |version| {
             print.format("{}\n", .{version});
         }
-        print.format("{}\n", .{info.*});
-        mode = @ptrCast(*Mode, &vbe.mode_info[0]);
-        print.format("{}\n", .{mode.*});
+        print.format("{}\n", .{info});
+        print.format("{}\n", .{mode});
 
         if (mode.bpp != 32) {
             @panic("bpp is not 32bit");
@@ -261,15 +379,15 @@ pub fn init(memory: *kmemory.Memory) void {
         // TODO: Zig Bug? If catch is taken away Zig 0.5 fails to reject not
         // handling the error return. LLVM catches the mistake instead.
         print.format("vms: {}\n", .{video_memory_size});
-        buffer = mem.big_alloc.alloc_array(u8, video_memory_size) catch {
+        buffer = kernel.memory.big_alloc.alloc_array(u8, video_memory_size) catch {
             @panic("Couldn't alloc VBE Buffer");
         };
-        const video_memory_range =
-                mem.platform_memory.get_unused_kernel_space(video_memory_size) catch {
+        const video_memory_range = kernel.memory.platform_memory.get_unused_kernel_space(
+                video_memory_size) catch {
             @panic("Couldn't Reserve VBE Buffer");
         };
         video_memory = @intToPtr([*]u8, video_memory_range.start)[0..video_memory_size];
-        mem.platform_memory.map(video_memory_range, mode.framebuffer, false) catch {
+        kernel.memory.platform_memory.map(video_memory_range, mode.framebuffer, false) catch {
             @panic("Couldn't map VBE Buffer");
         };
 
