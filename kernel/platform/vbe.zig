@@ -20,9 +20,8 @@ const Range = kmemory.Range;
 const font = @import("../font.zig");
 
 // TODO Make these not fixed
-// 1024x768x32
-const find_width = 1024;
-const find_height = 768;
+const find_width = 800;
+const find_height = 600;
 const find_bpp = 32;
 
 const RealModePtr = packed struct {
@@ -30,7 +29,7 @@ const RealModePtr = packed struct {
     segment: u16,
 
     pub fn get(self: *const RealModePtr) u32 {
-        return self.segment * 0x10 + self.offset;
+        return @intCast(u32, self.segment) * 0x10 + self.offset;
     }
 };
 
@@ -287,11 +286,13 @@ pub fn init() void {
         vbe_setup = true;
     }
 
-    // Then see if we can set it up usng BIOS
+    // Then see if we can set it up using the BIOS
     if (!vbe_setup) {
         // Get Info
         print.string("   - Trying to get VBE info directly from BIOS...\n");
-        const result_ptr: u32 = 0x1000;
+        const result_ptr: u32 = 0x4000;
+        const vbe2 = "VBE2"; // Set the interface to use VBE Version 2
+        _ = utils.memory_copy_truncate(@intToPtr([*]u8, result_ptr)[0..vbe2.len], vbe2);
         var params = bios_int.Params{
             .interrupt = 0x10,
             .eax = 0x4f00,
@@ -302,17 +303,20 @@ pub fn init() void {
             return;
         };
         if (params.eax != 0x4f) {
-            print.format("   - get info failed eax: {}\n", .{params.eax});
+            print.format("   - get info failed eax: {:x}\n", .{params.eax});
             return;
         }
         info = @intToPtr(*Info, result_ptr).*;
         print.format("{}\n", .{info});
+        if (info.get_version()) |version| {
+            print.format("VERSION {}\n", .{version});
+        }
 
         // Find the Mode We're Looking For
         const supported_modes = info.get_modes();
         defer kernel.memory.small_alloc.free_array(supported_modes) catch unreachable;
         for (supported_modes) |supported_mode| {
-            print.format("   - mode {}\n", .{supported_mode});
+            print.format("   - mode {:x}\n", .{supported_mode});
             params.eax = 0x4f01;
             params.ecx = supported_mode;
             params.edi = result_ptr;
@@ -321,7 +325,7 @@ pub fn init() void {
                 return;
             };
             if (params.eax != 0x4f) {
-                print.format("   - get mode details failed eax: {}\n", .{params.eax});
+                print.format("   - get mode details failed eax: {:x}\n", .{params.eax});
                 return;
             }
             const mode_ptr = @intToPtr(*const Mode, result_ptr);
@@ -339,7 +343,7 @@ pub fn init() void {
             }
         }
         if (mode_id == null) {
-            print.string("     - Didn't Find VBE Mode\n");
+            print.string("   - Didn't Find VBE Mode\n");
             return;
         }
 
@@ -352,7 +356,7 @@ pub fn init() void {
             return;
         };
         if (params.eax != 0x4f) {
-            print.format("   - set mode failed eax: {}\n", .{params.eax});
+            print.format("   - set mode failed eax: {:x}\n", .{params.eax});
             return;
         }
 

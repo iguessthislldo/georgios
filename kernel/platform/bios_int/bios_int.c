@@ -132,7 +132,7 @@ bool georgios_bios_int_run(GeorgiosBiosInt * params) {
     *(uint8_t*)(ip + 1) = params->interrupt; // Interrupt Number
     *(uint8_t*)(ip + 2) = 0xf4; // hlt
 
-    emu->x86.R_SP = 0x1000;
+    emu->x86.R_SP = 0x4000;
     x86emu_set_seg_register(emu, emu->x86.R_SS_SEL, 0);
 
     bool slow = params->slow && !georgios_bios_int_trace;
