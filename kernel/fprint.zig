@@ -229,6 +229,8 @@ pub fn any(file: *File, value: anytype) FileError!void {
 ///         on if `x` or `X` was used as the specifier (TODO).
 ///     'a'
 ///         Like "x", but prints the full address value prefixed with "@".
+///     'c'
+///         Insert the u8 as a character (more specficially as a UTF-8 byte).
 ///
 /// Escapes:
 ///     `{{` is replaced with `{` and `}}` is replaced by `}`.
@@ -244,6 +246,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
         Default,
         Hex,
         Address,
+        Char,
     };
 
     comptime var arg: usize = 0;
@@ -278,6 +281,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
                     switch (spec) {
                         Spec.Hex => try hex(file, args[arg]),
                         Spec.Address => try address(file, args[arg]),
+                        Spec.Char => try char(file, args[arg]),
                         Spec.Default => try any(file, args[arg]),
                     }
                     arg += 1;
@@ -297,6 +301,10 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
                 },
                 'a' => {
                     spec = Spec.Address;
+                    state = State.Format;
+                },
+                'c' => {
+                    spec = Spec.Char;
                     state = State.Format;
                 },
                 else => @compileError(
