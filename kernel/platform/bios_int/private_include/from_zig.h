@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 extern void georgios_bios_int_print_string(const char * str);
 extern void georgios_bios_int_print_value(uint32_t value);

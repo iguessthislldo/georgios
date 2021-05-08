@@ -57,7 +57,7 @@ int vsnprintf(
                     value_ptr = &value;
                     break;
                 case 's':
-                    value_ptr = va_arg(vlist, const char *);
+                    value_ptr = va_arg(vlist, char *);
                     break;
                 }
                 if (value_ptr) {
