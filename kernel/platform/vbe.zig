@@ -270,6 +270,56 @@ pub fn flush_buffer() void {
     buffer_clean = true;
 }
 
+const vbe_result_ptr: u16 = 0x8000;
+
+const VbeFuncArgs = struct {
+    bx: u16 = 0,
+    cx: u16 = 0,
+    di: u16 = 0,
+    slow: bool = false,
+};
+fn vbe_func(name: []const u8, func_num: u16, args: VbeFuncArgs) bool {
+    var params = bios_int.Params{
+        .interrupt = 0x10,
+        .eax = func_num,
+        .ebx = args.bx,
+        .ecx = args.cx,
+        .edi = args.di,
+        .slow = args.slow,
+    };
+    bios_int.run(&params) catch {
+        print.format("   - vbe_func: {}: bios_int.run failed\n", .{name});
+        return false;
+    };
+    if (@truncate(u16, params.eax) != 0x4f) {
+        print.format("   - vbe_func: {}: failed, eax: {:x}\n", .{name, params.eax});
+        return false;
+    }
+    return true;
+}
+
+fn get_vbe_info() ?*const Info {
+    const vbe2 = "VBE2"; // Set the interface to use VBE Version 2
+    _ = utils.memory_copy_truncate(@intToPtr([*]u8, vbe_result_ptr)[0..vbe2.len], vbe2);
+    return if (vbe_func("get_vbe_info", 0x4f00, .{
+        .di = vbe_result_ptr
+    })) @intToPtr(*const Info, vbe_result_ptr) else null;
+}
+
+fn get_mode_info(mode_number: u16) ?*const Mode {
+    return if (vbe_func("get_mode_info", 0x4f01, .{
+        .cx = mode_number,
+        .di = vbe_result_ptr
+    })) @intToPtr(*const Mode, vbe_result_ptr) else null;
+}
+
+fn set_mode() void {
+    vbe_setup = vbe_func("set_mode", 0x4f02, .{
+        .bx = mode_id.? | 0x4000, // Use Linear Buffer
+        .slow = true,
+    });
+}
+
 pub fn init() void {
     if (!build_options.vbe) {
         return;
@@ -290,23 +340,7 @@ pub fn init() void {
     if (!vbe_setup) {
         // Get Info
         print.string("   - Trying to get VBE info directly from BIOS...\n");
-        const result_ptr: u32 = 0x4000;
-        const vbe2 = "VBE2"; // Set the interface to use VBE Version 2
-        _ = utils.memory_copy_truncate(@intToPtr([*]u8, result_ptr)[0..vbe2.len], vbe2);
-        var params = bios_int.Params{
-            .interrupt = 0x10,
-            .eax = 0x4f00,
-            .edi = result_ptr,
-        };
-        bios_int.run(&params) catch {
-            print.string("   - get info bios_int.run failed\n");
-            return;
-        };
-        if (params.eax != 0x4f) {
-            print.format("   - get info failed eax: {:x}\n", .{params.eax});
-            return;
-        }
-        info = @intToPtr(*Info, result_ptr).*;
+        info = (get_vbe_info() orelse return).*;
         print.format("{}\n", .{info});
         if (info.get_version()) |version| {
             print.format("VERSION {}\n", .{version});
@@ -317,18 +351,7 @@ pub fn init() void {
         defer kernel.memory.small_alloc.free_array(supported_modes) catch unreachable;
         for (supported_modes) |supported_mode| {
             print.format("   - mode {:x}\n", .{supported_mode});
-            params.eax = 0x4f01;
-            params.ecx = supported_mode;
-            params.edi = result_ptr;
-            bios_int.run(&params) catch {
-                print.string("   - get mode bios_int.run failed\n");
-                return;
-            };
-            if (params.eax != 0x4f) {
-                print.format("   - get mode details failed eax: {:x}\n", .{params.eax});
-                return;
-            }
-            const mode_ptr = @intToPtr(*const Mode, result_ptr);
+            const mode_ptr = get_mode_info(supported_mode) orelse return;
             print.format("     - {}x{}x{}\n", .{
                 mode_ptr.width, mode_ptr.height, mode_ptr.bpp});
             if ((mode_ptr.attributes & (1 << 7)) == 0) {
@@ -348,19 +371,7 @@ pub fn init() void {
         }
 
         // Set the Mode
-        params.eax = 0x4f02;
-        params.ebx = mode_id.? | 0x4000; // Use Linear Buffer
-        params.slow = true;
-        bios_int.run(&params) catch {
-            print.string("   - set mode bios_int.run failed\n");
-            return;
-        };
-        if (params.eax != 0x4f) {
-            print.format("   - set mode failed eax: {:x}\n", .{params.eax});
-            return;
-        }
-
-        vbe_setup = true;
+        set_mode();
     }
 
     if (vbe_setup) {
@@ -407,6 +418,6 @@ pub fn init() void {
             flush_buffer();
         }
     } else {
-        print.string(" - Missing VBE info from Multiboot. Could not init VBE.\n");
+        print.string(" - Could not init VBE graphics\n");
     }
 }

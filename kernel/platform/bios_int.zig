@@ -34,8 +34,29 @@ pub const Params = struct {
     slow: bool = false,
 };
 
-const debug_access = false;
+const debug_io_access = false;
+const debug_mem_access = false;
 const exec_trace = false;
+
+export fn georgios_bios_int_to_string(
+        buffer: [*]u8, buffer_size: usize, got: *usize, kind: u8, value: *c_void) bool {
+    var ts = utils.ToString{.buffer = buffer[0..buffer_size]};
+    switch (kind) {
+        's' => {
+            ts.cstring(@ptrCast([*:0]const u8, value)) catch return true;
+        },
+        'x' => {
+            var v: usize = undefined;
+            utils.memory_copy_anyptr(utils.to_bytes(&v), value);
+            ts.hex(v) catch return true;
+        },
+        else => {
+            print.format("georgios_bios_to_string: Unexpected kind {:c}\n", .{kind});
+        },
+    }
+    got.* = ts.got;
+    return false;
+}
 
 export fn georgios_bios_int_print_string(str: [*:0]const u8) void {
     var i: usize = 0;
@@ -89,27 +110,27 @@ export fn georgios_bios_int_strcat(dest: [*c]u8, src: [*c]const u8) [*c]u8 {
 
 // For Access to I/O Ports
 export fn georgios_bios_int_inb(port: u16) callconv(.C) u8 {
-    if (debug_access) print.format("georgios_bios_int_inb {:x}\n", .{port});
+    if (debug_io_access) print.format("georgios_bios_int_inb {:x}\n", .{port});
     return util.in8(port);
 }
 export fn georgios_bios_int_inw(port: u16) callconv(.C) u16 {
-    if (debug_access) print.format("georgios_bios_int_inw {:x}\n", .{port});
+    if (debug_io_access) print.format("georgios_bios_int_inw {:x}\n", .{port});
     return util.in16(port);
 }
 export fn georgios_bios_int_inl(port: u16) callconv(.C) u32 {
-    if (debug_access) print.format("georgios_bios_int_inl {:x}\n", .{port});
+    if (debug_io_access) print.format("georgios_bios_int_inl {:x}\n", .{port});
     return util.in32(port);
 }
 export fn georgios_bios_int_outb(port: u16, value: u8) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_outb {:x}, {:x}\n", .{port, value});
+    if (debug_io_access) print.format("georgios_bios_int_outb {:x}, {:x}\n", .{port, value});
     return util.out8(port, value);
 }
 export fn georgios_bios_int_outw(port: u16, value: u16) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_outw {:x}, {:x}\n", .{port, value});
+    if (debug_io_access) print.format("georgios_bios_int_outw {:x}, {:x}\n", .{port, value});
     return util.out16(port, value);
 }
 export fn georgios_bios_int_outl(port: u16, value: u32) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_outl {:x}, {:x}\n", .{port, value});
+    if (debug_io_access) print.format("georgios_bios_int_outl {:x}, {:x}\n", .{port, value});
     return util.out32(port, value);
 }
 
@@ -121,33 +142,33 @@ export fn georgios_bios_int_fush_log_impl(buf: [*c]u8, size: c_uint) void {
 export fn georgios_bios_int_rdb(addr: u32) callconv(.C) u8 {
     @setRuntimeSafety(false);
     const value = @intToPtr(*allowzero u8, addr).*;
-    if (debug_access) print.format("georgios_bios_int_rdb {:x} ({:x})\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_rdb {:x} ({:x})\n", .{addr, value});
     return value;
 }
 export fn georgios_bios_int_rdw(addr: u32) callconv(.C) u16 {
     @setRuntimeSafety(false);
     const value = @intToPtr(*allowzero u16, addr).*;
-    if (debug_access) print.format("georgios_bios_int_rdw {:x} ({:x})\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_rdw {:x} ({:x})\n", .{addr, value});
     return value;
 }
 export fn georgios_bios_int_rdl(addr: u32) callconv(.C) u32 {
     @setRuntimeSafety(false);
     const value = @intToPtr(*allowzero u32, addr).*;
-    if (debug_access) print.format("georgios_bios_int_rdl {:x} ({:x})\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_rdl {:x} ({:x})\n", .{addr, value});
     return value;
 }
 export fn georgios_bios_int_wrb(addr: u32, value: u8) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_wrb {:x}, {:x}\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_wrb {:x}, {:x}\n", .{addr, value});
     @setRuntimeSafety(false);
     @intToPtr(*allowzero u8, addr).* = value;
 }
 export fn georgios_bios_int_wrw(addr: u32, value: u16) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_wrw {:x}, {:x}\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_wrw {:x}, {:x}\n", .{addr, value});
     @setRuntimeSafety(false);
     @intToPtr(*allowzero u16, addr).* = value;
 }
 export fn georgios_bios_int_wrl(addr: u32, value: u32) callconv(.C) void {
-    if (debug_access) print.format("georgios_bios_int_wrl {:x}, {:x}\n", .{addr, value});
+    if (debug_mem_access) print.format("georgios_bios_int_wrl {:x}, {:x}\n", .{addr, value});
     @setRuntimeSafety(false);
     @intToPtr(*allowzero u32, addr).* = value;
 }

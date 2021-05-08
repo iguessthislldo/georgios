@@ -9,6 +9,8 @@ pub const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
 
 pub const Guid = @import("guid.zig");
 
+pub const ToString = @import("ToString.zig");
+
 pub const Error = error {
     Unknown,
     OutOfBounds,
@@ -222,6 +224,13 @@ pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usi
     return size;
 }
 
+pub inline fn memory_copy_anyptr(destination: []u8, source: anytype) void {
+    const s = @ptrCast([*]const u8, source);
+    for (destination[0..]) |*ptr, i| {
+        ptr.* = s[i];
+    }
+}
+
 /// Set all the elements of `destination` to `value`.
 pub inline fn memory_set(destination: []u8, value: u8) void {
     for (destination[0..]) |*ptr| {
@@ -278,6 +287,22 @@ pub inline fn string_length(bytes: []const u8) usize {
     return bytes.len;
 }
 
+pub fn cstring_length(cstr: [*:0]const u8) usize {
+    var i: usize = 0;
+    while (cstr[i] != 0) {
+        i += 1;
+    }
+    return i;
+}
+
+pub fn cstring_to_slice(cstr: [*:0]const u8) []const u8 {
+    return @ptrCast([*]const u8, cstr)[0..cstring_length(cstr) + 1];
+}
+
+pub fn cstring_to_string(cstr: [*:0]const u8) []const u8 {
+    return @ptrCast([*]const u8, cstr)[0..cstring_length(cstr)];
+}
+
 pub fn int_log2(comptime Type: type, value: Type) Type {
     return @sizeOf(Type) * 8 - 1 - @clz(Type, value);
 }
@@ -295,6 +320,28 @@ test "int_log2" {
     test_int_log2(32, 5);
     test_int_log2(64, 6);
     test_int_log2(128, 7);
+}
+
+pub fn hex_char_len(comptime Type: type, value: Type) Type {
+    if (value == 0) {
+        return 1;
+    }
+    return int_log2(Type, value) / 4 + 1;
+}
+
+fn test_hex_char_len(value: usize, expected: usize) void {
+    std.testing.expectEqual(expected, hex_char_len(usize, value));
+}
+
+test "hex_char_len" {
+    test_hex_char_len(0x0, 1);
+    test_hex_char_len(0x1, 1);
+    test_hex_char_len(0xf, 1);
+    test_hex_char_len(0x10, 2);
+    test_hex_char_len(0x11, 2);
+    test_hex_char_len(0xff, 2);
+    test_hex_char_len(0x100, 3);
+    test_hex_char_len(0x101, 3);
 }
 
 pub fn int_bit_size(comptime Type: type) usize {

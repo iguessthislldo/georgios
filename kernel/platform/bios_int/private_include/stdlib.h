@@ -1,8 +1,7 @@
 #ifndef GEORGIOS_BIOS_INT_STDLIB_H
 #define GEORGIOS_BIOS_INT_STDLIB_H
 
-#define NULL ((void*) 0)
-typedef unsigned size_t;
+#include <stddef.h>
 
 #define malloc georgios_bios_int_malloc
 void * malloc(size_t size);

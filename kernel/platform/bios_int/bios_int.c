@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <sys/io.h>
 #include <stdio.h>
+#include <from_zig.h>
 #include <georgios_bios_int.h>
 
 #include <stdbool.h>
@@ -24,20 +25,54 @@ time_t time(time_t * arg) {
     return 0;
 }
 
-// TODO: Right now this basically just copies format to the buffer
-// Doesn't seem to be used for traces though, so it will probably stay like
-// this unless I see a message with printf format markers in it.
 int vsnprintf(
         char * restrict buffer, size_t bufsz, const char * restrict format, va_list vlist) {
     if (bufsz == 0) return 0;
     size_t buffer_i = 0;
+    int state = 0;
     for (size_t fmt_i = 0; format[fmt_i]; fmt_i++) {
         if (buffer_i == bufsz - 1) {
             break;
         }
-        const ch = format[fmt_i];
-        buffer[buffer_i] = ch;
-        buffer_i++;
+        const char ch = format[fmt_i];
+        bool print_ch = false;
+        switch (state) {
+        case 0:
+            if (ch == '%') {
+                state = 1;
+            } else {
+                print_ch = true;
+            }
+            break;
+
+        default:
+            if (ch >= '0' && ch <= '9' || ch == '.') {
+                // skip
+            } else {
+                void* value_ptr = 0;
+                unsigned value;
+                switch (ch) {
+                case 'x':
+                    value = va_arg(vlist, unsigned);
+                    value_ptr = &value;
+                    break;
+                case 's':
+                    value_ptr = va_arg(vlist, const char *);
+                    break;
+                }
+                if (value_ptr) {
+                    size_t got;
+                    georgios_bios_int_to_string(
+                        &buffer[buffer_i], bufsz - buffer_i + 1, &got, ch, value_ptr);
+                    buffer_i += got;
+                }
+                state = 0;
+            }
+        }
+        if (print_ch) {
+            buffer[buffer_i] = ch;
+            buffer_i++;
+        }
     }
     buffer[buffer_i] = '\0';
     return buffer_i;
@@ -119,21 +154,42 @@ void georgios_bios_int_init(bool trace) {
 }
 
 bool georgios_bios_int_run(GeorgiosBiosInt * params) {
+    emu->x86.R_CS_BASE =
+    emu->x86.R_DS_BASE =
+    emu->x86.R_ES_BASE =
+    emu->x86.R_FS_BASE =
+    emu->x86.R_GS_BASE =
+    emu->x86.R_SS_BASE = ~0;
+
+    emu->x86.R_CS_LIMIT =
+    emu->x86.R_DS_LIMIT =
+    emu->x86.R_ES_LIMIT =
+    emu->x86.R_FS_LIMIT =
+    emu->x86.R_GS_LIMIT =
+    emu->x86.R_SS_LIMIT = ~0;
+
+    x86emu_set_seg_register(emu, emu->x86.R_CS_SEL, 0);
+    x86emu_set_seg_register(emu, emu->x86.R_DS_SEL, 0);
+    x86emu_set_seg_register(emu, emu->x86.R_ES_SEL, 0);
+    x86emu_set_seg_register(emu, emu->x86.R_FS_SEL, 0);
+    x86emu_set_seg_register(emu, emu->x86.R_GS_SEL, 0);
+    x86emu_set_seg_register(emu, emu->x86.R_SS_SEL, 0);
+
     emu->x86.R_EAX = params->eax;
     emu->x86.R_EBX = params->ebx;
     emu->x86.R_ECX = params->ecx;
     emu->x86.R_EDX = params->edx;
     emu->x86.R_EDI = params->edi;
 
-    const uint16_t ip = 0x600;
-    emu->x86.R_IP = ip;
-    x86emu_set_seg_register(emu, emu->x86.R_CS_SEL, 0);
+    const uint16_t ip = 0x7c00;
+    emu->x86.R_EIP = ip;
     *(uint8_t*)(ip + 0) = 0xcd; // int ...
     *(uint8_t*)(ip + 1) = params->interrupt; // Interrupt Number
     *(uint8_t*)(ip + 2) = 0xf4; // hlt
 
-    emu->x86.R_SP = 0x4000;
-    x86emu_set_seg_register(emu, emu->x86.R_SS_SEL, 0);
+    emu->x86.R_SP = 0xffff;
+    /* x86emu_dump(emu, ~0); */
+    /* x86emu_clear_log(emu, 1); */
 
     bool slow = params->slow && !georgios_bios_int_trace;
     if (slow) {

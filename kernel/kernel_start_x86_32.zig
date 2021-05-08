@@ -18,7 +18,7 @@ const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
 const utils = @import("utils");
 
-const sse_enabled: bool = comptime {
+pub const sse_enabled: bool = comptime {
     for (builtin.arch.allFeaturesList()) |feature, index_usize| {
         const index = @intCast(std.Target.Cpu.Feature.Set.Index, index_usize);
         if (builtin.cpu.features.isEnabled(index)) {

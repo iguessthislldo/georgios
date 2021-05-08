@@ -3,4 +3,5 @@ test "utils test root" {
     const unicode = @import("unicode.zig");
     const guid = @import("guid.zig");
     const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
+    const ToString = @import("ToString.zig");
 }
