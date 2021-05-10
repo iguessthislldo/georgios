@@ -42,34 +42,38 @@ const CapParams = packed struct {
     reserved1: u16, // 4 bits at the start of this are used by v1.1
 };
 
-const CapabilityRegisters = packed struct {
+const CapRegs = packed struct {
     length: u8, // CAPLENGTH
     reserved: u8,
     version: u16, // HCIVERSION
     struct_params: StructParams, // HCSPARAMS
     cap_params: CapParams, // HCCPARAMS
 
-    pub fn get(virtual_range: memory.Range) *const CapabilityRegisters {
-        return @intToPtr(*const CapabilityRegisters, virtual_range.start);
+    pub fn get(virtual_range: memory.Range) *const CapRegs {
+        return @intToPtr(*const CapRegs, virtual_range.start);
     }
 
     // HCSP-PORTROUTE is after HCCPARAMS, but its size depends on CAPLENGTH and
     // its validity depends on struct_params.
-    pub fn get_companion_port_route(self: *const CapabilityRegisters, index: usize) ?u4 {
+    pub fn get_companion_port_route(self: *const CapRegs, index: usize) ?u4 {
         if (!self.struct_params.port_routing_rules) return null;
-        const count = (@as(usize, self.length) - @sizeOf(CapabilityRegisters)) / 2;
+        const count = (@as(usize, self.length) - @sizeOf(CapRegs)) / 2;
         if (index >= count) return null;
         const byte = @intToPtr(*const u8,
-            @ptrToInt(self) + @sizeOf(CapabilityRegisters) + index / 2).*;
+            @ptrToInt(self) + @sizeOf(CapRegs) + index / 2).*;
         return @truncate(u4, byte >> (@truncate(u3, index & 1) << 2));
     }
 
-    pub fn get_op_regs(self: *const CapabilityRegisters) *OpRegs {
+    pub fn get_op_regs(self: *const CapRegs) *OpRegs {
         return @intToPtr(*OpRegs, @ptrToInt(self) + self.length);
     }
 
-    pub fn get_extended_caps_id_offset(
-            self: *const CapabilityRegisters, dev: *pci.Dev, id: u8) ?u8 {
+    pub fn get_port_regs(self: *const CapRegs) []PortReg {
+        return @intToPtr([*]PortReg, @ptrToInt(self.get_op_regs()) + @sizeOf(OpRegs))
+            [0..self.struct_params.port_count];
+    }
+
+    pub fn get_extended_caps_id_offset(self: *const CapRegs, dev: *pci.Dev, id: u8) ?u8 {
         // Lunt Pages 7-8 and M-7
         var offset = self.cap_params.extended_caps_offset;
         while (true) {
@@ -89,8 +93,18 @@ const CapabilityRegisters = packed struct {
 };
 
 const Command = packed struct {
+    // Lunt Table 7-10
+    // TODO: Zig Compiler crashes: "TODO buf_read_value_bytes enum packed"
+    // const FrameListSize = packed enum(u2) {
+    //     e1024 = 0b00,
+    //     e512 = 0b01,
+    //     e256 = 0b10,
+    //     e32 = 0b11,
+    // };
+
     run: bool, // RS
     reset: bool, // HCRESET
+    // frame_list_size: FrameListSize,
     frame_list_size: u2,
     period_schedule_enabled: bool,
     async_schedule_enabled: bool,
@@ -102,8 +116,19 @@ const Command = packed struct {
     reserved1: u4,
     interrupt_threshold: u8,
     reserved2: u8,
+
+    pub fn init(self: *Command) void {
+        var new = @bitCast(Command, @as(u32, 0));
+        new.interrupt_threshold = 8;
+        // new.async_schedule_enabled = true;
+        // new.period_schedule_enabled = true;
+        // new.frame_list_size = FrameListSize.e1024;
+        new.run = true;
+        self.* = new;
+    }
 };
 
+/// Lunt Table 7-12
 const Status = packed struct {
     transfer_interrupt: bool,
     error_interrupt: bool,
@@ -117,23 +142,65 @@ const Status = packed struct {
     periodic_schedule_status: bool,
     async_schedule_status: bool,
     reserved1: u16,
+
+    pub fn clear(self: *Status) void {
+        self.* = @bitCast(Status, @as(u32, 0x3f));
+    }
 };
 
+/// Lunt Table 7-13
+const Interrupts = packed struct {
+    enabled: bool,
+    error_enabled: bool,
+    port_change_enabled: bool,
+    frame_list_rollover_enabled: bool,
+    host_system_error_enabled: bool,
+    async_advance_enabled: bool,
+    reserved0: u26,
+};
+
+/// Lunt Table 7-22
+const PortReg = packed struct {
+    connected: bool, // Read-only
+    status_changed: bool, //
+    enabled: bool, // Read/Write only false
+    enabled_changed: bool, //
+    over_current: bool, // Read-only
+    over_current_changed: bool, //
+    force_port_resume: bool, // Read/Write
+    suspended: bool, // Read/Write
+    reset: bool, // Read/Write
+    reserved0: bool,
+    status: u2, // Read-only
+    power: bool, // Read-only or Read/Write if port_power_control is true
+    release_ownership: bool, // Read/Write
+    indicator_control: u2, //
+    test_control: u4, // Read/Write
+    wake_on_connect: bool, // Read/Write
+    wake_on_disconnect: bool, // Read/Write
+    wake_on_over_current: bool, // Read/Write
+    reserved1: u9,
+};
+
+/// Lunt Table 7-8
 const OpRegs = packed struct {
     command: Command, // USBCMD
     status: Status, // USBSTS
-    // interrupts: Interrupts, // USBINTR
-    // frame_index: Frame, // FRINDEX
-    // segment_selector: u32, // CTRLDSSEGMENT
-    // frame_list_address: u32, // PERIODICLISTBASE
-    // next_async_list: u32, // ASYNCLISTADDR
-    // reserved: u288,
-    // config_flag: u32, // CONFIGFLAG
-    // port_status_control: u32, // PORTSC
+    interrupts: Interrupts, // USBINTR
+    frame_index: u32, // FRINDEX
+    segment_selector: u32, // CTRLDSSEGMENT
+    frame_list_address: u32, // PERIODICLISTBASE
+    next_async_list: u32, // ASYNCLISTADDR
+    reserved: u288,
+    config_flag: u32, // CONFIGFLAG
+    // PORTSC is after this, see CapRegs.get_port_regs()
 };
 
 pub fn interrupt(interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
+    print.string("USB INT\n");
 }
+
+var frame_list: ?[]u32 = null;
 
 pub fn init(dev: *pci.Dev) void {
     const indent = "      - ";
@@ -165,13 +232,8 @@ pub fn init(dev: *pci.Dev) void {
     ps2.anykey();
 
     // Get Controller Registers
-    const cap_regs = CapabilityRegisters.get(range);
+    const cap_regs = CapRegs.get(range);
     const op_regs = cap_regs.get_op_regs();
-
-    print.format("{}\n", .{cap_regs.*});
-    ps2.anykey();
-    print.format("{}\n", .{op_regs});
-    ps2.anykey();
 
     // Turn Off BIOS USB to PS/2 Emulation
     if (cap_regs.cap_params.extended_caps_offset >= 0x40) {
@@ -183,7 +245,7 @@ pub fn init(dev: *pci.Dev) void {
         }
     }
 
-    // Reset
+    // Reset the Controller
     var invalid = true;
     var reset_timeout: u8 = 30; // Lunt says 20ms, but do 30ms to be safe.
     op_regs.command.reset = true;
@@ -195,9 +257,67 @@ pub fn init(dev: *pci.Dev) void {
         print.string(indent ++ "EHCI Controller failed to respond to reset\n");
         return;
     }
-    print.string(indent ++ "EHCI Controller Initialized\n");
-    ps2.anykey();
 
-    print.format("{}\n", .{cap_regs.*});
-    print.format("{}\n", .{op_regs});
+    print.string(indent ++ "EHCI Controller Reset\n");
+
+    frame_list = kernel.memory.big_alloc.alloc_array(u32, 1024) catch
+        @panic("usb.init: alloc frame_list failed");
+
+    // Initialize the Controller
+    op_regs.interrupts.enabled = true;
+    op_regs.interrupts.error_enabled = true;
+    op_regs.interrupts.port_change_enabled = true;
+    op_regs.frame_index = 0;
+    op_regs.segment_selector = 0;
+
+    op_regs.command.period_schedule_enabled = false;
+    while (op_regs.command.period_schedule_enabled) {}
+
+    op_regs.frame_list_address = @ptrToInt(frame_list.ptr);
+    // op_regs.next_async_list = 0; // TODO
+    op_regs.status.clear();
+    op_regs.command.init();
+    op_regs.config_flag = 1;
+
+    print.string(indent ++ "EHCI Controller Initialized\n");
+
+    for (cap_regs.get_port_regs()) |*port_reg, i| {
+        // For some reason the accessing the ports registers in QEMU must be
+        // done as a whole.
+        var copy = port_reg.*;
+
+        // Check to see if we need to power the port
+        if (cap_regs.struct_params.port_power_control and !copy.power) {
+            copy.power = true;
+            port_reg.* = copy;
+            timing.wait_milliseconds(30);
+            copy = port_reg.*;
+        }
+
+        if (!copy.connected) continue; // No device
+
+        // Reset the Port Lunt 7-25
+        copy.reset = true;
+        copy.enabled = false;
+        port_reg.* = copy;
+        copy = port_reg.*;
+        while (!copy.reset) {
+            copy = port_reg.*;
+        }
+        timing.wait_milliseconds(50);
+        copy.reset = false;
+        port_reg.* = copy;
+        copy = port_reg.*;
+        while (copy.reset) {
+            copy = port_reg.*;
+        }
+
+        if (!copy.enabled) {
+            // Not a high-speed device, release ownership to another controller
+            copy.release_ownership = true;
+            continue;
+        }
+
+        print.format("Port {}: {}\n", .{i, copy});
+    }
 }
