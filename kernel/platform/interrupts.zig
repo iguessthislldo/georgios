@@ -109,8 +109,8 @@ pub fn PanicMessage(comptime StackType: type) type {
     return struct {
         pub fn show(interrupt_number: u32, interrupt_stack: *const StackType) void {
             const Color = cga_console.Color;
-            cga_console.disable_cursor();
-            cga_console.new_page();
+            cga_console.reset();
+            cga_console.show_cursor(false);
             cga_console.set_colors(Color.Black, Color.Red);
             cga_console.fill_screen(' ');
             const has_ec = StackType.has_error_code;

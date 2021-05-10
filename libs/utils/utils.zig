@@ -617,8 +617,12 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
         end: usize = 0,
         len: usize = 0,
 
+        inline fn wrapped_offset(pos: usize, offset: usize) usize {
+            return (pos + offset) % max_len;
+        }
+
         inline fn increment(pos: *usize) void {
-            pos.* = (pos.* + 1) % max_len;
+            pos.* = wrapped_offset(pos.*, 1);
         }
 
         pub fn push(self: *Self, value: Type) void {
@@ -705,4 +709,29 @@ pub fn nibble_char(value: u4) u8 {
 pub fn byte_buffer(buffer: []u8, value: u8) void {
     buffer[0] = nibble_char(@intCast(u4, value >> 4));
     buffer[1] = nibble_char(@intCast(u4, value % 0x10));
+}
+
+/// Simple Pseudo-random number generator
+/// See https://en.wikipedia.org/wiki/Linear_congruential_generator
+pub fn Rand(comptime Type: type) type {
+    return struct {
+        const Self = @This();
+
+        const a: u64 = 6364136223846793005;
+        const c: u64 = 1442695040888963407;
+
+        seed: u64,
+
+        pub fn get(self: *Self) Type {
+            self.seed = a *% self.seed +% c;
+            return @truncate(Type, self.seed);
+        }
+    };
+}
+
+test "Rand" {
+    var r = Rand(u64){.seed = 0};
+    std.testing.expectEqual(@as(u64, 1442695040888963407), r.get());
+    std.testing.expectEqual(@as(u64, 1876011003808476466), r.get());
+    std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
 }

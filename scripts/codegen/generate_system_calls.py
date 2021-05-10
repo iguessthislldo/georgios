@@ -36,7 +36,7 @@ def error(*args, **kwargs):
     sys.exit(1)
 
 
-decompose_sig_re = re.compile(r'^(\w+)\((.*)\) (?:([^ :]+): )?((?:([^ !]+)!)?([ \[\]\w\.]+))$')
+decompose_sig_re = re.compile(r'^(\w+)\((.*)\) (?:([^ :]+): )?((?:([^ !]+)!)?([\? \[\]\w\.]+))$')
 error_re = re.compile(r'^(.*)!')
 def decompose_sig(sig):
     m = decompose_sig_re.match(sig)

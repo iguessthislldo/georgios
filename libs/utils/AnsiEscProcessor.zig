@@ -45,7 +45,8 @@ backspace: ?fn() void = null,
 newline: ?fn() void = null,
 reset_attributes: ?fn () void = null,
 reset_terminal: ?fn () void = null,
-// TODO: Other Functions like set colors, cursor, etc.
+move_cursor: ?fn (r: usize, c: usize) void = null,
+show_cursor: ?fn (show: bool) void = null,
 
 state: State = .Unescaped,
 saved: [64]u8 = undefined,
@@ -91,6 +92,20 @@ fn select_graphic_rendition(self: *Self) void {
             else => {},
         }
         i += 1;
+    }
+}
+
+fn process_move_cursor(self: *Self) void {
+    var column: usize = 0;
+    if (self.parameter_count > 1) {
+        column = self.parameters[1];
+    }
+    var row: usize = 0;
+    if (self.parameter_count > 0) {
+        row = self.parameters[0];
+    }
+    if (self.move_cursor) |move_cursor| {
+        move_cursor(row, column);
     }
 }
 
@@ -150,6 +165,11 @@ pub fn feed_char(self: *Self, char: u8) void {
                     }
                 },
 
+                '?' => {
+                    // TODO
+                    // private = true;
+                },
+
                 ';' => {
                     abort = self.process_parameter();
                 },
@@ -160,6 +180,25 @@ pub fn feed_char(self: *Self, char: u8) void {
                         self.select_graphic_rendition();
                         reset = true;
                     }
+                },
+
+                'H' => {
+                    abort = self.process_parameter();
+                    if (!abort) {
+                        self.process_move_cursor();
+                        reset = true;
+                    }
+                },
+
+                'l' => {
+                    // if (self.parameter_count == 1 and self.parameters[0] == 25) {
+                        if (self.show_cursor) |show_cursor| {
+                            show_cursor(false);
+                        }
+                        reset = true;
+                    // } else {
+                    //     abort = true;
+                    // }
                 },
 
                 else => abort = true,

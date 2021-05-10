@@ -244,11 +244,12 @@ pub inline fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!void {
     return rv.get();
 }
 
-pub inline fn get_key() georgios.keyboard.Event {
-    var key: georgios.keyboard.Event = undefined;
+pub inline fn get_key(blocking: georgios.Blocking) ?georgios.keyboard.Event {
+    var key: ?georgios.keyboard.Event = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 5)),
-        [arg1] "{ebx}" (@ptrToInt(&key)),
+        [arg1] "{ebx}" (@ptrToInt(&blocking)),
+        [arg2] "{ecx}" (@ptrToInt(&key)),
         );
     return key;
 }
@@ -342,4 +343,18 @@ pub inline fn set_cwd(dir: []const u8) georgios.ThreadingOrFsError!void {
         [arg2] "{ecx}" (@ptrToInt(&rv)),
         );
     return rv.get();
+}
+
+pub inline fn sleep_milliseconds(ms: u64) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 15)),
+        [arg1] "{ebx}" (@ptrToInt(&ms)),
+        );
+}
+
+pub inline fn sleep_seconds(s: u64) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 16)),
+        [arg1] "{ebx}" (@ptrToInt(&s)),
+        );
 }

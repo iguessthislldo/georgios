@@ -132,6 +132,14 @@ pub fn estimate_cpu_speed() void {
     estimated_ticks_per_nanosecond = estimated_ticks_per_microsecond / 1000;
 }
 
+pub fn seconds_to_ticks(s: u64) u64{
+    return s * estimated_ticks_per_second;
+}
+
+pub fn milliseconds_to_ticks(ms: u64) u64 {
+    return ms * estimated_ticks_per_millisecond;
+}
+
 inline fn wait_ticks(ticks: u64) void {
     const until = rdtsc() + ticks;
     while (until > rdtsc()) {

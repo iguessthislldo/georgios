@@ -99,15 +99,20 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
-        // SYSCALL: get_key() key: georgios.keyboard.Event
+        // SYSCALL: get_key(&blocking: georgios.Blocking) key: ?georgios.keyboard.Event
         // IMPORT: georgios "georgios.zig"
         5 => {
+            const blocking = @intToPtr(*georgios.Blocking, arg1).* == .Blocking;
             while (true) {
                 if (ps2.get_key()) |key| {
-                    @intToPtr(*georgios.keyboard.Event, arg1).* = key;
+                    @intToPtr(*?georgios.keyboard.Event, arg2).* = key;
+                    break;
+                } else if (blocking) {
+                    kernel.threading_manager.wait_for_keyboard();
+                } else {
+                    @intToPtr(*?georgios.keyboard.Event, arg2).* = null;
                     break;
                 }
-                kernel.threading_manager.wait_for_keyboard();
             }
         },
 
@@ -213,6 +218,16 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             } else |e| {
                 rv.set_error(e);
             }
+        },
+
+        // SYSCALL: sleep_milliseconds(&ms: u64) void
+        15 => {
+            kernel.threading_manager.sleep_milliseconds(@intToPtr(*u64, arg1).*);
+        },
+
+        // SYSCALL: sleep_seconds(&s: u64) void
+        16 => {
+            kernel.threading_manager.sleep_seconds(@intToPtr(*u64, arg1).*);
         },
 
         else => @panic("Invalid System Call"),

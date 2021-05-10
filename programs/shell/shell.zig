@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const georgios = @import("georgios");
 comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
@@ -46,7 +48,7 @@ pub fn main() void {
         system_calls.print_string("%\x1b[7m");
         var getline = true;
         while (getline) {
-            const key_event = system_calls.get_key();
+            const key_event = system_calls.get_key(.Blocking).?;
             if (key_event.char) |c| {
                 if (key_event.modifiers.control_is_pressed()) {
                     switch (c) {
@@ -121,6 +123,16 @@ pub fn main() void {
                             system_calls.print_string(@errorName(e));
                             system_calls.print_string("\n");
                         };
+                    }
+                } else if (utils.memory_compare(command_parts[0], "sleep")) {
+                    if (command_part_count != 2) {
+                        system_calls.print_string("sleep requires exactly one argument\n");
+                    } else {
+                        if (std.fmt.parseUnsigned(usize, command_parts[1], 10)) |n| {
+                            system_calls.sleep_seconds(n);
+                        } else |e| {
+                            system_calls.print_string("invalid argument\n");
+                        }
                     }
                 } else {
                     var command_path = command_parts[0];

@@ -60,25 +60,34 @@ var default_colors: u8 = default_default_colors;
 
 var buffer: [*]u16 = undefined;
 
-pub fn new_page() void {
-    row = 0;
-    column = 0;
-    fill_screen(' ');
-    cursor(0, 0);
+pub fn move_cursor(x: u32, y: u32) void {
+    row = x;
+    column = y;
+    cursor(x, y);
 }
 
-fn reset_attributes() void {
+pub fn reset_cursor() void {
+    move_cursor(0, 0);
+    show_cursor(true);
+}
+
+pub fn clear_screen() void {
+    fill_screen(' ');
+}
+
+pub fn reset_attributes() void {
     default_colors = default_default_colors;
 }
 
-fn reset_terminal() void {
-    new_page();
+pub fn reset() void {
     reset_attributes();
+    clear_screen();
+    reset_cursor();
 }
 
 pub fn init() void {
     buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
-    reset_terminal();
+    reset();
 }
 
 pub fn set_colors(fg: Color, bg: Color) void {
@@ -114,9 +123,9 @@ pub fn cursor(x: u32, y: u32) void {
     out8(data_port, @intCast(u8, index & 0xFF));
 }
 
-pub fn disable_cursor() void {
+pub fn show_cursor(show: bool) void {
     out8(command_port, set_cursor_shape_command);
-    out8(data_port, 0x20); // Bit 5 Disables Cursor
+    out8(data_port, if (show) 0 else 0x20); // Bit 5 Disables Cursor
 }
 
 pub fn scroll() void {
@@ -155,7 +164,7 @@ pub fn direct_print_char(c: u8) void {
 }
 
 pub fn print_all_characters() void {
-    new_page();
+    reset();
     var i: u16 = 0;
     while (i < 256) {
         direct_print_char(@truncate(u8, i));
@@ -220,7 +229,9 @@ var ansi_esc_processor = utils.AnsiEscProcessor{
     .backspace = backspace,
     .invert_colors = invert_colors,
     .reset_attributes = reset_attributes,
-    .reset_terminal = reset_terminal,
+    .reset_terminal = reset,
+    .move_cursor = move_cursor,
+    .show_cursor = show_cursor,
 };
 
 pub fn print_char(byte: u8) void {

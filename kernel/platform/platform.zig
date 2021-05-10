@@ -31,6 +31,11 @@ pub const disable_interrupts = util.disable_interrupts;
 pub const done = util.done;
 pub const idle = util.idle;
 
+pub const Time = u64;
+pub const time = timing.rdtsc;
+pub const seconds_to_time = timing.seconds_to_ticks;
+pub const milliseconds_to_time = timing.milliseconds_to_ticks;
+
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     asm volatile ("int $50");
     unreachable;

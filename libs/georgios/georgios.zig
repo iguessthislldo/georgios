@@ -68,3 +68,8 @@ pub const elf = struct {
 };
 
 pub const ExecError = ThreadingOrFsError || elf.Error;
+
+pub const Blocking = enum {
+    Blocking,
+    NonBlocking,
+};

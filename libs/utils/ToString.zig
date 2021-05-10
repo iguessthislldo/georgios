@@ -62,6 +62,27 @@ pub fn hex(self: *ToString, value: usize) Error!void {
     self.hex_recurse(value);
 }
 
+fn uint_recurse(self: *ToString, value: usize) Error!void {
+    const next = value / 10;
+    if (next > 0) {
+        try self.uint_recurse(next);
+    }
+    try self.char('0' + @intCast(u8, value % 10));
+}
+
+pub fn uint(self: *ToString, value: usize) Error!void {
+    if (value == 0) {
+        try self.char('0');
+        return;
+    }
+    const got = self.got;
+    self.uint_recurse(value) catch |e| {
+        // Restore
+        self.got = got;
+        return e;
+    };
+}
+
 test "ToString" {
     {
         var buffer: [128]u8 = undefined;
@@ -94,5 +115,15 @@ test "ToString" {
         var ts = ToString{.buffer = buffer[0..]};
         std.testing.expectError(Error.NotEnoughDestination, ts.hex(0xff));
         std.testing.expectEqualSlices(u8, ts.get(), "");
+    }
+    {
+        var buffer: [10]u8 = undefined;
+        var ts = ToString{.buffer = buffer[0..]};
+        try ts.uint(0);
+        try ts.uint(2);
+        try ts.uint(14);
+        try ts.uint(1346);
+        std.testing.expectError(Error.NotEnoughDestination, ts.uint(23912));
+        std.testing.expectEqualSlices(u8, ts.get(), "02141346");
     }
 }

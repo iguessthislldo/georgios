@@ -115,6 +115,7 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("hello");
     build_program("ls");
     build_program("cat");
+    build_program("snake");
 }
 
 fn build_bios_int() void {
