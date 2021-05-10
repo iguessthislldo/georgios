@@ -1,5 +1,6 @@
 ISO:=georgios.iso
 DISK:=disk.img
+USBDRIVE:=usbdrive.img
 
 ROOT_DIR:=tmp/root
 BOOT_DIR:=$(ROOT_DIR)/boot
@@ -16,7 +17,7 @@ vbe?=$(multiboot_vbe)
 debug_log?=true
 wait_for_anykey?=false
 
-all: $(ISO) $(DISK)
+all: $(ISO) $(DISK) $(USBDRIVE)
 
 .PHONY: build_georgios
 build_georgios:
@@ -50,6 +51,9 @@ $(DISK): root
 	rm -f $(DISK)
 	mke2fs -L '' -N 0 -O none -d $(ROOT_DIR) -r 1 -t ext2 $(DISK) 20m
 
+$(USBDRIVE): $(DISK)
+	cp $(DISK) $(USBDRIVE)
+
 .PHONY: bochs
 bochs:
 	bochs -q -f misc/bochs_config -rc misc/bochs_rc
@@ -60,4 +64,4 @@ qemu:
 
 .PHONY: clean
 clean:
-	rm -fr tmp $(ISO) $(DISK) zig-cache
+	rm -fr tmp $(ISO) $(DISK) $(USBDRIVE) zig-cache
