@@ -46,8 +46,16 @@ const CapRegs = packed struct {
     length: u8, // CAPLENGTH
     reserved: u8,
     version: u16, // HCIVERSION
-    struct_params: StructParams, // HCSPARAMS
-    cap_params: CapParams, // HCCPARAMS
+    _struct_params: StructParams, // HCSPARAMS
+    _cap_params: CapParams, // HCCPARAMS
+
+    pub fn get_struct_params(self: *const CapRegs) StructParams {
+        return self._struct_params;
+    }
+
+    pub fn get_cap_params(self: *const CapRegs) CapParams {
+        return self._cap_params;
+    }
 
     pub fn get(virtual_range: memory.Range) *const CapRegs {
         return @intToPtr(*const CapRegs, virtual_range.start);
@@ -56,7 +64,7 @@ const CapRegs = packed struct {
     // HCSP-PORTROUTE is after HCCPARAMS, but its size depends on CAPLENGTH and
     // its validity depends on struct_params.
     pub fn get_companion_port_route(self: *const CapRegs, index: usize) ?u4 {
-        if (!self.struct_params.port_routing_rules) return null;
+        if (!self.get_struct_params().port_routing_rules) return null;
         const count = (@as(usize, self.length) - @sizeOf(CapRegs)) / 2;
         if (index >= count) return null;
         const byte = @intToPtr(*const u8,
@@ -70,12 +78,12 @@ const CapRegs = packed struct {
 
     pub fn get_port_regs(self: *const CapRegs) []PortReg {
         return @intToPtr([*]PortReg, @ptrToInt(self.get_op_regs()) + @sizeOf(OpRegs))
-            [0..self.struct_params.port_count];
+            [0..self.get_struct_params().port_count];
     }
 
     pub fn get_extended_caps_id_offset(self: *const CapRegs, dev: *pci.Dev, id: u8) ?u8 {
         // Lunt Pages 7-8 and M-7
-        var offset = self.cap_params.extended_caps_offset;
+        var offset = self.get_cap_params().extended_caps_offset;
         while (true) {
             const value = dev.read(u32, offset);
             const this_id = @truncate(u8, value);
@@ -236,7 +244,7 @@ pub fn init(dev: *pci.Dev) void {
     const op_regs = cap_regs.get_op_regs();
 
     // Turn Off BIOS USB to PS/2 Emulation
-    if (cap_regs.cap_params.extended_caps_offset >= 0x40) {
+    if (cap_regs.get_cap_params().extended_caps_offset >= 0x40) {
         // Find the USB Legacy Support
         if (cap_regs.get_extended_caps_id_offset(dev, 1)) |offset| {
             // Set the "System Software Owned Semaphore" Bit
@@ -248,14 +256,24 @@ pub fn init(dev: *pci.Dev) void {
     // Reset the Controller
     var invalid = true;
     var reset_timeout: u8 = 30; // Lunt says 20ms, but do 30ms to be safe.
-    op_regs.command.reset = true;
-    while (reset_timeout > 0 and op_regs.command.reset) {
+    {
+        var copy = op_regs.command;
+        copy.run = false;
+        copy.reset = true;
+        op_regs.command = copy;
+    }
+    while (reset_timeout > 0) {
+        var copy = op_regs.command;
+        if (!copy.reset) break;
         timing.wait_milliseconds(1);
         reset_timeout -= 1;
     }
-    if (op_regs.command.reset) {
-        print.string(indent ++ "EHCI Controller failed to respond to reset\n");
-        return;
+    {
+        var copy = op_regs.command;
+        if (copy.reset) {
+            print.string(indent ++ "EHCI Controller failed to respond to reset\n");
+            return;
+        }
     }
 
     print.string(indent ++ "EHCI Controller Reset\n");
@@ -264,16 +282,14 @@ pub fn init(dev: *pci.Dev) void {
         @panic("usb.init: alloc frame_list failed");
 
     // Initialize the Controller
-    op_regs.interrupts.enabled = true;
-    op_regs.interrupts.error_enabled = true;
-    op_regs.interrupts.port_change_enabled = true;
+    var int_copy = op_regs.interrupts;
+    int_copy.enabled = true;
+    int_copy.error_enabled = true;
+    int_copy.port_change_enabled = true;
+    op_regs.interrupts = int_copy;
     op_regs.frame_index = 0;
     op_regs.segment_selector = 0;
-
-    op_regs.command.period_schedule_enabled = false;
-    while (op_regs.command.period_schedule_enabled) {}
-
-    op_regs.frame_list_address = @ptrToInt(frame_list.ptr);
+    op_regs.frame_list_address = @ptrToInt(frame_list.?.ptr);
     // op_regs.next_async_list = 0; // TODO
     op_regs.status.clear();
     op_regs.command.init();
@@ -281,13 +297,14 @@ pub fn init(dev: *pci.Dev) void {
 
     print.string(indent ++ "EHCI Controller Initialized\n");
 
+    const power_control = cap_regs.get_struct_params().port_power_control;
     for (cap_regs.get_port_regs()) |*port_reg, i| {
         // For some reason the accessing the ports registers in QEMU must be
         // done as a whole.
         var copy = port_reg.*;
 
         // Check to see if we need to power the port
-        if (cap_regs.struct_params.port_power_control and !copy.power) {
+        if (power_control and !copy.power) {
             copy.power = true;
             port_reg.* = copy;
             timing.wait_milliseconds(30);
@@ -315,6 +332,7 @@ pub fn init(dev: *pci.Dev) void {
         if (!copy.enabled) {
             // Not a high-speed device, release ownership to another controller
             copy.release_ownership = true;
+            port_reg.* = copy;
             continue;
         }
 
