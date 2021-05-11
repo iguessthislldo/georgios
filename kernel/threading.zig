@@ -460,6 +460,7 @@ pub const Manager = struct {
     // than 5ms), it causes a really weird looking page fault. Might have
     // something to do with the keyboard interrupt for the enter release.
     pub fn sleep_milliseconds(self: *Manager, ms: u64) void {
+        if (ms == 0) return;
         platform.disable_interrupts();
         self.current_thread.?.state = .Wait;
         self.time_queue.insert(self.current_thread.?.id,
@@ -468,6 +469,7 @@ pub const Manager = struct {
     }
 
     pub fn sleep_seconds(self: *Manager, s: u64) void {
+        if (s == 0) return;
         platform.disable_interrupts();
         self.current_thread.?.state = .Wait;
         self.time_queue.insert(self.current_thread.?.id,

@@ -358,3 +358,12 @@ pub inline fn sleep_seconds(s: u64) void {
         [arg1] "{ebx}" (@ptrToInt(&s)),
         );
 }
+
+pub inline fn time() u64 {
+    var rv: u64 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 17)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}

@@ -230,6 +230,11 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_manager.sleep_seconds(@intToPtr(*u64, arg1).*);
         },
 
+        // SYSCALL: time() u64
+        17 => {
+            @intToPtr(*u64, arg1).* = kernel.platform.time();
+        },
+
         else => @panic("Invalid System Call"),
     }
 }

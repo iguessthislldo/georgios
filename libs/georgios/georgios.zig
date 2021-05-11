@@ -21,6 +21,18 @@ comptime {
 
 pub var proc_info: if (is_program) *const ProcessInfo else void = undefined;
 
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    var buffer: [128]u8 = undefined;
+    var ts = utils.ToString{.buffer = buffer[0..]};
+    ts.string("\x1bc") catch unreachable;
+    ts.string(proc_info.name) catch unreachable;
+    ts.string(" panicked: ") catch unreachable;
+    ts.string(msg) catch unreachable;
+    ts.string("\n") catch unreachable;
+    system_calls.print_string(ts.get());
+    system_calls.exit(1);
+}
+
 pub const DirEntry = struct {
     dir: []const u8,
     dir_inode: ?usize = null,

@@ -607,15 +607,26 @@ pub inline fn to_const_bytes(value: anytype) []const u8 {
     }
 }
 
-pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
+/// What to discard if there is no more room.
+const CircularBufferDiscard = enum {
+    DiscardNewest,
+    DiscardOldest,
+};
+
+pub fn CircularBuffer(
+        comptime Type: type, len_arg: usize, discard: CircularBufferDiscard) type {
     return struct {
         const Self = @This();
         const max_len = len_arg;
 
         contents: [max_len]Type = undefined,
         start: usize = 0,
-        end: usize = 0,
         len: usize = 0,
+
+        pub fn reset(self: *Self) void {
+            self.start = 0;
+            self.len = 0;
+        }
 
         inline fn wrapped_offset(pos: usize, offset: usize) usize {
             return (pos + offset) % max_len;
@@ -626,11 +637,16 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
         }
 
         pub fn push(self: *Self, value: Type) void {
-            if (self.len < max_len) {
-                self.contents[self.end] = value;
-                increment(&self.end);
+            if (self.len == max_len) {
+                if (discard == .DiscardNewest) {
+                    return;
+                } else { // DiscardOldest
+                    increment(&self.start);
+                }
+            } else {
                 self.len += 1;
             }
+            self.contents[wrapped_offset(self.start, self.len - 1)] = value;
         }
 
         pub fn pop(self: *Self) ?Type {
@@ -640,61 +656,127 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
             return self.contents[self.start];
         }
 
-        pub fn peek(self: *Self) ?Type {
+        pub fn get(self: *const Self, offset: usize) ?Type {
+            if (offset >= self.len) return null;
+            return self.contents[wrapped_offset(self.start, offset)];
+        }
+
+        pub fn peek_start(self: *const Self) ?Type {
+            return self.get(0);
+        }
+
+        pub fn peek_end(self: *const Self) ?Type {
             if (self.len == 0) return null;
-            return self.contents[self.start];
+            return self.get(self.len - 1);
         }
     };
 }
 
-test "CircularBuffer" {
-    var buffer = CircularBuffer(usize, 4){};
+fn test_circular_buffer(comptime discard: CircularBufferDiscard) void {
+    var buffer = CircularBuffer(usize, 4, discard){};
     const nil: ?usize = null;
 
     // Empty
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
 
     // Push Some Values
     buffer.push(1);
     std.testing.expectEqual(@as(usize, 1), buffer.len);
-    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
     buffer.push(2);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(3);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
     std.testing.expectEqual(@as(usize, 3), buffer.len);
 
+    // Test get
+    std.testing.expectEqual(@as(usize, 1), buffer.get(0).?);
+    std.testing.expectEqual(@as(usize, 2), buffer.get(1).?);
+    std.testing.expectEqual(@as(usize, 3), buffer.get(2).?);
+    std.testing.expectEqual(nil, buffer.get(3));
+
     // Pop The Values
-    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
 
     // It's empty again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
 
-    // Fill It
+    // Fill it past capacity
     buffer.push(5);
+    std.testing.expectEqual(@as(usize, 5), buffer.peek_end().?);
     buffer.push(4);
+    std.testing.expectEqual(@as(usize, 4), buffer.peek_end().?);
     buffer.push(3);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
     buffer.push(2);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(1);
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
+    }
     std.testing.expectEqual(@as(usize, 4), buffer.len);
 
+    // Test get
+    var index: usize = 0;
+    if (discard == .DiscardNewest) {
+        std.testing.expectEqual(@as(usize, 5), buffer.get(index).?);
+        index += 1;
+    }
+    std.testing.expectEqual(@as(usize, 4), buffer.get(index).?);
+    index += 1;
+    std.testing.expectEqual(@as(usize, 3), buffer.get(index).?);
+    index += 1;
+    std.testing.expectEqual(@as(usize, 2), buffer.get(index).?);
+    index += 1;
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.get(index).?);
+        index += 1;
+    }
+    std.testing.expectEqual(nil, buffer.get(index));
+
     // Pop The Values
-    std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+    if (discard == .DiscardNewest) {
+        std.testing.expectEqual(@as(usize, 5), buffer.peek_start().?);
+        std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+    }
+    std.testing.expectEqual(@as(usize, 4), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 4), buffer.pop().?);
     std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+        std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+    }
 
     // It's empty yet again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
+}
+
+test "CircularBuffer(.DiscardNewest)" {
+    test_circular_buffer(.DiscardNewest);
+}
+
+test "CircularBuffer(.DiscardOldest)" {
+    test_circular_buffer(.DiscardOldest);
 }
 
 pub fn nibble_char(value: u4) u8 {

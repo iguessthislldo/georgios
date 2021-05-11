@@ -21,7 +21,7 @@ const scan_codes = @import("ps2_scan_codes.zig");
 
 var modifiers = keyboard.Modifiers{};
 
-var buffer = utils.CircularBuffer(Event, 128){};
+var buffer = utils.CircularBuffer(Event, 128, .DiscardNewest){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
