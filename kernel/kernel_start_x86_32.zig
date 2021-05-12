@@ -18,7 +18,7 @@ const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
 const utils = @import("utils");
 
-const sse_enabled: bool = comptime {
+pub const sse_enabled: bool = comptime {
     for (builtin.arch.allFeaturesList()) |feature, index_usize| {
         const index = @intCast(std.Target.Cpu.Feature.Set.Index, index_usize);
         if (builtin.cpu.features.isEnabled(index)) {
@@ -34,9 +34,6 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     kernel.panic(msg, trace);
 }
 
-// TODO: Be able to use VGA
-const multiboot_vga_request = build_options.multiboot_vga_request;
-
 // TODO: Maybe refactor when struct fields get custom alignment
 const Multiboot2Header = packed struct {
     const magic_value: u32 = 0xe85250d6;
@@ -51,7 +48,7 @@ const Multiboot2Header = packed struct {
     const tag_flag_must_understand: u16 = 0;
     const tag_flag_optional: u16 = 1;
 
-    const VgaMode = if (multiboot_vga_request) packed struct {
+    const VgaMode = if (build_options.multiboot_vbe) packed struct {
         const InfoRequestTag = packed struct {
             kind: u16 = tag_kind_info_request,
             flags: u16 = tag_flag_must_understand,
@@ -110,9 +107,7 @@ pub export var temp_stack: [utils.Ki(4)]u8
     align(utils.Ki(4)) linksection(".low_bss") = undefined;
 
 /// Stack for kernel_main()
-/// TODO: Allow this to grow later or what ever kernel stacks are supposed to
-/// do?
-export var stack: [utils.Ki(16)]u8 align(16) linksection(".bss") = undefined;
+export var stack: [utils.Ki(8)]u8 align(16) linksection(".bss") = undefined;
 
 /// Entry Point
 export fn kernel_start() linksection(".low_text") callconv(.Naked) noreturn {
@@ -235,6 +230,7 @@ export fn kernel_main_wrapper() linksection(".low_text") noreturn {
     for (low_kernel_page_tables[0..frame_count]) |*ptr, i| {
         ptr.* = i * utils.Ki(4) + 1;
     }
+    low_kernel_page_tables[0] = 0;
     // Translate for high mode
     low_kernel_page_tables.ptr =
         @intToPtr([*]u32, @ptrToInt(low_kernel_page_tables.ptr) + offset);

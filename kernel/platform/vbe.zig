@@ -4,31 +4,48 @@
 // https://wiki.osdev.org/VESA_Video_Modes
 
 const std = @import("std");
+const build_options = @import("build_options");
 
 const utils = @import("utils");
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
+const bios_int = @import("bios_int.zig");
 
+const kernel = @import("../kernel.zig");
 const print = @import("../print.zig");
 const kmemory = @import("../memory.zig");
 const Range = kmemory.Range;
 const font = @import("../font.zig");
+
+// TODO Make these not fixed
+const find_width = 800;
+const find_height = 600;
+const find_bpp = 32;
+
+const RealModePtr = packed struct {
+    offset: u16,
+    segment: u16,
+
+    pub fn get(self: *const RealModePtr) u32 {
+        return @intCast(u32, self.segment) * 0x10 + self.offset;
+    }
+};
 
 const Info = packed struct {
     const magic_expected = "VESA";
 
     magic: [4]u8,
     version: u16,
-    oem_ptr: [2]u16,
+    oem_ptr: RealModePtr,
     capabilities: u32,
-    video_mode_ptr: [2]u16,
+    video_modes_ptr: RealModePtr,
     memory: u16,
     software_rev: u16,
-    vendor: [2]u16,
-    product_name: [2]u16,
-    product_rev: [2]u16,
+    vendor: RealModePtr,
+    product_name: RealModePtr,
+    product_rev: RealModePtr,
 
     const Version = enum (u8) {
         V1 = 1,
@@ -36,8 +53,24 @@ const Info = packed struct {
         V3 = 3,
     };
 
-    pub fn get_version(self: @This()) ?Version {
+    pub fn get_version(self: *const Info) ?Version {
         return utils.int_to_enum(Version, @intCast(u8, self.version >> 8));
+    }
+
+    pub fn get_modes(self: *const Info) []const u16 {
+        var mode_count: usize = 0;
+        const modes_ptr = @intToPtr([*]const u16, self.video_modes_ptr.get());
+        while (modes_ptr[mode_count] != 0xffff) {
+            mode_count += 1;
+        }
+        const modes = kernel.memory.small_alloc.alloc_array(u16, mode_count) catch
+            @panic("vbe.Info.get_modes: alloc mode array failed");
+        var mode_i: usize = 0;
+        while (modes_ptr[mode_i] != 0xffff) {
+            modes[mode_i] = modes_ptr[mode_i];
+            mode_i += 1;
+        }
+        return modes;
     }
 };
 
@@ -76,9 +109,10 @@ const Mode = packed struct {
     off_screen_mem_size: u16,
 };
 
-var info: *Info = undefined;
-var mode: *Mode = undefined;
-var mem: *kmemory.Memory = undefined;
+var vbe_setup = false;
+var info: Info = undefined;
+var mode: Mode = undefined;
+var mode_id: ?u16 = null;
 
 fn video_memory_offset(x: u32, y: u32) callconv(.Inline) u32 {
     return y * mode.pitch + x * bytes_per_pixel;
@@ -236,19 +270,118 @@ pub fn flush_buffer() void {
     buffer_clean = true;
 }
 
-pub fn init(memory: *kmemory.Memory) void {
+const vbe_result_ptr: u16 = 0x8000;
+
+const VbeFuncArgs = struct {
+    bx: u16 = 0,
+    cx: u16 = 0,
+    di: u16 = 0,
+    slow: bool = false,
+};
+fn vbe_func(name: []const u8, func_num: u16, args: VbeFuncArgs) bool {
+    var params = bios_int.Params{
+        .interrupt = 0x10,
+        .eax = func_num,
+        .ebx = args.bx,
+        .ecx = args.cx,
+        .edi = args.di,
+        .slow = args.slow,
+    };
+    bios_int.run(&params) catch {
+        print.format("   - vbe_func: {}: bios_int.run failed\n", .{name});
+        return false;
+    };
+    if (@truncate(u16, params.eax) != 0x4f) {
+        print.format("   - vbe_func: {}: failed, eax: {:x}\n", .{name, params.eax});
+        return false;
+    }
+    return true;
+}
+
+fn get_vbe_info() ?*const Info {
+    const vbe2 = "VBE2"; // Set the interface to use VBE Version 2
+    _ = utils.memory_copy_truncate(@intToPtr([*]u8, vbe_result_ptr)[0..vbe2.len], vbe2);
+    return if (vbe_func("get_vbe_info", 0x4f00, .{
+        .di = vbe_result_ptr
+    })) @intToPtr(*const Info, vbe_result_ptr) else null;
+}
+
+fn get_mode_info(mode_number: u16) ?*const Mode {
+    return if (vbe_func("get_mode_info", 0x4f01, .{
+        .cx = mode_number,
+        .di = vbe_result_ptr
+    })) @intToPtr(*const Mode, vbe_result_ptr) else null;
+}
+
+fn set_mode() void {
+    vbe_setup = vbe_func("set_mode", 0x4f02, .{
+        .bx = mode_id.? | 0x4000, // Use Linear Buffer
+        .slow = true,
+    });
+}
+
+pub fn init() void {
+    if (!build_options.vbe) {
+        return;
+    }
+
+    print.string(" - See if we can use VESA graphics..\n");
+
+    // First see GRUB setup VBE
     if (multiboot.get_vbe_info()) |vbe| {
-        print.string(" - Got VBE info from Multiboot...\n");
+        print.string("   - Got VBE info from Multiboot...\n");
+        info = @ptrCast(*Info, &vbe.control_info[0]).*;
+        mode_id = vbe.mode;
+        mode = @ptrCast(*Mode, &vbe.mode_info[0]).*;
+        vbe_setup = true;
+    }
 
-        mem = memory;
+    // Then see if we can set it up using the BIOS
+    if (!vbe_setup) {
+        // Get Info
+        print.string("   - Trying to get VBE info directly from BIOS...\n");
+        info = (get_vbe_info() orelse return).*;
+        print.format("{}\n", .{info});
+        if (info.get_version()) |version| {
+            print.format("VERSION {}\n", .{version});
+        }
 
-        info = @ptrCast(*Info, &vbe.control_info[0]);
+        // Find the Mode We're Looking For
+        const supported_modes = info.get_modes();
+        defer kernel.memory.small_alloc.free_array(supported_modes) catch unreachable;
+        for (supported_modes) |supported_mode| {
+            print.format("   - mode {:x}\n", .{supported_mode});
+            const mode_ptr = get_mode_info(supported_mode) orelse return;
+            print.format("     - {}x{}x{}\n", .{
+                mode_ptr.width, mode_ptr.height, mode_ptr.bpp});
+            if ((mode_ptr.attributes & (1 << 7)) == 0) {
+                print.string("     - Non-linear, skipping...\n");
+                continue;
+            }
+            if (mode_ptr.width == find_width and mode_ptr.height == find_height and
+                    mode_ptr.bpp == find_bpp) {
+                mode = mode_ptr.*;
+                mode_id = supported_mode;
+                break;
+            }
+        }
+        if (mode_id == null) {
+            print.string("   - Didn't Find VBE Mode\n");
+            return;
+        }
+
+        // Set the Mode
+        set_mode();
+    }
+
+    if (vbe_setup) {
+        print.string("   - Got VBE info\n");
+
         if (info.get_version()) |version| {
             print.format("{}\n", .{version});
         }
-        print.format("{}\n", .{info.*});
-        mode = @ptrCast(*Mode, &vbe.mode_info[0]);
-        print.format("{}\n", .{mode.*});
+        print.format("{}\n", .{info});
+        print.format("{}\n", .{mode});
 
         if (mode.bpp != 32) {
             @panic("bpp is not 32bit");
@@ -261,15 +394,15 @@ pub fn init(memory: *kmemory.Memory) void {
         // TODO: Zig Bug? If catch is taken away Zig 0.5 fails to reject not
         // handling the error return. LLVM catches the mistake instead.
         print.format("vms: {}\n", .{video_memory_size});
-        buffer = mem.big_alloc.alloc_array(u8, video_memory_size) catch {
+        buffer = kernel.memory.big_alloc.alloc_array(u8, video_memory_size) catch {
             @panic("Couldn't alloc VBE Buffer");
         };
-        const video_memory_range =
-                mem.platform_memory.get_unused_kernel_space(video_memory_size) catch {
+        const video_memory_range = kernel.memory.platform_memory.get_unused_kernel_space(
+                video_memory_size) catch {
             @panic("Couldn't Reserve VBE Buffer");
         };
         video_memory = @intToPtr([*]u8, video_memory_range.start)[0..video_memory_size];
-        mem.platform_memory.map(video_memory_range, mode.framebuffer, false) catch {
+        kernel.memory.platform_memory.map(video_memory_range, mode.framebuffer, false) catch {
             @panic("Couldn't map VBE Buffer");
         };
 
@@ -285,6 +418,6 @@ pub fn init(memory: *kmemory.Memory) void {
             flush_buffer();
         }
     } else {
-        print.string(" - Missing VBE info from Multiboot. Could not init VBE.\n");
+        print.string(" - Could not init VBE graphics\n");
     }
 }

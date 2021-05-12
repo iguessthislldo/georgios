@@ -16,6 +16,8 @@ pub const fs = @import("fs.zig");
 pub var panic_message: []const u8 = "";
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    print.format("panic: {}\n", .{msg});
+    platform.impl.ps2.anykey();
     panic_message = msg;
     if (trace) |t| {
         print.format("index: {}\n", .{t.index});
@@ -54,7 +56,7 @@ pub fn init() !void {
     try threading_manager.init();
 }
 
-pub fn exec(info: *const georgios.ProcessInfo) !threading.Process.Id {
+pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_manager.new_process(info);
     var ext2_file = try filesystem.open(info.path);
     var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
@@ -73,7 +75,7 @@ pub fn exec(info: *const georgios.ProcessInfo) !threading.Process.Id {
 
 pub fn run() !void {
     try init();
-    platform.impl.cga_console.new_page();
+    print.string("\x1bc"); // Reset Console
     threading_manager.wait_for_process(
         try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
 }

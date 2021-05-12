@@ -2,13 +2,17 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const unicode = @import("unicode.zig");
-pub const utf8_to_utf32 = unicode.utf8_to_utf32;
+pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
 pub const UnicodeError = unicode.Error;
-pub const Utf8ToUtf32Result = unicode.Utf8ToUtf32Result;
+
+pub const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
 
 pub const Guid = @import("guid.zig");
 
+pub const ToString = @import("ToString.zig");
+
 pub const Error = error {
+    Unknown,
     OutOfBounds,
     NotEnoughSource,
     NotEnoughDestination,
@@ -220,6 +224,13 @@ pub fn memory_copy_error(destination: []u8, source: []const u8) callconv(.Inline
     return size;
 }
 
+pub fn memory_copy_anyptr(destination: []u8, source: anytype) callconv(.Inline) void {
+    const s = @ptrCast([*]const u8, source);
+    for (destination[0..]) |*ptr, i| {
+        ptr.* = s[i];
+    }
+}
+
 /// Set all the elements of `destination` to `value`.
 pub fn memory_set(destination: []u8, value: u8) callconv(.Inline) void {
     for (destination[0..]) |*ptr| {
@@ -276,6 +287,22 @@ pub fn string_length(bytes: []const u8) callconv(.Inline) usize {
     return bytes.len;
 }
 
+pub fn cstring_length(cstr: [*:0]const u8) usize {
+    var i: usize = 0;
+    while (cstr[i] != 0) {
+        i += 1;
+    }
+    return i;
+}
+
+pub fn cstring_to_slice(cstr: [*:0]const u8) []const u8 {
+    return @ptrCast([*]const u8, cstr)[0..cstring_length(cstr) + 1];
+}
+
+pub fn cstring_to_string(cstr: [*:0]const u8) []const u8 {
+    return @ptrCast([*]const u8, cstr)[0..cstring_length(cstr)];
+}
+
 pub fn int_log2(comptime Type: type, value: Type) Type {
     return @sizeOf(Type) * 8 - 1 - @clz(Type, value);
 }
@@ -293,6 +320,28 @@ test "int_log2" {
     test_int_log2(32, 5);
     test_int_log2(64, 6);
     test_int_log2(128, 7);
+}
+
+pub fn hex_char_len(comptime Type: type, value: Type) Type {
+    if (value == 0) {
+        return 1;
+    }
+    return int_log2(Type, value) / 4 + 1;
+}
+
+fn test_hex_char_len(value: usize, expected: usize) void {
+    std.testing.expectEqual(expected, hex_char_len(usize, value));
+}
+
+test "hex_char_len" {
+    test_hex_char_len(0x0, 1);
+    test_hex_char_len(0x1, 1);
+    test_hex_char_len(0xf, 1);
+    test_hex_char_len(0x10, 2);
+    test_hex_char_len(0x11, 2);
+    test_hex_char_len(0xff, 2);
+    test_hex_char_len(0x100, 3);
+    test_hex_char_len(0x101, 3);
 }
 
 pub fn int_bit_size(comptime Type: type) usize {
@@ -510,7 +559,16 @@ pub fn to_bytes(value: anytype) callconv(.Inline) []u8 {
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
-            return make_slice(u8, @ptrCast([*]u8, value), @sizeOf(pointer_type.child));
+            const count = switch (pointer_type.size) {
+                .One => 1,
+                .Slice => value.len,
+                else => {
+                    @compileLog("Unsupported Type is ", @typeName(Type));
+                    @compileError("Unsupported Type");
+                }
+            };
+            return make_slice(u8, @ptrCast([*]u8, value),
+                @sizeOf(pointer_type.child) * count);
         },
         else => {
             @compileLog("Unsupported Type is ", @typeName(Type));
@@ -532,8 +590,16 @@ pub fn to_const_bytes(value: anytype) callconv(.Inline) []const u8 {
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
         builtin.TypeId.Pointer => |pointer_type| {
+            const count = switch (pointer_type.size) {
+                .One => 1,
+                .Slice => value.len,
+                else => {
+                    @compileLog("Unsupported Type is ", @typeName(Type));
+                    @compileError("Unsupported Type");
+                }
+            };
             return make_const_slice(u8, @ptrCast([*]const u8, value),
-                @sizeOf(pointer_type.child));
+                @sizeOf(pointer_type.child) * count);
         },
         else => {
             @compileLog("Unsupported Type is ", @typeName(Type));
@@ -542,26 +608,46 @@ pub fn to_const_bytes(value: anytype) callconv(.Inline) []const u8 {
     }
 }
 
-pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
+/// What to discard if there is no more room.
+const CircularBufferDiscard = enum {
+    DiscardNewest,
+    DiscardOldest,
+};
+
+pub fn CircularBuffer(
+        comptime Type: type, len_arg: usize, discard: CircularBufferDiscard) type {
     return struct {
         const Self = @This();
         const max_len = len_arg;
 
         contents: [max_len]Type = undefined,
         start: usize = 0,
-        end: usize = 0,
         len: usize = 0,
 
+        pub fn reset(self: *Self) void {
+            self.start = 0;
+            self.len = 0;
+        }
+
+        fn wrapped_offset(pos: usize, offset: usize) callconv(.Inline) usize {
+            return (pos + offset) % max_len;
+        }
+
         fn increment(pos: *usize) callconv(.Inline) void {
-            pos.* = (pos.* + 1) % max_len;
+            pos.* = wrapped_offset(pos.*, 1);
         }
 
         pub fn push(self: *Self, value: Type) void {
-            if (self.len < max_len) {
-                self.contents[self.end] = value;
-                increment(&self.end);
+            if (self.len == max_len) {
+                if (discard == .DiscardNewest) {
+                    return;
+                } else { // DiscardOldest
+                    increment(&self.start);
+                }
+            } else {
                 self.len += 1;
             }
+            self.contents[wrapped_offset(self.start, self.len - 1)] = value;
         }
 
         pub fn pop(self: *Self) ?Type {
@@ -571,61 +657,127 @@ pub fn CircularBuffer(comptime Type: type, len_arg: usize) type {
             return self.contents[self.start];
         }
 
-        pub fn peek(self: *Self) ?Type {
+        pub fn get(self: *const Self, offset: usize) ?Type {
+            if (offset >= self.len) return null;
+            return self.contents[wrapped_offset(self.start, offset)];
+        }
+
+        pub fn peek_start(self: *const Self) ?Type {
+            return self.get(0);
+        }
+
+        pub fn peek_end(self: *const Self) ?Type {
             if (self.len == 0) return null;
-            return self.contents[self.start];
+            return self.get(self.len - 1);
         }
     };
 }
 
-test "CircularBuffer" {
-    var buffer = CircularBuffer(usize, 4){};
+fn test_circular_buffer(comptime discard: CircularBufferDiscard) void {
+    var buffer = CircularBuffer(usize, 4, discard){};
     const nil: ?usize = null;
 
     // Empty
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
 
     // Push Some Values
     buffer.push(1);
     std.testing.expectEqual(@as(usize, 1), buffer.len);
-    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
     buffer.push(2);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(3);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
     std.testing.expectEqual(@as(usize, 3), buffer.len);
 
+    // Test get
+    std.testing.expectEqual(@as(usize, 1), buffer.get(0).?);
+    std.testing.expectEqual(@as(usize, 2), buffer.get(1).?);
+    std.testing.expectEqual(@as(usize, 3), buffer.get(2).?);
+    std.testing.expectEqual(nil, buffer.get(3));
+
     // Pop The Values
-    std.testing.expectEqual(@as(usize, 1), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.peek().?);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
 
     // It's empty again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
 
-    // Fill It
+    // Fill it past capacity
     buffer.push(5);
+    std.testing.expectEqual(@as(usize, 5), buffer.peek_end().?);
     buffer.push(4);
+    std.testing.expectEqual(@as(usize, 4), buffer.peek_end().?);
     buffer.push(3);
+    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
     buffer.push(2);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(1);
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
+    }
     std.testing.expectEqual(@as(usize, 4), buffer.len);
 
+    // Test get
+    var index: usize = 0;
+    if (discard == .DiscardNewest) {
+        std.testing.expectEqual(@as(usize, 5), buffer.get(index).?);
+        index += 1;
+    }
+    std.testing.expectEqual(@as(usize, 4), buffer.get(index).?);
+    index += 1;
+    std.testing.expectEqual(@as(usize, 3), buffer.get(index).?);
+    index += 1;
+    std.testing.expectEqual(@as(usize, 2), buffer.get(index).?);
+    index += 1;
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.get(index).?);
+        index += 1;
+    }
+    std.testing.expectEqual(nil, buffer.get(index));
+
     // Pop The Values
-    std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+    if (discard == .DiscardNewest) {
+        std.testing.expectEqual(@as(usize, 5), buffer.peek_start().?);
+        std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+    }
+    std.testing.expectEqual(@as(usize, 4), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 4), buffer.pop().?);
     std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
+    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
     std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    if (discard == .DiscardOldest) {
+        std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+        std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+    }
 
     // It's empty yet again
     std.testing.expectEqual(@as(usize, 0), buffer.len);
     std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek());
+    std.testing.expectEqual(nil, buffer.peek_start());
+    std.testing.expectEqual(nil, buffer.get(0));
+    std.testing.expectEqual(nil, buffer.peek_end());
+}
+
+test "CircularBuffer(.DiscardNewest)" {
+    test_circular_buffer(.DiscardNewest);
+}
+
+test "CircularBuffer(.DiscardOldest)" {
+    test_circular_buffer(.DiscardOldest);
 }
 
 pub fn nibble_char(value: u4) u8 {
@@ -640,4 +792,29 @@ pub fn nibble_char(value: u4) u8 {
 pub fn byte_buffer(buffer: []u8, value: u8) void {
     buffer[0] = nibble_char(@intCast(u4, value >> 4));
     buffer[1] = nibble_char(@intCast(u4, value % 0x10));
+}
+
+/// Simple Pseudo-random number generator
+/// See https://en.wikipedia.org/wiki/Linear_congruential_generator
+pub fn Rand(comptime Type: type) type {
+    return struct {
+        const Self = @This();
+
+        const a: u64 = 6364136223846793005;
+        const c: u64 = 1442695040888963407;
+
+        seed: u64,
+
+        pub fn get(self: *Self) Type {
+            self.seed = a *% self.seed +% c;
+            return @truncate(Type, self.seed);
+        }
+    };
+}
+
+test "Rand" {
+    var r = Rand(u64){.seed = 0};
+    std.testing.expectEqual(@as(u64, 1442695040888963407), r.get());
+    std.testing.expectEqual(@as(u64, 1876011003808476466), r.get());
+    std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
 }

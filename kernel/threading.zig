@@ -11,7 +11,7 @@ const MappedList = @import("mapped_list.zig").MappedList;
 
 pub const debug = false;
 
-pub const Error = pthreading.Error;
+pub const Error = georgios.threading.Error;
 
 pub const Thread = struct {
     pub const Id = u32;
@@ -30,11 +30,14 @@ pub const Thread = struct {
     process: ?*Process = null,
     prev_in_system: ?*Thread = null,
     next_in_system: ?*Thread = null,
+    /// Address of First Instruction
     entry: usize = 0,
 
     pub fn init(self: *Thread, boot_thread: bool) Error!void {
         if (self.process) |process| {
-            self.kernel_mode = process.info.kernel_mode;
+            if (process.info) |*info| {
+                self.kernel_mode = info.kernel_mode;
+            }
         }
         try self.impl.init(self, boot_thread);
     }
@@ -53,36 +56,45 @@ pub const Thread = struct {
 pub const Process = struct {
     pub const Id = u32;
 
-    info: Info,
+    info: ?Info = null,
     id: Id = undefined,
-    impl: pthreading.ProcessImpl = undefined,
-    main_thread: Thread = Thread{},
+    impl: pthreading.ProcessImpl = .{},
+    main_thread: Thread = .{},
+    /// Address of First Instruction for Main Thread
     entry: usize = 0,
+    /// Current Working Directory
+    cwd: ?[]const u8 = null,
 
-    pub fn init(self: *Process) Error!void {
-        // Duplicate info data because we can't trust it will stay.
-        const path_temp = try kernel.memory.small_alloc.alloc_array(u8, self.info.path.len);
-        _ = utils.memory_copy_truncate(path_temp, self.info.path);
-        self.info.path = path_temp;
-        if (self.info.name.len > 0) {
-            const name_temp =
-                try kernel.memory.small_alloc.alloc_array(u8, self.info.name.len);
-            _ = utils.memory_copy_truncate(name_temp, self.info.name);
-            self.info.name = name_temp;
-        }
-        if (self.info.args.len > 0) {
-            const args_temp =
-                try kernel.memory.small_alloc.alloc_array([]u8, self.info.args.len);
-            for (self.info.args) |arg, i| {
-                if (arg.len > 0) {
-                    args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
-                    _ = utils.memory_copy_truncate(args_temp[i], arg);
-                } else {
-                    args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
-                }
+    pub fn init(self: *Process, current: ?*Process) Error!void {
+        // TODO: Cleanup on failure
+
+        if (self.info) |*info| {
+            // Duplicate info data because we can't trust it will stay.
+            const path_temp = try kernel.memory.small_alloc.alloc_array(u8, info.path.len);
+            _ = utils.memory_copy_truncate(path_temp, info.path);
+            info.path = path_temp;
+            if (info.name.len > 0) {
+                const name_temp =
+                    try kernel.memory.small_alloc.alloc_array(u8, info.name.len);
+                _ = utils.memory_copy_truncate(name_temp, info.name);
+                info.name = name_temp;
             }
-            self.info.args = args_temp;
+            if (info.args.len > 0) {
+                const args_temp =
+                    try kernel.memory.small_alloc.alloc_array([]u8, info.args.len);
+                for (info.args) |arg, i| {
+                    if (arg.len > 0) {
+                        args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
+                        _ = utils.memory_copy_truncate(args_temp[i], arg);
+                    } else {
+                        args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
+                    }
+                }
+                info.args = args_temp;
+            }
         }
+
+        try self.set_cwd(if (current) |c| c.cwd.? else "/");
 
         try self.impl.init(self);
         self.main_thread.process = self;
@@ -103,9 +115,109 @@ pub const Process = struct {
             address: usize, byte: u8, len: usize) memory.AllocError!void {
         try self.impl.address_space_set(address, byte, len);
     }
+
+    pub fn set_cwd(self: *Process, dir: []const u8) Error!void {
+        const new_cwd = try kernel.memory.small_alloc.alloc_array(u8, dir.len);
+        _ = utils.memory_copy_truncate(new_cwd, dir);
+        if (self.cwd) |cwd| {
+            try kernel.memory.small_alloc.free_array(cwd);
+        }
+        self.cwd = new_cwd;
+    }
+};
+
+const TimeQueue = struct {
+    const Element = struct {
+        valid: bool,
+        tid: Thread.Id,
+        when: platform.Time,
+        prev: ?*Element,
+        next: ?*Element,
+    };
+
+    elements: []Element = undefined,
+    head: ?*Element = null,
+    tail: ?*Element = null,
+
+    pub fn init(self: *TimeQueue) Error!void {
+        self.elements = try kernel.memory.small_alloc.alloc_array(Element, 8);
+        for (self.elements) |*e| {
+            e.valid = false;
+        }
+    }
+
+    pub fn insert(self: *TimeQueue, tid: Thread.Id, when: platform.Time) void {
+        // print.format("insert {} {}\n", .{tid, when});
+        var index: usize = 0;
+        while (self.elements[index].valid) {
+            index += 1;
+            if (index >= self.elements.len) @panic("TimeQueue Full"); // TODO
+        }
+
+        const element = &self.elements[index];
+        element.valid = true;
+        element.tid = tid;
+        element.when = when;
+
+        if (self.head) |head| {
+            var compare = self.head;
+            while (compare) |cmp| {
+                if (when < cmp.when) {
+                    break;
+                }
+                compare = cmp.next;
+            }
+            if (compare) |cmp| { // Comes before something else
+                if (cmp.prev) |prev| {
+                    prev.next = element;
+                } else {
+                    self.head = element;
+                }
+                element.prev = cmp.prev;
+                cmp.prev = element;
+                element.next = cmp;
+            } else { // Tack on end
+                element.prev = self.tail;
+                element.next = null;
+                self.tail = element;
+            }
+        } else { // Nothing in Queue
+            self.head = element;
+            self.tail = element;
+            element.prev = null;
+            element.next = null;
+        }
+    }
+
+    pub fn check(self: *TimeQueue) ?Thread.Id {
+        if (self.head) |head| {
+            if (platform.time() >= head.when) {
+                head.valid = false;
+                if (head.next) |next| {
+                    next.prev = null;
+                }
+                self.head = head.next;
+                if (self.head == null) {
+                    self.tail = null;
+                }
+                return head.tid;
+            }
+        }
+        return null;
+    }
 };
 
 pub const Manager = struct {
+    fn tid_eql(a: Thread.Id, b: Thread.Id) bool {
+        return a == b;
+    }
+
+    fn tid_cmp(a: Thread.Id, b: Thread.Id) bool {
+        return a > b;
+    }
+
+    const ThreadList = MappedList(Thread.Id, *Thread, tid_eql, tid_cmp);
+
     fn pid_eql(a: Process.Id, b: Process.Id) bool {
         return a == b;
     }
@@ -116,6 +228,7 @@ pub const Manager = struct {
 
     const ProcessList = MappedList(Process.Id, *Process, pid_eql, pid_cmp);
 
+    thread_list: ThreadList = undefined,
     idle_thread: Thread = .{.kernel_mode = true, .state = .Wait},
     boot_thread: Thread = .{.kernel_mode = true},
     next_thread_id: Thread.Id = 0,
@@ -126,23 +239,32 @@ pub const Manager = struct {
     next_process_id: Process.Id = 0,
     current_process: ?*Process = null,
     waiting_for_keyboard: ?*Thread = null,
+    time_queue: TimeQueue = .{},
 
     pub fn init(self: *Manager) Error!void {
+        self.thread_list = .{.alloc = kernel.memory.small_alloc};
         self.process_list = .{.alloc = kernel.memory.small_alloc};
         try self.idle_thread.init(false);
         self.idle_thread.entry = @ptrToInt(platform.idle);
         try self.boot_thread.init(true);
         self.current_thread = &self.boot_thread;
         platform.disable_interrupts();
-        self.insert_thread(&self.idle_thread);
-        self.insert_thread(&self.boot_thread);
+        try self.insert_thread(&self.idle_thread);
+        try self.insert_thread(&self.boot_thread);
+        try self.time_queue.init();
         platform.enable_interrupts();
     }
 
-    pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
+    pub fn new_process_i(self: *Manager) Error!*Process {
         const p = try kernel.memory.small_alloc.alloc(Process);
-        p.* = Process{.info = info.*};
-        try p.init();
+        p.* = .{.info = undefined};
+        return p;
+    }
+
+    pub fn new_process(self: *Manager, info: *const Info) Error!*Process {
+        const p = try self.new_process_i();
+        p.info = info.*;
+        try p.init(self.current_process);
         return p;
     }
 
@@ -154,11 +276,11 @@ pub const Manager = struct {
 
         // Start
         try self.process_list.push_back(process.id, process);
-        self.insert_thread(&process.main_thread);
+        try self.insert_thread(&process.main_thread);
         try process.start();
     }
 
-    pub fn insert_thread(self: *Manager, thread: *Thread) void {
+    pub fn insert_thread(self: *Manager, thread: *Thread) Error!void {
         // Assign ID
         thread.id = self.next_thread_id;
         self.next_thread_id += 1;
@@ -173,6 +295,8 @@ pub const Manager = struct {
         thread.prev_in_system = self.tail_thread;
         thread.next_in_system = null;
         self.tail_thread = thread;
+
+        try self.thread_list.push_back(thread.id, thread);
     }
 
     pub fn remove_process(self: *Manager, process: *Process) void {
@@ -201,6 +325,9 @@ pub const Manager = struct {
                 self.remove_process(process);
             }
         }
+
+        _ = self.thread_list.find_remove(thread.id)
+            catch @panic("remove_thread: thread_list.find_remove");
     }
 
     pub fn remove_current_thread(self: *Manager) void {
@@ -228,6 +355,14 @@ pub const Manager = struct {
     }
 
     fn next(self: *Manager) ?*Thread {
+        if (self.time_queue.check()) |tid| {
+            // print.uint(tid);
+            if (self.thread_list.find(tid)) |thread| {
+                // print.uint(thread.id);
+                thread.state = .Run;
+                return thread;
+            }
+        }
         var next_thread: ?*Thread = null;
         var thread = self.current_thread;
         while (next_thread == null) {
@@ -298,9 +433,47 @@ pub const Manager = struct {
     }
 
     pub fn keyboard_event_occured(self: *Manager) void {
+        platform.disable_interrupts();
         if (self.waiting_for_keyboard) |t| {
             t.state = .Run;
             self.waiting_for_keyboard = null;
         }
+    }
+
+    pub fn get_cwd(self: *Manager, buffer: []u8) Error![]const u8 {
+        if (self.current_process) |proc| {
+            return buffer[0..try utils.memory_copy_error(buffer, proc.cwd.?)];
+        } else {
+            return Error.NoCurrentProcess;
+        }
+    }
+
+    pub fn set_cwd(self: *Manager, dir: []const u8) georgios.ThreadingOrFsError!void {
+        if (self.current_process) |proc| {
+            try proc.set_cwd(dir);
+        } else {
+            return Error.NoCurrentProcess;
+        }
+    }
+
+    // TODO: If this is called by shell sleep for too short a time (like less
+    // than 5ms), it causes a really weird looking page fault. Might have
+    // something to do with the keyboard interrupt for the enter release.
+    pub fn sleep_milliseconds(self: *Manager, ms: u64) void {
+        if (ms == 0) return;
+        platform.disable_interrupts();
+        self.current_thread.?.state = .Wait;
+        self.time_queue.insert(self.current_thread.?.id,
+            platform.time() + platform.milliseconds_to_time(ms));
+        self.yield();
+    }
+
+    pub fn sleep_seconds(self: *Manager, s: u64) void {
+        if (s == 0) return;
+        platform.disable_interrupts();
+        self.current_thread.?.state = .Wait;
+        self.time_queue.insert(self.current_thread.?.id,
+            platform.time() + platform.seconds_to_time(s));
+        self.yield();
     }
 };

@@ -52,27 +52,52 @@ const data_port: u16 = 0x03D5;
 const high_byte_command: u8 = 14;
 const low_byte_command: u8 = 15;
 const set_cursor_shape_command: u8 = 0x0a;
+const default_default_colors = combine_colors(Color.LightGrey, Color.Black);
 
 var row: u32 = 0;
 var column: u32 = 0;
-var default_colors: u8 = combine_colors(Color.LightGrey, Color.Black);
+var default_colors: u8 = default_default_colors;
 
 var buffer: [*]u16 = undefined;
 
-pub fn new_page() void {
-    row = 0;
-    column = 0;
+pub fn move_cursor(x: u32, y: u32) void {
+    row = x;
+    column = y;
+    cursor(x, y);
+}
+
+pub fn reset_cursor() void {
+    move_cursor(0, 0);
+    show_cursor(true);
+}
+
+pub fn clear_screen() void {
     fill_screen(' ');
-    cursor(0, 0);
+}
+
+pub fn reset_attributes() void {
+    default_colors = default_default_colors;
+}
+
+pub fn reset() void {
+    reset_attributes();
+    clear_screen();
+    reset_cursor();
 }
 
 pub fn init() void {
     buffer = @intToPtr([*]u16, platform.kernel_to_virtual(0xB8000));
-    new_page();
+    reset();
 }
 
 pub fn set_colors(fg: Color, bg: Color) void {
     default_colors = combine_colors(fg, bg);
+}
+
+pub fn invert_colors() void {
+    const n1 = @truncate(u4, default_colors);
+    const n2 = @truncate(u4, default_colors >> 4);
+    default_colors = @intCast(u8, n1) << 4 | n2;
 }
 
 pub fn place_char(c: u8, x: u32, y: u32) void {
@@ -98,9 +123,9 @@ pub fn cursor(x: u32, y: u32) void {
     out8(data_port, @intCast(u8, index & 0xFF));
 }
 
-pub fn disable_cursor() void {
+pub fn show_cursor(show: bool) void {
     out8(command_port, set_cursor_shape_command);
-    out8(data_port, 0x20); // Bit 5 Disables Cursor
+    out8(data_port, if (show) 0 else 0x20); // Bit 5 Disables Cursor
 }
 
 pub fn scroll() void {
@@ -119,7 +144,7 @@ pub fn scroll() void {
     }
 }
 
-pub fn new_line() void {
+pub fn newline() void {
     if (row == (height - 1)) {
         scroll();
     } else {
@@ -132,27 +157,19 @@ pub fn new_line() void {
 pub fn direct_print_char(c: u8) void {
     column += 1;
     if (column == width) {
-        new_line();
+        newline();
     }
     place_char(c, column, row);
     cursor(column + 1, row);
 }
 
-pub fn print_char(c: u8) void {
-    if (c == '\n') {
-        new_line();
-    } else {
-        direct_print_char(c);
-    }
-}
-
 pub fn print_all_characters() void {
-    new_page();
+    reset();
     var i: u16 = 0;
     while (i < 256) {
         direct_print_char(@truncate(u8, i));
         if (i % 32 == 31) {
-            new_line();
+            newline();
         }
         i += 1;
     }
@@ -196,21 +213,27 @@ pub fn from_unicode(c: u32) ?u8 {
     return null;
 }
 
-pub fn print_utf8_string(s: []const u8) void {
-    var b: [128]u32 = undefined;
-    var r = utils.Utf8ToUtf32Result{.leftovers=s[0..]};
-    while (true) {
-        r = utils.utf8_to_utf32(r.leftovers, b[0..])
-            catch @panic("UTF-8 CGA Console Failure");
-        for (r.fit_in_output[0..]) |i| {
-            switch (i) {
-                '\n' => new_line(),
-                '\x08' => backspace(),
-                // TODO: Tab
-                // TODO: ANSI Escapes for Color and Cursor Control
-                else => direct_print_char(if (from_unicode(i)) |c437| c437 else '?'),
-            }
-        }
-        if (r.leftovers.len == 0) break;
+var utf32_buffer: [128]u32 = undefined;
+var utf8_to_utf32 = utils.Utf8ToUtf32{.input = undefined, .buffer = utf32_buffer[0..]};
+
+fn print_utf8_char(utf8_char: u8) void {
+    utf8_to_utf32.input = @ptrCast([*]const u8, &utf8_char)[0..1];
+    for (utf8_to_utf32.next() catch @panic("UTF-8 CGA Console Failure")) |char32| {
+        direct_print_char(if (from_unicode(char32)) |c437| c437 else '?');
     }
+}
+
+var ansi_esc_processor = utils.AnsiEscProcessor{
+    .print_char = print_utf8_char,
+    .newline = newline,
+    .backspace = backspace,
+    .invert_colors = invert_colors,
+    .reset_attributes = reset_attributes,
+    .reset_terminal = reset,
+    .move_cursor = move_cursor,
+    .show_cursor = show_cursor,
+};
+
+pub fn print_char(byte: u8) void {
+    ansi_esc_processor.feed_char(byte);
 }

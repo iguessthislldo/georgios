@@ -22,6 +22,7 @@ pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
 pub const timing = @import("timing.zig");
+pub const bios_int = @import("bios_int.zig");
 
 pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
@@ -29,6 +30,11 @@ pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
 pub const done = util.done;
 pub const idle = util.idle;
+
+pub const Time = u64;
+pub const time = timing.rdtsc;
+pub const seconds_to_time = timing.seconds_to_ticks;
+pub const milliseconds_to_time = timing.milliseconds_to_ticks;
 
 pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     asm volatile ("int $50");
@@ -84,12 +90,12 @@ pub fn kernel_range_virtual_start_available() usize {
 fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     for (from) |value| {
         serial_log.print_char(value);
+        cga_console.print_char(value);
     }
-    cga_console.print_utf8_string(from);
     return from.len;
 }
 
-fn console_read(file: *io.File, to: []u8) anyerror!usize {
+fn console_read(file: *io.File, to: []u8) io.FileError!usize {
     return 0;
 }
 
@@ -126,9 +132,10 @@ pub fn init() !void {
 
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
-    pci.find_pci_devices();
     ps2.init();
-    vbe.init(&kernel.memory);
+    pci.find_pci_devices();
+    bios_int.init();
+    vbe.init();
 
     acpi.init();
 

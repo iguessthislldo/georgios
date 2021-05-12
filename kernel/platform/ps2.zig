@@ -2,6 +2,8 @@
 // PS/2 Keyboard Interface
 // ============================================================================
 
+const build_options = @import("build_options");
+
 const utils = @import("utils");
 const georgios = @import("georgios");
 const keyboard = georgios.keyboard;
@@ -19,7 +21,7 @@ const scan_codes = @import("ps2_scan_codes.zig");
 
 var modifiers = keyboard.Modifiers{};
 
-var buffer = utils.CircularBuffer(Event, 128){};
+var buffer = utils.CircularBuffer(Event, 128, .DiscardNewest){};
 
 const intel8042 = struct {
     const data_port: u16 = 0x60;
@@ -179,4 +181,16 @@ pub fn init() void {
         "IRQ1: Keyboard", segments.kernel_code_selector, interrupts.kernel_flags);
     interrupts.load();
     interrupts.pic.allow_irq(1, true);
+}
+
+pub fn anykey() void {
+    if (build_options.wait_for_anykey) {
+        while (true) {
+            if (get_key()) |key| {
+                if (key.kind == .Released) {
+                    break;
+                }
+            }
+        }
+    }
 }

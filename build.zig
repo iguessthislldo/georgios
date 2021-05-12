@@ -35,6 +35,7 @@ fn add_tests(source: []const u8) void {
     const tests = b.addTest(source);
     tests.setBuildMode(build_mode);
     tests.addPackage(utils_pkg);
+    tests.addPackage(georgios_pkg);
     test_step.dependOn(&tests.step);
 }
 
@@ -44,12 +45,18 @@ pub fn build(builder: *std.build.Builder) void {
     alloc = &arena_alloc.allocator;
 
     build_mode = b.standardReleaseOptions();
-    const multiboot_vga_request = b.option(bool, "multiboot_vga_request",
+    const multiboot_vbe = b.option(bool, "multiboot_vbe",
         \\Ask the bootloader to switch to a graphics mode for us.
         ) orelse false;
+    const vbe = b.option(bool, "vbe",
+        \\Use VBE Graphics if possible.
+        ) orelse multiboot_vbe;
     const debug_log = b.option(bool, "debug_log",
         \\Print debug information by default
         ) orelse true;
+    const wait_for_anykey = b.option(bool, "wait_for_anykey",
+        \\Wait for key press at important events
+        ) orelse false;
 
     target = b.standardTargetOptions(.{
         .default_target = std.zig.CrossTarget.parse(.{
@@ -74,6 +81,7 @@ pub fn build(builder: *std.build.Builder) void {
     // Tests
     test_step = b.step("test", "Run Tests");
     add_tests("libs/utils/test.zig");
+    add_tests("libs/georgios/test.zig");
     add_tests("kernel/test.zig");
 
     // Kernel
@@ -83,22 +91,57 @@ pub fn build(builder: *std.build.Builder) void {
     kernel.setLinkerScriptPath(p_path ++ "linking.ld");
     kernel.setTarget(target);
     kernel.setBuildMode(build_mode);
-    kernel.addBuildOption(bool,
-        "multiboot_vga_request", multiboot_vga_request);
+    kernel.addBuildOption(bool, "multiboot_vbe", multiboot_vbe);
+    kernel.addBuildOption(bool, "vbe", vbe);
     kernel.addBuildOption(bool, "debug_log", debug_log);
-    build_acpica();
+    kernel.addBuildOption(bool, "wait_for_anykey", wait_for_anykey);
+    // Packages
     kernel.addPackage(utils_pkg);
     kernel.addPackage(georgios_pkg);
+    // System Calls
     var generate_system_calls_step = b.addSystemCommand(&[_][]const u8{
         "scripts/codegen/generate_system_calls.py"
     });
     kernel.step.dependOn(&generate_system_calls_step.step);
+    // bios_int/libx86emu
+    build_bios_int();
+    // ACPICA
+    build_acpica();
     kernel.install();
 
     // Programs
     build_program("shell");
     build_program("hello");
     build_program("ls");
+    build_program("cat");
+    build_program("snake");
+}
+
+fn build_bios_int() void {
+    var bios_int = b.addObject("bios_int", null);
+    bios_int.setTarget(target);
+    const bios_int_path = p_path ++ "bios_int/";
+    const libx86emu_path = bios_int_path ++ "libx86emu/";
+    const pub_inc = bios_int_path ++ "public_include/";
+    bios_int.addIncludeDir(libx86emu_path ++ "include/");
+    bios_int.addIncludeDir(bios_int_path ++ "private_include/");
+    bios_int.addIncludeDir(pub_inc);
+    const sources = [_][]const u8 {
+        libx86emu_path ++ "api.c",
+        libx86emu_path ++ "decode.c",
+        libx86emu_path ++ "mem.c",
+        libx86emu_path ++ "ops2.c",
+        libx86emu_path ++ "ops.c",
+        libx86emu_path ++ "prim_ops.c",
+        bios_int_path ++ "bios_int.c",
+    };
+    for (sources) |source| {
+        bios_int.addCSourceFile(source, &[_][]const u8{
+            "-fsanitize-blacklist=misc/clang-sanitize-blacklist.txt",
+        });
+    }
+    kernel.addObject(bios_int);
+    kernel.addIncludeDir(pub_inc);
 }
 
 fn build_acpica() void {

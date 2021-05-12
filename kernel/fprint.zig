@@ -96,16 +96,19 @@ pub fn hex(file: *File, value: usize) FileError!void {
 }
 
 /// Print a unsigned integer as a hexadecimal number a padded to usize and
-/// prefixed with "@".
+/// prefixed with "@0x".
 pub fn address(file: *File, value: usize) FileError!void {
-    // For 32b: @XXXXXXXX
-    // For 64b: @XXXXXXXXXXXXXXXX
+    const prefix = "@0x";
+    // For 32b: @0xXXXXXXXX
+    // For 64b: @0xXXXXXXXXXXXXXXXX
     const nibble_count = @sizeOf(usize) * 2;
-    const char_count = 1 + nibble_count;
+    const char_count = prefix.len + nibble_count;
     var buffer: [char_count]u8 = undefined;
-    buffer[0] = '@';
+    for (prefix) |c, i| {
+        buffer[i] = c;
+    }
 
-    for (buffer[1..]) |*ptr, i| {
+    for (buffer[prefix.len..]) |*ptr, i| {
         const nibble_index: usize = (nibble_count - 1) - i;
         ptr.* = utils.nibble_char(utils.select_nibble(usize, value, nibble_index));
     }
@@ -127,9 +130,9 @@ test "address" {
     const length = utils.string_length(file_buffer[0..]);
 
     const expected = if (@sizeOf(usize) == 4)
-        "@7bc75e39"
+        "@0x7bc75e39"
     else if (@sizeOf(usize) == 8)
-        "@000000007bc75e39"
+        "@0x000000007bc75e39"
     else
         @compileError("usize size missing in this test");
     std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
@@ -226,6 +229,8 @@ pub fn any(file: *File, value: anytype) FileError!void {
 ///         on if `x` or `X` was used as the specifier (TODO).
 ///     'a'
 ///         Like "x", but prints the full address value prefixed with "@".
+///     'c'
+///         Insert the u8 as a character (more specficially as a UTF-8 byte).
 ///
 /// Escapes:
 ///     `{{` is replaced with `{` and `}}` is replaced by `}`.
@@ -241,6 +246,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
         Default,
         Hex,
         Address,
+        Char,
     };
 
     comptime var arg: usize = 0;
@@ -275,6 +281,7 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
                     switch (spec) {
                         Spec.Hex => try hex(file, args[arg]),
                         Spec.Address => try address(file, args[arg]),
+                        Spec.Char => try char(file, args[arg]),
                         Spec.Default => try any(file, args[arg]),
                     }
                     arg += 1;
@@ -294,6 +301,10 @@ pub fn format(file: *File, comptime fmtstr: []const u8, args: anytype) FileError
                 },
                 'a' => {
                     spec = Spec.Address;
+                    state = State.Format;
+                },
+                'c' => {
+                    spec = Spec.Char;
                     state = State.Format;
                 },
                 else => @compileError(

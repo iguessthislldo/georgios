@@ -26,3 +26,7 @@ pub const idle = impl.idle;
 pub const Memory = impl.Memory;
 pub const enable_interrupts = impl.enable_interrupts;
 pub const disable_interrupts = impl.disable_interrupts;
+pub const Time = impl.Time;
+pub const time = impl.time;
+pub const seconds_to_time = impl.seconds_to_time;
+pub const milliseconds_to_time = impl.milliseconds_to_time;

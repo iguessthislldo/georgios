@@ -100,13 +100,6 @@ pub fn load_page_directory(new: []const u32, old: ?[]u32) utils.Error!void {
     reload_active_page_directory();
 }
 
-pub fn unmap_low_kernel() void {
-    for (active_page_directory[0..kernel_page_table_count]) |*ptr| {
-        ptr.* = 0;
-    }
-    reload_active_page_directory();
-}
-
 /// Add Frame Groups to Our Memory Map from Multiboot Memory Map
 pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
     const entry_size = @intToPtr(*u32, tag.start + 8).*;
@@ -120,8 +113,13 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
             const range_end = range_start + range_size;
             if (range_start >= platform.kernel_real_start() and
                     platform.kernel_real_end() <= range_end) {
+                // This is the kernel, remove it from the range.
                 range_size = range_end - kernel_range_start_available;
                 range_start = kernel_range_start_available;
+            }
+            if (range_start < frame_size) {
+                // This is the Real Mode IVT and BDA, remove it from the range.
+                range_start = frame_size;
             }
             map.add_frame_group(range_start, range_size);
         }
@@ -156,10 +154,6 @@ pub const Memory = struct {
         self.virtual_page_address = @ptrToInt(&_VIRTUAL_LOW_START);
         self.virtual_page_index = get_table_index(self.virtual_page_address);
 
-        // Unmap low kernel left over from the start. We don't need it anymore
-        // and we can recycle the memory.
-        unmap_low_kernel();
-
         // var total_count: usize = 0;
         for (memory_map.frame_groups[0..memory_map.frame_group_count]) |*i| {
             // total_count += i.frame_count;
@@ -182,7 +176,7 @@ pub const Memory = struct {
             table_pages_size);
     }
 
-    fn map_virtual_page(self: *Memory, address: usize) void {
+    pub fn map_virtual_page(self: *Memory, address: usize) void {
         // print.format("map_virtual_page: {:a}\n", address);
         if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
             set_entry(&kernel_page_tables[self.virtual_page_index], address, false);
@@ -337,7 +331,7 @@ pub const Memory = struct {
         return range.to_slice(u8);
     }
 
-    fn page_free(allocator: *kmemory.Allocator, value: []u8) FreeError!void {
+    fn page_free(allocator: *kmemory.Allocator, value: []const u8) FreeError!void {
         const self = @fieldParentPtr(Self, "page_allocator", allocator);
         // TODO
     }

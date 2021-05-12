@@ -1,20 +1,15 @@
 const std = @import("std");
 
+const georgios = @import("georgios");
 const utils = @import("utils");
+
 const print = @import("print.zig");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
 const PlatformMemory = platform.Memory;
 
-pub const AllocError = error {
-    OutOfMemory,
-    ZeroSizedAlloc,
-};
-pub const FreeError = error {
-    InvalidFree,
-};
-pub const MemoryError = AllocError || FreeError;
+usingnamespace georgios.memory;
 
 pub const Range = struct {
     start: usize = 0,
@@ -83,7 +78,7 @@ pub const RealMemoryMap = struct {
 var alloc_debug = false;
 pub const Allocator = struct {
     alloc_impl: fn(self: *Allocator, size: usize) AllocError![]u8,
-    free_impl: fn(self: *Allocator, value: []u8) FreeError!void,
+    free_impl: fn(self: *Allocator, value: []const u8) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
         if (alloc_debug) print.string(
@@ -121,7 +116,7 @@ pub const Allocator = struct {
         if (alloc_debug) print.format(
             "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
             .{array.len, @ptrToInt(array.ptr)});
-        try self.free_impl(self, std.mem.sliceAsBytes(array));
+        try self.free_impl(self, utils.to_const_bytes(array));
     }
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
@@ -169,7 +164,7 @@ pub const UnitTestAllocator = struct {
         return self.impl.allocator.alloc(u8, size) catch return AllocError.OutOfMemory;
     }
 
-    pub fn free(allocator: *Allocator, value: []u8) FreeError!void {
+    pub fn free(allocator: *Allocator, value: []const u8) FreeError!void {
         const self = @fieldParentPtr(Self, "allocator", allocator);
         std.testing.expectEqual(true, self.allocated >= value.len);
         self.allocated -= value.len;

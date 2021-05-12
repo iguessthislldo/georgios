@@ -268,14 +268,14 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             try self.block_statuses.set(new_unique_id, .Free);
         }
 
-        fn free(allocator: *Allocator, value: []u8) FreeError!void {
+        fn free(allocator: *Allocator, value: []const u8) FreeError!void {
             const self = @fieldParentPtr(Self, "allocator", allocator);
 
             if (value.len > max_size) return FreeError.InvalidFree;
 
             const address = @ptrToInt(value.ptr);
             const block = @intToPtr(FreeBlock.Ptr, address);
-            {
+            if (value.len > 0) {
                 const level = size_to_level(value.len);
                 const index = self.get_index(level, block);
                 const id = unique_id(level, index);
@@ -287,6 +287,8 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                         .{address, value.len, level, index, status});
                 }
             }
+            // else if it's zero-sized then it probably came from something like C
+            // free where we don't get the size.
 
             // Find the level
             var level = level_count - 1;

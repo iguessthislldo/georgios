@@ -1,5 +1,6 @@
 ISO:=georgios.iso
 DISK:=disk.img
+USBDRIVE:=usbdrive.img
 
 ROOT_DIR:=tmp/root
 BOOT_DIR:=$(ROOT_DIR)/boot
@@ -11,17 +12,21 @@ GRUB_CFG:=$(BOOT_DIR)/grub/grub.cfg
 
 DEBUGGER:=gdb
 
-multiboot_vga_request?=false
+multiboot_vbe?=false
+vbe?=$(multiboot_vbe)
 debug_log?=true
+wait_for_anykey?=false
 
-all: $(ISO) $(DISK)
+all: $(ISO) $(DISK) $(USBDRIVE)
 
 .PHONY: build_georgios
 build_georgios:
 	python3 scripts/lint.py
 	$(ZIG) build \
-		-Dmultiboot_vga_request=$(multiboot_vga_request) \
+		-Dmultiboot_vbe=$(multiboot_vbe) \
+		-Dvbe=$(vbe) \
 		-Ddebug_log=$(debug_log) \
+		-Dwait_for_anykey=$(wait_for_anykey) \
 
 	grub-file --is-x86-multiboot2 $(KERNEL)
 	nm --print-size --numeric-sort $(KERNEL) | grep -v '__' > tmp/annotated_kernel
@@ -46,6 +51,9 @@ $(DISK): root
 	rm -f $(DISK)
 	mke2fs -L '' -N 0 -O none -d $(ROOT_DIR) -r 1 -t ext2 $(DISK) 20m
 
+$(USBDRIVE): $(DISK)
+	cp $(DISK) $(USBDRIVE)
+
 .PHONY: bochs
 bochs:
 	bochs -q -f misc/bochs_config -rc misc/bochs_rc
@@ -56,4 +64,4 @@ qemu:
 
 .PHONY: clean
 clean:
-	rm -fr tmp $(ISO) $(DISK) zig-cache
+	rm -fr tmp $(ISO) $(DISK) $(USBDRIVE) zig-cache

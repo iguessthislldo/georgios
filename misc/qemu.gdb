@@ -21,7 +21,13 @@ target remote | qemu-system-i386 \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \
     -soundhw pcspk \
+    -usb \
+    -device usb-ehci,id=ehci \
+    -drive if=none,id=flashdrive,file=usbdrive.img \
+    -device usb-storage,bus=ehci.0,drive=flashdrive \
     disk.img
+
+#    -trace 'vga*' \
 
 #    -trace 'ide_*' \
 #    -trace '*irq*' \

@@ -1,3 +1,6 @@
 [submodule "kernel/platform/acpica"]
 	path = kernel/platform/acpica/acpica
 	url = git@github.com:acpica/acpica.git
+[submodule "kernel/platform/bios_int/libx86emu"]
+	path = kernel/platform/bios_int/libx86emu
+	url = https://github.com/wfeldt/libx86emu

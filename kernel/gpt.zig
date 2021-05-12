@@ -120,6 +120,11 @@ pub const Disk = struct {
 
         pub fn next(self: *PartitionIterator) Error!?Partition {
             var partition: Partition = undefined;
+            if (self.offset >= self.block.data.?.len) {
+                self.block.address += 1;
+                try self.block_store.read_block(&self.block);
+                self.offset = 0;
+            }
             const id_offset = self.offset + 16;
             try partition.type_guid.from_ms(self.block.data.?[self.offset..id_offset]);
             if (partition.type_guid.is_null()) {
