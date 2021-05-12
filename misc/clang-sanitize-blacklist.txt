@@ -1,2 +1,2 @@
 [undefined]
-src:*/libx86emu/*
+src:*
