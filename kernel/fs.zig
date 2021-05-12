@@ -214,46 +214,46 @@ pub const PathIterator = struct {
 fn assert_path_iterator(
         path: []const u8,
         expected: []const []const u8,
-        absolute: bool, trailing_slash: bool) void {
+        absolute: bool, trailing_slash: bool) !void {
     var i: usize = 0;
     var it = PathIterator.new(path);
-    std.testing.expectEqual(absolute, it.absolute);
-    std.testing.expectEqual(trailing_slash, it.trailing_slash);
+    try std.testing.expectEqual(absolute, it.absolute);
+    try std.testing.expectEqual(trailing_slash, it.trailing_slash);
     while (it.next()) |component| {
-        std.testing.expectEqualStrings(expected[i], component);
+        try std.testing.expectEqualStrings(expected[i], component);
         i += 1;
     }
-    std.testing.expect(it.done());
-    std.testing.expectEqual(i, expected.len);
+    try std.testing.expect(it.done());
+    try std.testing.expectEqual(i, expected.len);
 }
 
 test "PathIterator" {
-    assert_path_iterator(
+    try assert_path_iterator(
         "", &[_][]const u8{}, false, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice", &[_][]const u8{"alice"}, false, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice/bob", &[_][]const u8{"alice", "bob"}, false, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice/bob/carol", &[_][]const u8{"alice", "bob", "carol"}, false, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice/", &[_][]const u8{"alice"}, false, true);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice/bob/", &[_][]const u8{"alice", "bob"}, false, true);
-    assert_path_iterator(
+    try assert_path_iterator(
         "alice/bob/carol/", &[_][]const u8{"alice", "bob", "carol"}, false, true);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/", &[_][]const u8{}, true, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice", &[_][]const u8{"alice"}, true, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice/bob", &[_][]const u8{"alice", "bob"}, true, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice/bob/carol", &[_][]const u8{"alice", "bob", "carol"}, true, false);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice/", &[_][]const u8{"alice"}, true, true);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice/bob/", &[_][]const u8{"alice", "bob"}, true, true);
-    assert_path_iterator(
+    try assert_path_iterator(
         "/alice/bob/carol/", &[_][]const u8{"alice", "bob", "carol"}, true, true);
 }

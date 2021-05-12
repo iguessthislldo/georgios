@@ -135,7 +135,7 @@ test "address" {
         "@0x000000007bc75e39"
     else
         @compileError("usize size missing in this test");
-    std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
+    try std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
 }
 
 /// Print a hexadecimal representation of a byte (no "0x" prefix)

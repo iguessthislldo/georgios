@@ -57,7 +57,7 @@ test "Log" {
         buffer_file.reset();
         var log = Log{.file = file};
         log.log("{}, World!", .{"Hello"});
-        buffer_file.expect(" - Hello, World!\n");
+        try buffer_file.expect(" - Hello, World!\n");
     }
 
     {
@@ -83,7 +83,7 @@ test "Log" {
             log2.log("7", .{});
         }
         log1.log("8", .{});
-        buffer_file.expect(
+        try buffer_file.expect(
             \\ - 1
             \\ - 2
             \\   - 3

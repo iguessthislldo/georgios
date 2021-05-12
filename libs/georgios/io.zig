@@ -208,16 +208,16 @@ pub const File = struct {
 };
 
 /// Test for normal situation.
-fn generic_seek_subtest(seek_type: File.SeekType, expected_from: usize) FileError!void {
-    std.testing.expectEqual(expected_from,
+fn generic_seek_subtest(seek_type: File.SeekType, expected_from: usize) !void {
+    try std.testing.expectEqual(expected_from,
         try File.generic_seek(1, 4, null, 0, seek_type));
-    std.testing.expectEqual(expected_from + 5,
+    try std.testing.expectEqual(expected_from + 5,
         try File.generic_seek(1, 4, null, 5, seek_type));
-    std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.OutOfBounds,
         File.generic_seek(1, 4, 4, 5, seek_type));
-    std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.OutOfBounds,
         File.generic_seek(1, 4, 4, -5, seek_type));
-    std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.OutOfBounds,
         File.generic_seek(1, 4, 4, -5, seek_type));
 }
 
@@ -231,14 +231,14 @@ test "File.generic_seek" {
     const max_usize = utils.max_of_int(usize);
     const max_isize = utils.max_of_int(isize);
     const max_isize_as_usize = @bitCast(usize, max_isize);
-    std.testing.expectEqual(max_usize,
+    try std.testing.expectEqual(max_usize,
         max_isize_as_usize + max_isize_as_usize + 1); // Just a sanity check
-    std.testing.expectEqual(max_usize,
+    try std.testing.expectEqual(max_usize,
         try File.generic_seek(max_isize_as_usize + 1, 4, null, max_isize, .FromHere));
     // However we shouldn't be able to go to past max_usize.
-    std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.OutOfBounds,
         File.generic_seek(max_usize, 4, null, 5, .FromHere));
-    std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.OutOfBounds,
         File.generic_seek(max_usize, 4, 4, 5, .FromHere));
 }
 
@@ -317,8 +317,8 @@ pub const BufferFile = struct {
         return self.buffer[0..self.written_up_until];
     }
 
-    pub fn expect(self: *Self, expected_contents: []const u8) void {
-        std.testing.expectEqualSlices(u8, expected_contents, self.get_contents());
+    pub fn expect(self: *Self, expected_contents: []const u8) !void {
+        try std.testing.expectEqualSlices(u8, expected_contents, self.get_contents());
     }
 };
 
@@ -334,27 +334,27 @@ test "BufferFile" {
     const len = string.len;
     var result_buffer: [128]u8 = undefined;
     try buffer_file.set_contents(0, string);
-    std.testing.expectEqual(len, try file.read(result_buffer[0..]));
+    try std.testing.expectEqual(len, try file.read(result_buffer[0..]));
     // TODO: Show strings if fail?
-    std.testing.expectEqualSlices(u8, string[0..], result_buffer[0..len]);
-    buffer_file.expect(string[0..]);
+    try std.testing.expectEqualSlices(u8, string[0..], result_buffer[0..len]);
+    try buffer_file.expect(string[0..]);
 
     // Seek position 3 and then read three 3 to start of result buffer
-    std.testing.expectEqual(@as(usize, 3), try file.seek(3, .FromStart));
-    std.testing.expectEqual(@as(usize, 3), try file.read(result_buffer[0..]));
-    std.testing.expectEqualSlices(u8, "123123", result_buffer[0..len]);
+    try std.testing.expectEqual(@as(usize, 3), try file.seek(3, .FromStart));
+    try std.testing.expectEqual(@as(usize, 3), try file.read(result_buffer[0..]));
+    try std.testing.expectEqualSlices(u8, "123123", result_buffer[0..len]);
 
     // Try to read again at the end of the file
-    std.testing.expectEqual(@as(usize, 0), try file.read(result_buffer[0..]));
-    std.testing.expectEqual(len, buffer_file.position);
+    try std.testing.expectEqual(@as(usize, 0), try file.read(result_buffer[0..]));
+    try std.testing.expectEqual(len, buffer_file.position);
 
     // Try Writing Another String Over It
     const string2 = "cdef";
-    std.testing.expectEqual(@as(usize, 2), try file.seek(2, .FromStart));
-    std.testing.expectEqual(@as(usize, string2.len), try file.write(string2));
-    std.testing.expectEqual(@as(usize, 0), try file.seek(0, .FromStart));
-    std.testing.expectEqual(len, try file.read(result_buffer[0..]));
-    std.testing.expectEqualSlices(u8, "abcdef", result_buffer[0..len]);
+    try std.testing.expectEqual(@as(usize, 2), try file.seek(2, .FromStart));
+    try std.testing.expectEqual(@as(usize, string2.len), try file.write(string2));
+    try std.testing.expectEqual(@as(usize, 0), try file.seek(0, .FromStart));
+    try std.testing.expectEqual(len, try file.read(result_buffer[0..]));
+    try std.testing.expectEqualSlices(u8, "abcdef", result_buffer[0..len]);
 
     // Unwritten With Set Contents
     {
@@ -362,25 +362,25 @@ test "BufferFile" {
         const blank = "\x00\x00\x00\x00\x00\x00\x00\x00";
         const str = "Georgios";
         try buffer_file.set_contents(blank.len, str);
-        buffer_file.expect(blank ++ str);
+        try buffer_file.expect(blank ++ str);
     }
 
     // Unwritten With Seek
     {
         buffer_file.reset();
         const str1 = "123";
-        std.testing.expectEqual(str1.len, try file.write(str1));
-        std.testing.expectEqual(str1.len, buffer_file.written_up_until);
+        try std.testing.expectEqual(str1.len, try file.write(str1));
+        try std.testing.expectEqual(str1.len, buffer_file.written_up_until);
         const blank = "\x00\x00\x00\x00\x00\x00\x00\x00";
         const expected1 = str1 ++ blank;
-        std.testing.expectEqual(expected1.len,
+        try std.testing.expectEqual(expected1.len,
             try file.seek(expected1.len, .FromStart));
-        std.testing.expectEqual(str1.len, buffer_file.written_up_until);
-        buffer_file.expect(str1);
+        try std.testing.expectEqual(str1.len, buffer_file.written_up_until);
+        try buffer_file.expect(str1);
         const str2 = "4567";
-        std.testing.expectEqual(str2.len, try file.write(str2));
+        try std.testing.expectEqual(str2.len, try file.write(str2));
         const expected2 = expected1 ++ str2;
-        buffer_file.expect(expected2);
+        try buffer_file.expect(expected2);
     }
 
     // Try to Write and Read End Of Buffer
@@ -389,10 +389,10 @@ test "BufferFile" {
         const str = "xyz";
         const pos = file_buffer.len - str.len;
         try buffer_file.set_contents(pos, str);
-        std.testing.expectEqual(pos, try file.seek(-@as(isize, str.len), .FromEnd));
-        std.testing.expectEqual(str.len, try file.read(result_buffer[0..]));
-        std.testing.expectEqualSlices(u8, str[0..], result_buffer[0..str.len]);
-        std.testing.expectEqual(@as(usize, 0), try file.write("ijk"));
-        std.testing.expectEqual(@as(usize, 0), try file.read(result_buffer[0..]));
+        try std.testing.expectEqual(pos, try file.seek(-@as(isize, str.len), .FromEnd));
+        try std.testing.expectEqual(str.len, try file.read(result_buffer[0..]));
+        try std.testing.expectEqualSlices(u8, str[0..], result_buffer[0..str.len]);
+        try std.testing.expectEqual(@as(usize, 0), try file.write("ijk"));
+        try std.testing.expectEqual(@as(usize, 0), try file.read(result_buffer[0..]));
     }
 }

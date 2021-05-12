@@ -352,8 +352,8 @@ test "BuddyAllocator" {
         64 => @as(usize, 16),
         else => unreachable,
     };
-    std.testing.expectEqual(free_pointer_size, @sizeOf(?FreeBlock.Ptr));
-    std.testing.expectEqual(free_pointer_size * 2, min_size);
+    try std.testing.expectEqual(free_pointer_size, @sizeOf(?FreeBlock.Ptr));
+    try std.testing.expectEqual(free_pointer_size * 2, min_size);
 
     const size: usize = 128;
     const ABuddyAllocator = BuddyAllocator(size);
@@ -362,7 +362,7 @@ test "BuddyAllocator" {
         64 => @as(usize, 3),
         else => unreachable,
     };
-    std.testing.expectEqual(
+    try std.testing.expectEqual(
         expected_level_count, ABuddyAllocator.level_count);
 
     var b = ABuddyAllocator{};
@@ -378,7 +378,7 @@ test "BuddyAllocator" {
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x01));
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x04));
     try test_helper(a, &al, @as(usize, 64), @as(u8, 0xff));
-    std.testing.expectEqualSlices(u8,
+    try std.testing.expectEqualSlices(u8,
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
@@ -392,12 +392,12 @@ test "BuddyAllocator" {
 
     const byte: u8 = 0xaa;
     try test_helper(a, &al, @as(usize, 1), byte);
-    std.testing.expectEqual(byte, m[32 * 2]);
+    try std.testing.expectEqual(byte, m[32 * 2]);
     try a.free_array((try al.pop_front()).?);
 
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x88));
     try test_helper(a, &al, @as(usize, 32), @as(u8, 0x77));
-    std.testing.expectEqualSlices(u8,
+    try std.testing.expectEqualSlices(u8,
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
         "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++

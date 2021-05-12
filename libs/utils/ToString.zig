@@ -91,13 +91,13 @@ test "ToString" {
         try ts.string("");
         try ts.cstring("goodbye!");
         try ts.cstring("");
-        std.testing.expectEqualSlices(u8, ts.get(), "Hello goodbye!");
+        try std.testing.expectEqualSlices(u8, ts.get(), "Hello goodbye!");
     }
     {
         var buffer: [1]u8 = undefined;
         var ts = ToString{.buffer = buffer[0..]};
-        std.testing.expectError(Error.NotEnoughDestination, ts.string("Hello"));
-        std.testing.expectEqualSlices(u8, ts.get(), "");
+        try std.testing.expectError(Error.NotEnoughDestination, ts.string("Hello"));
+        try std.testing.expectEqualSlices(u8, ts.get(), "");
     }
     {
         var buffer: [128]u8 = undefined;
@@ -108,13 +108,13 @@ test "ToString" {
         try ts.hex(0x10);
         try ts.hex(0xff);
         try ts.hex(0x100);
-        std.testing.expectEqualSlices(u8, ts.get(), "0x00x10xf0x100xff0x100");
+        try std.testing.expectEqualSlices(u8, ts.get(), "0x00x10xf0x100xff0x100");
     }
     {
         var buffer: [1]u8 = undefined;
         var ts = ToString{.buffer = buffer[0..]};
-        std.testing.expectError(Error.NotEnoughDestination, ts.hex(0xff));
-        std.testing.expectEqualSlices(u8, ts.get(), "");
+        try std.testing.expectError(Error.NotEnoughDestination, ts.hex(0xff));
+        try std.testing.expectEqualSlices(u8, ts.get(), "");
     }
     {
         var buffer: [10]u8 = undefined;
@@ -123,7 +123,7 @@ test "ToString" {
         try ts.uint(2);
         try ts.uint(14);
         try ts.uint(1346);
-        std.testing.expectError(Error.NotEnoughDestination, ts.uint(23912));
-        std.testing.expectEqualSlices(u8, ts.get(), "02141346");
+        try std.testing.expectError(Error.NotEnoughDestination, ts.uint(23912));
+        try std.testing.expectEqualSlices(u8, ts.get(), "02141346");
     }
 }

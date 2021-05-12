@@ -133,11 +133,11 @@ test "MS Guid" {
 
     var guid_string: [string_size]u8 = undefined;
     try guid.to_string(guid_string[0..]);
-    std.testing.expectEqualStrings("c12a7328-f81f-11d2-ba4b-00a0c93ec93b", &guid_string);
+    try std.testing.expectEqualStrings("c12a7328-f81f-11d2-ba4b-00a0c93ec93b", &guid_string);
 
     var guid_dst: [size]u8 = undefined;
     try guid.to_ms(&guid_dst);
-    std.testing.expectEqualSlices(u8, test_guid_source, &guid_dst);
+    try std.testing.expectEqualSlices(u8, test_guid_source, &guid_dst);
 }
 
 test "BE Guid" {
@@ -145,9 +145,9 @@ test "BE Guid" {
 
     var guid_string: [string_size]u8 = undefined;
     try guid.to_string(guid_string[0..]);
-    std.testing.expectEqualStrings("28732ac1-1ff8-d211-ba4b-00a0c93ec93b", &guid_string);
+    try std.testing.expectEqualStrings("28732ac1-1ff8-d211-ba4b-00a0c93ec93b", &guid_string);
 
     var guid_dst: [size]u8 = undefined;
     try guid.to_be(&guid_dst);
-    std.testing.expectEqualSlices(u8, test_guid_source, &guid_dst);
+    try std.testing.expectEqualSlices(u8, test_guid_source, &guid_dst);
 }

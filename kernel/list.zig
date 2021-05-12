@@ -155,63 +155,63 @@ test "List" {
     const niln: ?*UsizeList.Node = null;
 
     // Empty
-    equal(@as(usize, 0), list.len);
-    equal(nilv, try list.pop_back());
-    equal(nilv, try list.pop_front());
-    equal(niln, list.head);
-    equal(niln, list.tail);
+    try equal(@as(usize, 0), list.len);
+    try equal(nilv, try list.pop_back());
+    try equal(nilv, try list.pop_front());
+    try equal(niln, list.head);
+    try equal(niln, list.tail);
 
     // Push Some Values
     try list.push_back(1);
-    equal(@as(usize, 1), list.len);
+    try equal(@as(usize, 1), list.len);
     try list.push_back(2);
-    equal(@as(usize, 2), list.len);
+    try equal(@as(usize, 2), list.len);
     try list.push_back(3);
-    equal(@as(usize, 3), list.len);
+    try equal(@as(usize, 3), list.len);
 
     // Test Iterator
     var i: usize = 0;
     const expected = [_]usize{1, 2, 3};
     var it = list.iterator();
     while (it.next()) |actual| {
-        equal(expected[i], actual);
+        try equal(expected[i], actual);
         i += 1;
     }
 
     // pop_back The Values
-    equal(@as(usize, 3), (try list.pop_back()).?);
-    equal(@as(usize, 2), list.len);
-    equal(@as(usize, 2), (try list.pop_back()).?);
-    equal(@as(usize, 1), list.len);
-    equal(@as(usize, 1), (try list.pop_back()).?);
+    try equal(@as(usize, 3), (try list.pop_back()).?);
+    try equal(@as(usize, 2), list.len);
+    try equal(@as(usize, 2), (try list.pop_back()).?);
+    try equal(@as(usize, 1), list.len);
+    try equal(@as(usize, 1), (try list.pop_back()).?);
 
     // It's empty again
-    equal(@as(usize, 0), list.len);
-    equal(nilv, try list.pop_back());
-    equal(nilv, try list.pop_front());
-    equal(niln, list.head);
-    equal(niln, list.tail);
+    try equal(@as(usize, 0), list.len);
+    try equal(nilv, try list.pop_back());
+    try equal(nilv, try list.pop_front());
+    try equal(niln, list.head);
+    try equal(niln, list.tail);
 
     // Push Some Values
     try list.push_front(1);
-    equal(@as(usize, 1), list.len);
+    try equal(@as(usize, 1), list.len);
     try list.push_back(2);
     try list.push_front(3);
     try list.push_front(10);
-    equal(@as(usize, 4), list.len);
+    try equal(@as(usize, 4), list.len);
 
     // pop_back The Values
-    equal(@as(usize, 10), (try list.pop_front()).?);
-    equal(@as(usize, 3), (try list.pop_front()).?);
-    equal(@as(usize, 1), (try list.pop_front()).?);
-    equal(@as(usize, 2), (try list.pop_front()).?);
+    try equal(@as(usize, 10), (try list.pop_front()).?);
+    try equal(@as(usize, 3), (try list.pop_front()).?);
+    try equal(@as(usize, 1), (try list.pop_front()).?);
+    try equal(@as(usize, 2), (try list.pop_front()).?);
 
     // It's empty yet again
-    equal(@as(usize, 0), list.len);
-    equal(nilv, try list.pop_back());
-    equal(nilv, try list.pop_front());
-    equal(niln, list.head);
-    equal(niln, list.tail);
+    try equal(@as(usize, 0), list.len);
+    try equal(nilv, try list.pop_back());
+    try equal(nilv, try list.pop_front());
+    try equal(niln, list.head);
+    try equal(niln, list.tail);
 
     // Clear
     try list.push_back(12);
@@ -219,9 +219,9 @@ test "List" {
     try list.clear();
 
     // It's empty ... again
-    equal(@as(usize, 0), list.len);
-    equal(nilv, try list.pop_back());
-    equal(nilv, try list.pop_front());
-    equal(niln, list.head);
-    equal(niln, list.tail);
+    try equal(@as(usize, 0), list.len);
+    try equal(nilv, try list.pop_back());
+    try equal(nilv, try list.pop_front());
+    try equal(niln, list.head);
+    try equal(niln, list.tail);
 }
