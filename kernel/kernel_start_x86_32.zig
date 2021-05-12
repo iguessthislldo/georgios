@@ -14,7 +14,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 
-const kernel = @import("kernel.zig");
+pub const kernel = @import("kernel.zig");
 const kernel_main = kernel.kernel_main;
 const utils = @import("utils");
 

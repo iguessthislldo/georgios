@@ -12,6 +12,7 @@ typedef ACPI_STATUS Status;
 const Status Ok = AE_OK;
 const Status Error = AE_ERROR;
 const Status NoMemory = AE_NO_MEMORY;
+const Status BadParameter = AE_BAD_PARAMETER;
 
 typedef ACPI_SIZE Size;
 

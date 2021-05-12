@@ -7,15 +7,18 @@
 //  - https://github.com/acpica/acpica
 //  - https://wiki.osdev.org/ACPICA
 
+const utils = @import("utils");
+
+const kernel = @import("root").kernel;
+
 const acpica = @cImport({
     @cInclude("georgios_acpica_wrapper.h");
 });
 
 pub fn init() void {
-    // TODO
-    // if (acpica.AcpiInitializeSubsystem() != acpica.Ok) {
-    //     @panic("AcpiInitializeSubsystem Failed");
-    // }
+    if (acpica.AcpiInitializeSubsystem() != acpica.Ok) {
+        @panic("AcpiInitializeSubsystem Failed");
+    }
 }
 
 // OS Abstraction Layer ======================================================
@@ -32,6 +35,90 @@ export fn AcpiOsGetRootPointer() acpica.PhysicalAddress {
     var p: acpica.PhysicalAddress = 0;
     _ = acpica.AcpiFindRootPointer(@ptrCast([*c]acpica.PhysicalAddress, &p));
     return p;
+}
+
+export fn AcpiOsAllocate(size: acpica.Size) ?*c_void {
+    const a = kernel.memory.small_alloc.alloc_array(u8, size) catch return null;
+    return @ptrCast(*c_void, a.ptr);
+}
+
+export fn AcpiOsFree(ptr: ?*c_void) void {
+    if (ptr != null) {
+        kernel.memory.small_alloc.free_array(
+            utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
+    }
+}
+
+const Sem = kernel.sync.Semaphore(acpica.Uint32);
+
+export fn AcpiOsCreateSemaphore(
+        max_units: acpica.Uint32, initial_units: acpica.Uint32,
+        semaphore: **Sem) acpica.Status {
+    const sem = kernel.memory.small_alloc.alloc(Sem) catch return acpica.NoMemory;
+    sem.* = .{.value = initial_units};
+    sem.init();
+    semaphore.* = sem;
+    return acpica.Ok;
+}
+
+export fn AcpiOsWaitSemaphore(
+        semaphore: *Sem, units: acpica.Uint32, timeout: acpica.Uint16) acpica.Status {
+    // TODO: Timeout in milliseconds
+    var got: acpica.Uint32 = 0;
+    while (got < units) {
+        semaphore.wait() catch continue;
+        got += 1;
+    }
+    return acpica.Ok;
+}
+
+export fn AcpiOsSignalSemaphore(semaphore: *Sem, units: acpica.Uint32) acpica.Status {
+    var left: acpica.Uint32 = units;
+    while (left > 0) {
+        semaphore.signal() catch continue;
+        left -= 1;
+    }
+    return acpica.Ok;
+}
+
+export fn AcpiOsDeleteSemaphore(semaphore: *Sem) acpica.Status {
+    kernel.memory.small_alloc.free(semaphore) catch return acpica.BadParameter;
+    return acpica.Ok;
+}
+
+const Lock = kernel.sync.Lock;
+
+export fn AcpiOsCreateLock(lock: **Lock) acpica.Status {
+    const l = kernel.memory.small_alloc.alloc(Lock) catch return acpica.NoMemory;
+    l.* = .{};
+    lock.* = l;
+    return acpica.Ok;
+}
+
+export fn AcpiOsAcquireLock(lock: *Lock) acpica.ACPI_CPU_FLAGS {
+    lock.spin_lock();
+    return 0;
+}
+
+export fn AcpiOsReleaseLock(lock: *Lock, flags: acpica.ACPI_CPU_FLAGS) void {
+    lock.unlock();
+}
+
+export fn AcpiOsDeleteLock(lock: *Lock) acpica.Status {
+    kernel.memory.small_alloc.free(lock) catch return acpica.BadParameter;
+    return acpica.Ok;
+}
+
+export fn AcpiOsGetThreadId() acpica.Uint64 {
+    const t = kernel.threading_manager.current_thread orelse
+        &kernel.threading_manager.boot_thread;
+    return t.id;
+}
+
+export fn AcpiOsPredefinedOverride(predefined_object: *const acpica.ACPI_PREDEFINED_NAMES,
+        new_value: **allowzero c_void) acpica.Status {
+    new_value.* = @intToPtr(*allowzero c_void, 0);
+    return acpica.Ok;
 }
 
 export fn AcpiOsMapMemory(address: acpica.PhysicalAddress, size: acpica.Size) *c_void {
@@ -51,30 +138,6 @@ export fn AcpiOsSignal(function: acpica.Uint32, info: *c_void) acpica.Status {
     @panic("AcpiOsSignal called");
 }
 
-export fn AcpiOsGetThreadId() acpica.Status {
-    @panic("AcpiOsGetThreadId called");
-}
-
-export fn AcpiOsSignalSemaphore() acpica.Status {
-    @panic("AcpiOsSignalSemaphore called");
-}
-
-export fn AcpiOsCreateSemaphore() acpica.Status {
-    @panic("AcpiOsCreateSemaphore called");
-}
-
-export fn AcpiOsFree() acpica.Status {
-    @panic("AcpiOsFree called");
-}
-
-export fn AcpiOsAcquireLock() acpica.Status {
-    @panic("AcpiOsAcquireLock called");
-}
-
-export fn AcpiOsReleaseLock() acpica.Status {
-    @panic("AcpiOsReleaseLock called");
-}
-
 export fn AcpiOsInstallInterruptHandler() acpica.Status {
     @panic("AcpiOsInstallInterruptHandler called");
 }
@@ -91,18 +154,6 @@ export fn AcpiOsWaitEventsComplete() acpica.Status {
     @panic("AcpiOsWaitEventsComplete called");
 }
 
-export fn AcpiOsAllocate() acpica.Status {
-    @panic("AcpiOsAllocate called");
-}
-
-export fn AcpiOsCreateLock() acpica.Status {
-    @panic("AcpiOsCreateLock called");
-}
-
-export fn AcpiOsDeleteLock() acpica.Status {
-    @panic("AcpiOsDeleteLock called");
-}
-
 export fn AcpiOsReadPciConfiguration() acpica.Status {
     @panic("AcpiOsReadPciConfiguration called");
 }
@@ -111,20 +162,12 @@ export fn AcpiOsWritePciConfiguration() acpica.Status {
     @panic("AcpiOsWritePciConfiguration called");
 }
 
-export fn AcpiOsWaitSemaphore() acpica.Status {
-    @panic("AcpiOsWaitSemaphore called");
-}
-
 export fn AcpiOsStall() acpica.Status {
     @panic("AcpiOsStall called");
 }
 
 export fn AcpiOsSleep() acpica.Status {
     @panic("AcpiOsSleep called");
-}
-
-export fn AcpiOsDeleteSemaphore() acpica.Status {
-    @panic("AcpiOsDeleteSemaphore called");
 }
 
 export fn AcpiOsReadPort() acpica.Status {
@@ -147,36 +190,12 @@ export fn AcpiOsPrintf() acpica.Status {
     @panic("AcpiOsPrintf called");
 }
 
-export fn AcpiOsAcquireObject() acpica.Status {
-    @panic("AcpiOsAcquireObject called");
-}
-
-export fn AcpiOsReleaseObject() acpica.Status {
-    @panic("AcpiOsReleaseObject called");
-}
-
-export fn AcpiOsPredefinedOverride() acpica.Status {
-    @panic("AcpiOsPredefinedOverride called");
-}
-
 export fn AcpiOsTableOverride() acpica.Status {
     @panic("AcpiOsTableOverride called");
 }
 
 export fn AcpiOsPhysicalTableOverride() acpica.Status {
     @panic("AcpiOsPhysicalTableOverride called");
-}
-
-export fn AcpiOsPurgeCache() acpica.Status {
-    @panic("AcpiOsPurgeCache called");
-}
-
-export fn AcpiOsCreateCache() acpica.Status {
-    @panic("AcpiOsCreateCache called");
-}
-
-export fn AcpiOsDeleteCache() acpica.Status {
-    @panic("AcpiOsDeleteCache called");
 }
 
 export fn AcpiOsEnterSleep() acpica.Status {

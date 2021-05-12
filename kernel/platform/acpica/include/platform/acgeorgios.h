@@ -10,4 +10,7 @@
 
 #define ACPI_NO_ERROR_MESSAGES
 
+#define ACPI_CACHE_T ACPI_MEMORY_LIST
+#define ACPI_USE_LOCAL_CACHE 1
+
 #endif

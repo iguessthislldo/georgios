@@ -117,6 +117,8 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("snake");
 }
 
+const disable_ubsan = "-fsanitize-blacklist=misc/clang-sanitize-blacklist.txt";
+
 fn build_bios_int() void {
     var bios_int = b.addObject("bios_int", null);
     bios_int.setTarget(target);
@@ -136,9 +138,7 @@ fn build_bios_int() void {
         bios_int_path ++ "bios_int.c",
     };
     for (sources) |source| {
-        bios_int.addCSourceFile(source, &[_][]const u8{
-            "-fsanitize-blacklist=misc/clang-sanitize-blacklist.txt",
-        });
+        bios_int.addCSourceFile(source, &[_][]const u8{disable_ubsan});
     }
     kernel.addObject(bios_int);
     kernel.addIncludeDir(pub_inc);
@@ -182,8 +182,8 @@ fn build_acpica() void {
             const path = i.path;
             if (std.mem.endsWith(u8, path, ".c") and
                     !std.mem.endsWith(u8, path, "dump.c")) {
-                std.debug.warn("acpica source: {s}\n", .{path});
-                acpica.addCSourceFile(b.dupe(path), &[_][]const u8{});
+                // std.debug.warn("acpica source: {s}\n", .{path});
+                acpica.addCSourceFile(b.dupe(path), &[_][]const u8{disable_ubsan});
             }
         }
     }
