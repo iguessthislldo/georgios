@@ -12,6 +12,7 @@ pub const elf = @import("elf.zig");
 pub const Devices = @import("devices.zig").Devices;
 pub const threading = @import("threading.zig");
 pub const fs = @import("fs.zig");
+pub const sync = @import("sync.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -76,6 +77,7 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
 pub fn run() !void {
     try init();
     print.string("\x1bc"); // Reset Console
+    // try @import("sync.zig").system_tests();
     threading_manager.wait_for_process(
         try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
 }
