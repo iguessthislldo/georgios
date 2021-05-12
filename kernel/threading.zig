@@ -406,6 +406,24 @@ pub const Manager = struct {
         }
     }
 
+    pub fn thread_is_running(self: *Manager, id: Thread.Id) bool {
+        return self.thread_list.find(id) != null;
+    }
+
+    pub fn wait_for_thread(self: *Manager, id: Thread.Id) void {
+        if (debug) print.format("<Wait for tid {}>\n", .{id});
+        platform.disable_interrupts();
+        if (self.thread_list.find(id)) |thread| {
+            if (debug) print.string("<tid found>");
+            if (thread.wake_on_exit != null)
+                @panic("wait_for_thread: wake_on_exit not null");
+            self.current_thread.?.state = .Wait;
+            thread.wake_on_exit = self.current_thread;
+            self.yield();
+        }
+        if (debug) print.format("<Wait for tid {} is done>\n", .{id});
+    }
+
     pub fn process_is_running(self: *Manager, id: Process.Id) bool {
         return self.process_list.find(id) != null;
     }
@@ -416,7 +434,7 @@ pub const Manager = struct {
         if (self.process_list.find(id)) |proc| {
             if (debug) print.string("<pid found>");
             if (proc.main_thread.wake_on_exit != null)
-                @panic("yield_while_process_is_running: wake_on_exit not null");
+                @panic("wait_for_process: wake_on_exit not null");
             self.current_thread.?.state = .Wait;
             proc.main_thread.wake_on_exit = self.current_thread;
             self.yield();

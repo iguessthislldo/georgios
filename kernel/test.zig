@@ -6,4 +6,5 @@ test "kernel test root" {
     const mapped_list = @import("mapped_list.zig");
     const log = @import("log.zig");
     const fs = @import("fs.zig");
+    const sync = @import("sync.zig");
 }

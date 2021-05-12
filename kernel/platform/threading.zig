@@ -201,6 +201,7 @@ pub const ThreadImpl = struct {
         if (self.thread.kernel_mode) {
             platform.enable_interrupts();
             asm volatile ("call *%[entry]" : : [entry] "{ax}" (self.thread.entry));
+            kernel.threading_manager.remove_current_thread();
         } else {
             usermode(self.thread.entry, self.usermode_stack_ptr, self.v8086);
         }
