@@ -17,6 +17,7 @@ const util = @import("util.zig");
 const interrupts = @import("interrupts.zig");
 const segments = @import("segments.zig");
 const timing = @import("timing.zig");
+const pci = @import("pci.zig");
 
 const acpica = @cImport({
     @cInclude("georgios_acpica_wrapper.h");
@@ -32,6 +33,33 @@ pub fn check_status(comptime what: []const u8, status: acpica.Status) void {
     }
 }
 
+fn device_callback(obj: acpica.ACPI_HANDLE, level: acpica.Uint32, context: ?*c_void,
+        return_value: [*c]?*c_void) callconv(.C) acpica.Status {
+    var name_buffer =
+        acpica.ACPI_BUFFER{.Length = acpica.ACPI_ALLOCATE_BUFFER, .Pointer = null};
+    var status = acpica.AcpiGetName(obj, acpica.ACPI_FULL_PATHNAME, &name_buffer);
+    if (status == acpica.Ok) {
+        const name = utils.cstring_to_string(@ptrCast([*:0]const u8, name_buffer.Pointer));
+        print.format("acpi.device_callback: {}\n", .{name});
+        if (utils.ends_with(name, "HPET")) {
+            print.string("  HPET Found\n");
+        }
+        acpica.AcpiOsFree(name_buffer.Pointer);
+        // TODO: Wait for https://github.com/ziglang/zig/issues/8759 to be resolved?
+        // var devinfo: *acpica.ACPI_DEVICE_INFO = undefined;
+        // var status = acpica.AcpiGetObjectInfo(obj, &devinfo);
+        // if (status == acpica.Ok) {
+        //     print.format("{}\n", .{devinfo.*});
+        // } else {
+        //     print.format("acpi.device_callback: AcpiGetObjectInfo failed, returned {}\n",
+        //         .{status});
+        // }
+    } else {
+        print.format("acpi.device_callback: AcpiGetName failed, returned {}\n", .{status});
+    }
+    return acpica.Ok;
+}
+
 pub fn init() !void {
     _ = utils.memory_set(utils.to_bytes(page_directory[0..]), 0);
     try pmemory.load_page_directory(&page_directory, &prev_page_directory);
@@ -45,6 +73,10 @@ pub fn init() !void {
     //     acpica.AcpiEnableSubsystem(acpica.ACPI_FULL_INITIALIZATION));
     // check_status("acpi.init: AcpiInitializeObjects",
     //     acpica.AcpiInitializeObjects(acpica.ACPI_FULL_INITIALIZATION));
+
+    var devcb_rv: ?*c_void = null;
+    check_status("acpi.init: AcpiGetDevices", acpica.AcpiGetDevices(
+        null, device_callback, null, &devcb_rv));
 
     try pmemory.load_page_directory(&prev_page_directory, &page_directory);
 }
@@ -76,7 +108,6 @@ export fn AcpiOsTerminate() acpica.Status {
 export fn AcpiOsGetRootPointer() acpica.PhysicalAddress {
     var p: acpica.PhysicalAddress = 0;
     _ = acpica.AcpiFindRootPointer(@ptrCast([*c]acpica.PhysicalAddress, &p));
-    print.format("AcpiFindRootPointer: {:a}\n", .{@intCast(usize, p)});
     return p;
 }
 
@@ -236,6 +267,55 @@ export fn AcpiOsWritePort(address: acpica.ACPI_IO_ADDRESS, value: acpica.Uint32,
     return acpica.Ok;
 }
 
+fn convert_pci_loc(pci_loc: [*c]acpica.ACPI_PCI_ID) pci.Location {
+    // TODO ACPI_PCI_ID has a UINT16 Segment field. This might be for PCIe?
+    return .{
+        .bus = @intCast(pci.Bus, pci_loc.*.Bus),
+        .device = @intCast(pci.Device, pci_loc.*.Device),
+        .function = @intCast(pci.Function, pci_loc.*.Function),
+    };
+}
+
+export fn AcpiOsReadPciConfiguration(pci_loc: [*c]acpica.ACPI_PCI_ID, offset: acpica.Uint32,
+        value: [*c]acpica.Uint64, width: acpica.Uint32) acpica.Status {
+    // print.format("AcpiOsReadPciConfiguration: {}\n", .{pci_loc});
+    const off = @intCast(pci.Offset, offset);
+    const loc = convert_pci_loc(pci_loc);
+    value.* = switch (width) {
+        8 => pci.read_config(u8, loc, off),
+
+        16 => pci.read_config(u16, loc, off),
+
+        32 => pci.read_config(u32, loc, off),
+
+        else => {
+            print.format("AcpiOsReadPciConfiguration: width is {}\n", .{width});
+            return acpica.AE_ERROR;
+        },
+    };
+    return acpica.Ok;
+}
+
+export fn AcpiOsWritePciConfiguration(pci_loc: [*c]acpica.ACPI_PCI_ID, offset: acpica.Uint32,
+        value: acpica.Uint64, width: acpica.Uint32) acpica.Status {
+    // print.format("AcpiOsWritePciConfiguration: {}\n", .{pci_loc});
+    const off = @intCast(pci.Offset, offset);
+    const loc = convert_pci_loc(pci_loc);
+    switch (width) {
+        8 => pci.write_config(u8, loc, off, @truncate(u8, value)),
+
+        16 => pci.write_config(u16, loc, off, @truncate(u16, value)),
+
+        32 => pci.write_config(u32, loc, off, @truncate(u32, value)),
+
+        else => {
+            print.format("AcpiOsWritePciConfiguration: width is {}\n", .{width});
+            return acpica.AE_ERROR;
+        },
+    }
+    return acpica.Ok;
+}
+
 var interrupt_handler: acpica.ACPI_OSD_HANDLER = null;
 var interrupt_context: ?*c_void = null;
 pub fn interrupt(interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
@@ -278,7 +358,8 @@ export fn AcpiOsEnterSleep(
 }
 
 export fn AcpiOsGetTimer() acpica.Uint64 {
-    @panic("AcpiOsGetTimer called");
+    return 0;
+    // @panic("AcpiOsGetTimer called");
 }
 
 export fn AcpiOsSignal(function: acpica.Uint32, info: *c_void) acpica.Status {
@@ -291,14 +372,6 @@ export fn AcpiOsExecute() acpica.Status {
 
 export fn AcpiOsWaitEventsComplete() acpica.Status {
     @panic("AcpiOsWaitEventsComplete called");
-}
-
-export fn AcpiOsReadPciConfiguration() acpica.Status {
-    @panic("AcpiOsReadPciConfiguration called");
-}
-
-export fn AcpiOsWritePciConfiguration() acpica.Status {
-    @panic("AcpiOsWritePciConfiguration called");
 }
 
 export fn AcpiOsStall() acpica.Status {

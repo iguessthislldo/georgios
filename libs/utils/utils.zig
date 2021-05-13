@@ -817,3 +817,19 @@ test "Rand" {
     std.testing.expectEqual(@as(u64, 1876011003808476466), r.get());
     std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
 }
+
+pub fn starts_with(what: []const u8, prefix: []const u8) bool {
+    if (what.len < prefix.len) return false;
+    for (what[0..prefix.len]) |value, i| {
+        if (value != prefix[i]) return false;
+    }
+    return true;
+}
+
+pub fn ends_with(what: []const u8, postfix: []const u8) bool {
+    if (what.len < postfix.len) return false;
+    for (what[what.len - postfix.len..]) |value, i| {
+        if (value != postfix[i]) return false;
+    }
+    return true;
+}
