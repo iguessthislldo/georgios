@@ -2,11 +2,11 @@
 
 const builtin = @import("builtin");
 
-const io = @import("../io.zig");
-const print = @import("../print.zig");
-const kernel = @import("../kernel.zig");
-const kmemory = @import("../memory.zig");
-const Devices = @import("../devices.zig").Devices;
+const kernel = @import("root").kernel;
+const io = kernel.io;
+const print = kernel.print;
+const kmemory = kernel.kmemory;
+const Devices = kernel.devices.Devices;
 
 pub const serial_log = @import("serial_log.zig");
 pub const cga_console = @import("cga_console.zig");
@@ -28,7 +28,6 @@ pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
-pub const done = util.done;
 pub const idle = util.idle;
 
 pub const Time = u64;
@@ -130,6 +129,9 @@ pub fn init() !void {
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
     try kernel.memory.init(&real_memory_map);
 
+    // Threading
+    try kernel.threading_manager.init();
+
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
     ps2.init();
@@ -137,9 +139,13 @@ pub fn init() !void {
     bios_int.init();
     vbe.init();
 
-    acpi.init();
+    try acpi.init();
 
     // Start Ticking
     timing.set_pit_freq(.Irq0, 10000);
     interrupts.pic.allow_irq(0, true);
+}
+
+pub fn done() void {
+    acpi.power_off();
 }
