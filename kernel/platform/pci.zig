@@ -78,11 +78,12 @@ fn config_port(comptime Type: type, location: Location, offset: Offset) callconv
     return 0x0CFC + @intCast(u16, if (Type == u32) 0 else (offset & 3));
 }
 
-fn read_config(comptime Type: type, location: Location, offset: Offset) callconv(.Inline) Type {
+pub fn read_config(comptime Type: type,
+        location: Location, offset: Offset) callconv(.Inline) Type {
     return putil.in(Type, config_port(Type, location, offset));
 }
 
-fn write_config(comptime Type: type,
+pub fn write_config(comptime Type: type,
         location: Location, offset: Offset, value: Type) callconv(.Inline) void {
     putil.out(Type, config_port(Type, location, offset), value);
 }
