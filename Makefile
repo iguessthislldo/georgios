@@ -12,21 +12,27 @@ GRUB_CFG:=$(BOOT_DIR)/grub/grub.cfg
 
 DEBUGGER:=gdb
 
-multiboot_vbe?=false
-vbe?=$(multiboot_vbe)
-debug_log?=true
-wait_for_anykey?=false
+zig_build_args="build"
+ifdef multiboot_vbe
+	zig_build_args+="-Dmultiboot_vbe=$(multiboot_vbe)"
+	vbe?=$(multiboot_vbe)
+endif
+ifdef vbe
+	zig_build_args+="-Dvbe=$(vbe)"
+endif
+ifdef debug_log
+	zig_build_args+="-Ddebug_log=$(debug_log)"
+endif
+ifdef wait_for_anykey
+	zig_build_args+="-Dwait_for_anykey=$(wait_for_anykey)"
+endif
 
 all: $(ISO) $(DISK) $(USBDRIVE)
 
 .PHONY: build_georgios
 build_georgios:
 	python3 scripts/lint.py
-	$(ZIG) build \
-		-Dmultiboot_vbe=$(multiboot_vbe) \
-		-Dvbe=$(vbe) \
-		-Ddebug_log=$(debug_log) \
-		-Dwait_for_anykey=$(wait_for_anykey) \
+	$(ZIG) $(zig_build_args)
 
 	grub-file --is-x86-multiboot2 $(KERNEL)
 	nm --print-size --numeric-sort $(KERNEL) | grep -v '__' > tmp/annotated_kernel
