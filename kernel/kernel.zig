@@ -7,6 +7,9 @@ const georgios = @import("georgios");
 pub const platform = @import("platform.zig");
 pub const print = @import("print.zig");
 pub const Memory = @import("memory.zig").Memory;
+pub const kmemory = @import("memory.zig");
+// TODO: Rename Memory/memory to Memory_mgr/memory_mgr apply to over managers
+// TODO: Maybe also bring general allocators up to this level?
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
 pub const Devices = @import("devices.zig").Devices;
@@ -38,7 +41,7 @@ pub var devices: Devices = .{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var filesystem: fs.Filesystem = .{};
-pub var threading_manager: threading.Manager = undefined;
+pub var threading_manager: threading.Manager = .{};
 
 pub fn init() !void {
     print.init(&console, build_options.debug_log);
@@ -51,10 +54,6 @@ pub fn init() !void {
     } else {
         print.string(" - No Disk Found\n");
     }
-
-    // Threading
-    threading_manager = threading.Manager{};
-    try threading_manager.init();
 }
 
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {

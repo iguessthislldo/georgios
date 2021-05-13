@@ -2,11 +2,11 @@
 
 const builtin = @import("builtin");
 
-const io = @import("../io.zig");
-const print = @import("../print.zig");
-const kernel = @import("../kernel.zig");
-const kmemory = @import("../memory.zig");
-const Devices = @import("../devices.zig").Devices;
+const kernel = @import("root").kernel;
+const io = kernel.io;
+const print = kernel.print;
+const kmemory = kernel.kmemory;
+const Devices = kernel.devices.Devices;
 
 pub const serial_log = @import("serial_log.zig");
 pub const cga_console = @import("cga_console.zig");
@@ -28,8 +28,8 @@ pub const frame_size = pmemory.frame_size;
 pub const Memory = pmemory.Memory;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
-pub const done = util.done;
 pub const idle = util.idle;
+pub const done = util.done;
 
 pub const Time = u64;
 pub const time = timing.rdtsc;
@@ -129,6 +129,9 @@ pub fn init() !void {
     const mmap_tag = try multiboot.find_tag(.Mmap);
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
     try kernel.memory.init(&real_memory_map);
+
+    // Threading
+    try kernel.threading_manager.init();
 
     // Setup Devices
     kernel.devices.init(kernel.memory.small_alloc);
