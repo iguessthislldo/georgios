@@ -10,9 +10,9 @@ const keyboard = georgios.keyboard;
 const Key = keyboard.Key;
 const Event = keyboard.Event;
 
-const kernel = @import("../kernel.zig");
-const print = @import("../print.zig");
-const key_to_char = @import("../keys.zig").key_to_char;
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const key_to_char = kernel.keys.key_to_char;
 
 const putil = @import("util.zig");
 const interrupts = @import("interrupts.zig");
@@ -166,7 +166,7 @@ pub fn keyboard_event_occured(
             }
         }
         buffer.push(e.*);
-        kernel.threading_manager.keyboard_event_occured();
+        kernel.threading_mgr.keyboard_event_occured();
     }
 }
 

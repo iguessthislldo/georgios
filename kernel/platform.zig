@@ -24,6 +24,7 @@ pub const kernel_range_virtual_start_available =
 pub const done = impl.done;
 pub const idle = impl.idle;
 pub const Memory = impl.Memory;
+pub const MemoryMgrImpl = impl.MemoryMgrImpl;
 pub const enable_interrupts = impl.enable_interrupts;
 pub const disable_interrupts = impl.disable_interrupts;
 pub const Time = impl.Time;

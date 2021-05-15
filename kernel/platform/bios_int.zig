@@ -8,9 +8,9 @@
 
 const utils = @import("utils");
 
-const print = @import("../print.zig");
-const kernel = @import("../kernel.zig");
-const memory = @import("../memory.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const memory = kernel.memory;
 
 const platform = @import("platform.zig");
 const util = @import("util.zig");
@@ -76,20 +76,19 @@ export fn georgios_bios_int_wait() void {
 }
 
 export fn georgios_bios_int_malloc(size: usize) ?*c_void {
-    const a = kernel.memory.small_alloc.alloc_array(u8, size) catch return null;
+    const a = kernel.alloc.alloc_array(u8, size) catch return null;
     return @ptrCast(*c_void, a.ptr);
 }
 
 export fn georgios_bios_int_calloc(num: usize, size: usize) ?*c_void {
-    const a = kernel.memory.small_alloc.alloc_array(u8, size * num) catch return null;
+    const a = kernel.alloc.alloc_array(u8, size * num) catch return null;
     utils.memory_set(a, 0);
     return @ptrCast(*c_void, a.ptr);
 }
 
 export fn georgios_bios_int_free(ptr: ?*c_void) void {
     if (ptr != null) {
-        kernel.memory.small_alloc.free_array(
-            utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
+        kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
     }
 }
 
@@ -178,7 +177,7 @@ pub fn init() void {
 }
 
 pub fn run(params: *Params) Error!void {
-    const pmem = &kernel.memory.platform_memory;
+    const pmem = &kernel.memory_mgr.impl;
     pmem.map(.{.start = 0, .size = utils.Mi(1)}, 0, false)
         catch @panic("bios_int map");
 

@@ -13,7 +13,8 @@ const builtin = @import("builtin");
 
 const utils = @import("utils");
 
-const print = @import("../print.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
 
 const platform = @import("platform.zig");
 const kernel_to_virtual = platform.kernel_to_virtual;

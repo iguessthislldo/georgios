@@ -13,11 +13,11 @@ const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
 const bios_int = @import("bios_int.zig");
 
-const kernel = @import("../kernel.zig");
-const print = @import("../print.zig");
-const kmemory = @import("../memory.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const kmemory = kernel.memory;
 const Range = kmemory.Range;
-const font = @import("../font.zig");
+const font = kernel.font;
 
 // TODO Make these not fixed
 const find_width = 800;
@@ -63,7 +63,7 @@ const Info = packed struct {
         while (modes_ptr[mode_count] != 0xffff) {
             mode_count += 1;
         }
-        const modes = kernel.memory.small_alloc.alloc_array(u16, mode_count) catch
+        const modes = kernel.alloc.alloc_array(u16, mode_count) catch
             @panic("vbe.Info.get_modes: alloc mode array failed");
         var mode_i: usize = 0;
         while (modes_ptr[mode_i] != 0xffff) {
@@ -348,7 +348,7 @@ pub fn init() void {
 
         // Find the Mode We're Looking For
         const supported_modes = info.get_modes();
-        defer kernel.memory.small_alloc.free_array(supported_modes) catch unreachable;
+        defer kernel.alloc.free_array(supported_modes) catch unreachable;
         for (supported_modes) |supported_mode| {
             print.format("   - mode {:x}\n", .{supported_mode});
             const mode_ptr = get_mode_info(supported_mode) orelse return;
@@ -394,15 +394,16 @@ pub fn init() void {
         // TODO: Zig Bug? If catch is taken away Zig 0.5 fails to reject not
         // handling the error return. LLVM catches the mistake instead.
         print.format("vms: {}\n", .{video_memory_size});
-        buffer = kernel.memory.big_alloc.alloc_array(u8, video_memory_size) catch {
+        buffer = kernel.memory_mgr.big_alloc.alloc_array(u8, video_memory_size) catch {
             @panic("Couldn't alloc VBE Buffer");
         };
-        const video_memory_range = kernel.memory.platform_memory.get_unused_kernel_space(
+        const video_memory_range = kernel.memory_mgr.platform_memory.get_unused_kernel_space(
                 video_memory_size) catch {
             @panic("Couldn't Reserve VBE Buffer");
         };
         video_memory = @intToPtr([*]u8, video_memory_range.start)[0..video_memory_size];
-        kernel.memory.platform_memory.map(video_memory_range, mode.framebuffer, false) catch {
+        kernel.memory_mgr.platform_memory.map(
+                video_memory_range, mode.framebuffer, false) catch {
             @panic("Couldn't map VBE Buffer");
         };
 

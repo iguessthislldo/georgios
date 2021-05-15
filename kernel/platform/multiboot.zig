@@ -6,8 +6,9 @@ const paging = @import("paging.zig");
 const platform = @import("platform.zig");
 const vbe = @import("vbe.zig");
 
-const print = @import("../print.zig");
-const Range = @import("../memory.zig").Range;
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const Range = kernel.memory.Range;
 
 export var multiboot_info: []u32 = undefined;
 

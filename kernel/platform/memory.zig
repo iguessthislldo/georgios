@@ -2,13 +2,14 @@ const std = @import("std");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
 const utils = @import("utils");
-const kmemory = @import("../memory.zig");
-const KernelMemory = kmemory.Memory;
-const RealMemoryMap = kmemory.RealMemoryMap;
-const AllocError = kmemory.AllocError;
-const FreeError = kmemory.FreeError;
-const Range = kmemory.Range;
-const print = @import("../print.zig");
+
+const kernel = @import("root").kernel;
+const memory = kernel.memory;
+const RealMemoryMap = memory.RealMemoryMap;
+const AllocError = memory.AllocError;
+const FreeError = memory.FreeError;
+const Range = memory.Range;
+const print = kernel.print;
 
 const platform = @import("platform.zig");
 const to_virtual = platform.kernel_to_virtual;
@@ -131,26 +132,24 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
 /// Physical Memory Allocation is based on
 /// http://ethv.net/workshops/osdev/notes/notes-2
 /// When a physical frame isn't being used it is part of a linked list.
-pub const Memory = struct {
-    const Self = @This();
+pub const ManagerImpl = struct {
     const FreeFramePtr = ?usize;
 
     extern var _VIRTUAL_LOW_START: u32;
 
-    kernel_memory: *KernelMemory = undefined,
+    parent: *memory.Manager = undefined,
     next_free_frame: FreeFramePtr = null,
     kernel_tables_index_start: usize = 0,
     virtual_page_address: usize = 0,
     virtual_page_index: usize = 0,
     start_of_virtual_space: usize = 0,
-    page_allocator: kmemory.Allocator = undefined,
+    page_allocator: memory.Allocator = undefined,
 
-    pub fn init(self: *Memory, kernel_memory: *KernelMemory,
-            memory_map: *RealMemoryMap) void {
-        self.kernel_memory = kernel_memory;
-        self.page_allocator.alloc_impl = Self.page_alloc;
-        self.page_allocator.free_impl = Self.page_free;
-        kernel_memory.big_alloc = &self.page_allocator;
+    pub fn init(self: *ManagerImpl, parent: *memory.Manager, memory_map: *RealMemoryMap) void {
+        self.parent = parent;
+        self.page_allocator.alloc_impl = ManagerImpl.page_alloc;
+        self.page_allocator.free_impl = ManagerImpl.page_free;
+        parent.big_alloc = &self.page_allocator;
         self.virtual_page_address = @ptrToInt(&_VIRTUAL_LOW_START);
         self.virtual_page_index = get_table_index(self.virtual_page_address);
 
@@ -176,7 +175,7 @@ pub const Memory = struct {
             table_pages_size);
     }
 
-    pub fn map_virtual_page(self: *Memory, address: usize) void {
+    pub fn map_virtual_page(self: *ManagerImpl, address: usize) void {
         // print.format("map_virtual_page: {:a}\n", address);
         if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
             set_entry(&kernel_page_tables[self.virtual_page_index], address, false);
@@ -184,7 +183,7 @@ pub const Memory = struct {
         }
     }
 
-    pub fn push_frame(self: *Memory, frame: usize) void {
+    pub fn push_frame(self: *ManagerImpl, frame: usize) void {
         // Map fixed virtual address to frame.
         self.map_virtual_page(frame);
         // Put the current next_free_frame into the frame.
@@ -194,7 +193,7 @@ pub const Memory = struct {
         self.next_free_frame = frame;
     }
 
-    pub fn pop_frame(self: *Memory) AllocError!usize {
+    pub fn pop_frame(self: *ManagerImpl) AllocError!usize {
         if (self.next_free_frame) |frame| {
             const prev = frame;
             // Map fixed virtual address to next_free_frame.
@@ -209,7 +208,7 @@ pub const Memory = struct {
         return AllocError.OutOfMemory;
     }
 
-    pub fn get_unused_kernel_space(self: *Memory, requested_size: usize) AllocError!Range {
+    pub fn get_unused_kernel_space(self: *ManagerImpl, requested_size: usize) AllocError!Range {
         // print.format("get_unused_kernel_space {:x}\n", requested_size);
         const start = self.start_of_virtual_space;
         const dir_index_start = get_directory_index(start);
@@ -261,7 +260,7 @@ pub const Memory = struct {
         return AllocError.OutOfMemory;
     }
 
-    pub fn new_page_table(self: *Memory, page_directory: []u32,
+    pub fn new_page_table(self: *ManagerImpl, page_directory: []u32,
             dir_index: usize, user: bool) AllocError!void {
         // print.format("new_page_table {:x}\n", dir_index);
         // TODO: Go through memory.Memory
@@ -278,8 +277,8 @@ pub const Memory = struct {
     }
 
     // TODO: Read/Write and Any Other Options
-    pub fn mark_virtual_memory_present(
-            self: *Memory, page_directory: []u32, range: Range, user: bool) AllocError!void {
+    pub fn mark_virtual_memory_present(self: *ManagerImpl,
+            page_directory: []u32, range: Range, user: bool) AllocError!void {
         // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
@@ -321,30 +320,30 @@ pub const Memory = struct {
     }
 
     // TODO
-    fn mark_virtual_memory_absent(self: *Memory, range: Range) void {
+    fn mark_virtual_memory_absent(self: *ManagerImpl, range: Range) void {
     }
 
-    fn page_alloc(allocator: *kmemory.Allocator, size: usize) AllocError![]u8 {
-        const self = @fieldParentPtr(Self, "page_allocator", allocator);
+    fn page_alloc(allocator: *memory.Allocator, size: usize) AllocError![]u8 {
+        const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         const range = try self.get_unused_kernel_space(size);
         try self.mark_virtual_memory_present(active_page_directory[0..], range, false);
         return range.to_slice(u8);
     }
 
-    fn page_free(allocator: *kmemory.Allocator, value: []const u8) FreeError!void {
-        const self = @fieldParentPtr(Self, "page_allocator", allocator);
+    fn page_free(allocator: *memory.Allocator, value: []const u8) FreeError!void {
+        const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         // TODO
     }
 
-    pub fn new_page_directory(self: *Memory) AllocError![]u32 {
+    pub fn new_page_directory(self: *ManagerImpl) AllocError![]u32 {
         const end = get_kernel_space_start_directory_index();
         const page_directory =
-            try self.kernel_memory.big_alloc.alloc_array(u32, tables_per_directory);
+            try self.parent.big_alloc.alloc_array(u32, tables_per_directory);
         _ = utils.memory_set(sliceAsBytes(page_directory[0..]), 0);
         return page_directory;
     }
 
-    pub fn page_directory_memory_copy(self: *Memory, page_directory: []u32,
+    pub fn page_directory_memory_copy(self: *ManagerImpl, page_directory: []u32,
             address: usize, data: []const u8) AllocError!void {
         // print.format("page_directory_memory_copy: {} b to {:a}\n", .{data.len, address});
         const dir_index_start = get_directory_index(address);
@@ -386,7 +385,7 @@ pub const Memory = struct {
         }
     }
 
-    pub fn page_directory_memory_set(self: *Memory, page_directory: []u32,
+    pub fn page_directory_memory_set(self: *ManagerImpl, page_directory: []u32,
             address: usize, byte: u8, len: usize) AllocError!void {
         const dir_index_start = get_directory_index(address);
         const table_index_start = get_table_index(address);
@@ -431,7 +430,7 @@ pub const Memory = struct {
     // generic.
 
     // Assumes range address is page aligned.
-    pub fn map_i(self: *Memory, page_directory: []u32, virtual_range: Range,
+    pub fn map_i(self: *ManagerImpl, page_directory: []u32, virtual_range: Range,
             physical_start: usize, user: bool) AllocError!void {
         const dir_index_start = get_directory_index(virtual_range.start);
         const table_index_start = get_table_index(virtual_range.start);
@@ -464,7 +463,7 @@ pub const Memory = struct {
         }
     }
 
-    pub fn map(self: *Memory, virtual_range: Range, physical_start: usize,
+    pub fn map(self: *ManagerImpl, virtual_range: Range, physical_start: usize,
             user: bool) AllocError!void {
         try self.map_i(active_page_directory[0..], virtual_range, physical_start, user);
     }

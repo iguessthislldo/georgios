@@ -3,11 +3,11 @@ const std = @import("std");
 const georgios = @import("georgios");
 const utils = @import("utils");
 
+const kernel = @import("kernel.zig");
 const print = @import("print.zig");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
-const PlatformMemory = platform.Memory;
 
 usingnamespace georgios.memory;
 
@@ -175,20 +175,20 @@ pub const UnitTestAllocator = struct {
 };
 
 /// Used by the kernel to manage system memory
-pub const Memory = struct {
-    const small_alloc_size = utils.Mi(1);
-    const SmallAllocImplType = BuddyAllocator(small_alloc_size);
+pub const Manager = struct {
+    const alloc_size = utils.Mi(1);
+    const AllocImplType = BuddyAllocator(alloc_size);
 
-    platform_memory: PlatformMemory = PlatformMemory{},
+    impl: platform.MemoryMgrImpl = .{},
     free_frame_count: usize = 0,
-    small_alloc_range: Range = undefined,
-    small_alloc_impl_range: Range = undefined,
-    small_alloc_impl: *SmallAllocImplType = undefined,
-    small_alloc: *Allocator = undefined,
+    alloc_range: Range = undefined,
+    alloc_impl_range: Range = undefined,
+    alloc_impl: *AllocImplType = undefined,
+    alloc: *Allocator = undefined,
     big_alloc: *Allocator = undefined,
 
     /// To be called by the platform after it can give "map".
-    pub fn init(self: *Memory, map: *RealMemoryMap) !void {
+    pub fn init(self: *Manager, map: *RealMemoryMap) !void {
         print.debug_format(
             \\ - Initializing Memory System
             \\   - Start of kernel:
@@ -222,7 +222,7 @@ pub const Memory = struct {
 
         // Initialize Platform Implementation
         // After this we should be able to manage all the memory on the system.
-        self.platform_memory.init(self, map);
+        self.impl.init(self, map);
 
         // List Memory
         const total_memory: usize = map.total_frame_count * platform.frame_size;
@@ -235,18 +235,19 @@ pub const Memory = struct {
             total_memory >> 20,
             total_memory >> 30});
 
-        self.small_alloc_impl = try self.big_alloc.alloc(SmallAllocImplType);
-        self.small_alloc_impl.init(@ptrToInt(try self.big_alloc.alloc([small_alloc_size]u8)));
-        self.small_alloc = &self.small_alloc_impl.allocator;
+        self.alloc_impl = try self.big_alloc.alloc(AllocImplType);
+        self.alloc_impl.init(@ptrToInt(try self.big_alloc.alloc([alloc_size]u8)));
+        self.alloc = &self.alloc_impl.allocator;
+        kernel.alloc = self.alloc;
     }
 
-    pub fn free_pmem(self: *Memory, frame: usize) void {
-        self.platform_memory.push_frame(frame);
+    pub fn free_pmem(self: *Manager, frame: usize) void {
+        self.impl.push_frame(frame);
         self.free_frame_count += 1;
     }
 
-    pub fn alloc_pmem(self: *Memory) AllocError!usize {
-        const frame = try self.platform_memory.pop_frame();
+    pub fn alloc_pmem(self: *Manager) AllocError!usize {
+        const frame = try self.impl.pop_frame();
         self.free_frame_count -= 1;
         return frame;
     }

@@ -70,21 +70,21 @@ pub const Process = struct {
 
         if (self.info) |*info| {
             // Duplicate info data because we can't trust it will stay.
-            const path_temp = try kernel.memory.small_alloc.alloc_array(u8, info.path.len);
+            const path_temp = try kernel.memory_mgr.alloc.alloc_array(u8, info.path.len);
             _ = utils.memory_copy_truncate(path_temp, info.path);
             info.path = path_temp;
             if (info.name.len > 0) {
                 const name_temp =
-                    try kernel.memory.small_alloc.alloc_array(u8, info.name.len);
+                    try kernel.memory_mgr.alloc.alloc_array(u8, info.name.len);
                 _ = utils.memory_copy_truncate(name_temp, info.name);
                 info.name = name_temp;
             }
             if (info.args.len > 0) {
                 const args_temp =
-                    try kernel.memory.small_alloc.alloc_array([]u8, info.args.len);
+                    try kernel.memory_mgr.alloc.alloc_array([]u8, info.args.len);
                 for (info.args) |arg, i| {
                     if (arg.len > 0) {
-                        args_temp[i] = try kernel.memory.small_alloc.alloc_array(u8, arg.len);
+                        args_temp[i] = try kernel.memory_mgr.alloc.alloc_array(u8, arg.len);
                         _ = utils.memory_copy_truncate(args_temp[i], arg);
                     } else {
                         args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
@@ -117,10 +117,10 @@ pub const Process = struct {
     }
 
     pub fn set_cwd(self: *Process, dir: []const u8) Error!void {
-        const new_cwd = try kernel.memory.small_alloc.alloc_array(u8, dir.len);
+        const new_cwd = try kernel.memory_mgr.alloc.alloc_array(u8, dir.len);
         _ = utils.memory_copy_truncate(new_cwd, dir);
         if (self.cwd) |cwd| {
-            try kernel.memory.small_alloc.free_array(cwd);
+            try kernel.memory_mgr.alloc.free_array(cwd);
         }
         self.cwd = new_cwd;
     }
@@ -140,7 +140,7 @@ const TimeQueue = struct {
     tail: ?*Element = null,
 
     pub fn init(self: *TimeQueue) Error!void {
-        self.elements = try kernel.memory.small_alloc.alloc_array(Element, 8);
+        self.elements = try kernel.alloc.alloc_array(Element, 8);
         for (self.elements) |*e| {
             e.valid = false;
         }
@@ -242,8 +242,8 @@ pub const Manager = struct {
     time_queue: TimeQueue = .{},
 
     pub fn init(self: *Manager) Error!void {
-        self.thread_list = .{.alloc = kernel.memory.small_alloc};
-        self.process_list = .{.alloc = kernel.memory.small_alloc};
+        self.thread_list = .{.alloc = kernel.alloc};
+        self.process_list = .{.alloc = kernel.alloc};
         try self.idle_thread.init(false);
         self.idle_thread.entry = @ptrToInt(platform.idle);
         try self.boot_thread.init(true);
@@ -256,7 +256,7 @@ pub const Manager = struct {
     }
 
     pub fn new_process_i(self: *Manager) Error!*Process {
-        const p = try kernel.memory.small_alloc.alloc(Process);
+        const p = try kernel.alloc.alloc(Process);
         p.* = .{.info = undefined};
         return p;
     }
@@ -302,8 +302,7 @@ pub const Manager = struct {
     pub fn remove_process(self: *Manager, process: *Process) void {
         _ = self.process_list.find_remove(process.id)
             catch @panic("remove_process: process_list.find_remove");
-        kernel.memory.small_alloc.free(process)
-            catch @panic("remove_process: free(process)");
+        kernel.alloc.free(process) catch @panic("remove_process: free(process)");
     }
 
     pub fn remove_thread(self: *Manager, thread: *Thread) void {

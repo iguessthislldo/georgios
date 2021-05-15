@@ -9,13 +9,13 @@
 
 const utils = @import("utils");
 
-const print = @import("../print.zig");
-const io = @import("../io.zig");
-const memory = @import("../memory.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const io = kernel.io;
+const memory = kernel.memory;
 const MemoryError = memory.MemoryError;
 const Allocator = memory.Allocator;
-const devices = @import("../devices.zig");
-const kernel = @import("../kernel.zig");
+const devices = kernel.devices;
 
 const pci = @import("pci.zig");
 const putil = @import("util.zig");
@@ -533,12 +533,12 @@ const Controller = struct {
 };
 
 pub fn init(dev: *const pci.Dev) void {
-    var controller = kernel.memory.small_alloc.alloc(Controller) catch {
+    var controller = kernel.alloc.alloc(Controller) catch {
         @panic("Failure");
     };
     controller.* = Controller{};
-    controller.init(kernel.memory.small_alloc);
-    kernel.devices.add_device(&controller.device_interface) catch {
+    controller.init(kernel.alloc);
+    kernel.device_mgr.add_device(&controller.device_interface) catch {
         @panic("Failure");
     };
     if (controller.primary.master.present) {

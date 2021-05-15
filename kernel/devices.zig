@@ -27,25 +27,25 @@ fn id_cmp(a: Id, b: Id) bool {
     return a > b;
 }
 
-pub const Devices = struct {
+pub const Manager = struct {
     const Container = Map(Id, *Device, id_eql, id_cmp);
 
     alloc: *Allocator = undefined,
     container: Container = undefined,
     next_id: Id = 0,
 
-    pub fn init(self: *Devices, alloc: *Allocator) void {
+    pub fn init(self: *Manager, alloc: *Allocator) void {
         self.alloc = alloc;
         self.container = Container{.alloc = alloc};
     }
 
-    pub fn add_device(self: *Devices, device: *Device) MemoryError!void {
+    pub fn add_device(self: *Manager, device: *Device) MemoryError!void {
         device.id = self.next_id;
         self.next_id += 1;
         _ = try self.container.insert(device.id, device);
     }
 
-    pub fn deinit(self: *Devices) MemoryError!void {
+    pub fn deinit(self: *Manager) MemoryError!void {
         var it = self.container.iterate();
         while (it.next()) |i| {
             _ = try self.container.remove(i.key);

@@ -5,10 +5,11 @@ const builtin = @import("builtin");
 
 const utils = @import("utils");
 
-const print = @import("../print.zig");
-const fprint = @import("../fprint.zig");
-const io = @import("../io.zig");
-const memory = @import("../memory.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const fprint = kernel.fprint;
+const io = kernel.io;
+const memory = kernel.memory;
 
 const putil = @import("util.zig");
 const ata = @import("ata.zig");
