@@ -6,9 +6,9 @@
 //
 // ============================================================================
 
-const print = @import("../print.zig");
-const kernel = @import("../kernel.zig");
-const memory = @import("../memory.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const memory = kernel.memory;
 
 const platform = @import("platform.zig");
 const pci = @import("pci.zig");
@@ -231,7 +231,7 @@ pub fn init(dev: *pci.Dev) void {
 
     // Map Controller's Address Space
     const physical_range = dev.base_addresses[0].?.memory.range;
-    const pmem = &kernel.memory.platform_memory;
+    const pmem = &kernel.memory_mgr.impl;
     const range = pmem.get_unused_kernel_space(physical_range.size) catch
         @panic("usb.init: get_unused_kernel_space failed");
     pmem.map(range, physical_range.start, false) catch
@@ -278,7 +278,7 @@ pub fn init(dev: *pci.Dev) void {
 
     print.string(indent ++ "EHCI Controller Reset\n");
 
-    frame_list = kernel.memory.big_alloc.alloc_array(u32, 1024) catch
+    frame_list = kernel.memory_mgr.big_alloc.alloc_array(u32, 1024) catch
         @panic("usb.init: alloc frame_list failed");
 
     // Initialize the Controller

@@ -4,10 +4,10 @@
 
 const builtin = @import("builtin");
 
-const kernel = @import("../kernel.zig");
-const kutil = @import("../util.zig");
-const print = @import("../print.zig");
-const kthreading = @import("../threading.zig");
+const kernel = @import("root").kernel;
+const kutil = kernel.util;
+const print = kernel.print;
+const kthreading = kernel.threading;
 
 const putil = @import("util.zig");
 // TODO: Zig Bug? unable to evaluate constant expression
@@ -424,7 +424,7 @@ pub var in_tick = false;
 fn tick(irq_number: u32, interrupt_stack: *const Stack) void {
     in_tick = true;
     if (kthreading.debug) print.char('!');
-    kernel.threading_manager.yield();
+    kernel.threading_mgr.yield();
     in_tick = false;
 }
 

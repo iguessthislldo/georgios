@@ -3,9 +3,9 @@
 const utils = @import("utils");
 const georgios = @import("georgios");
 
-const kernel = @import("../kernel.zig");
-const print = @import("../print.zig");
-const kthreading = @import("../threading.zig");
+const kernel = @import("root").kernel;
+const print = kernel.print;
+const kthreading = kernel.threading;
 
 const ps2 = @import("ps2.zig");
 const interrupts = @import("interrupts.zig");
@@ -72,14 +72,14 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: yield() void
         2 => {
             if (kthreading.debug) print.string("\nY");
-            kernel.threading_manager.yield();
+            kernel.threading_mgr.yield();
         },
 
         // SYSCALL: exit(status: u8) noreturn
         3 => {
             // TODO: Use status
             if (kthreading.debug) print.string("\nE");
-            kernel.threading_manager.remove_current_thread();
+            kernel.threading_mgr.remove_current_thread();
         },
 
         // SYSCALL: exec(info: *const georgios.ProcessInfo) georgios.ExecError!void
@@ -92,7 +92,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             info.kernel_mode = false;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.exec(&info)) |pid| {
-                kernel.threading_manager.wait_for_process(pid);
+                kernel.threading_mgr.wait_for_process(pid);
                 rv.set_value(.{});
             } else |e| {
                 rv.set_error(e);
@@ -108,7 +108,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
                     @intToPtr(*?georgios.keyboard.Event, arg2).* = key;
                     break;
                 } else if (blocking) {
-                    kernel.threading_manager.wait_for_keyboard();
+                    kernel.threading_mgr.wait_for_keyboard();
                 } else {
                     @intToPtr(*?georgios.keyboard.Event, arg2).* = null;
                     break;
@@ -200,7 +200,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
                 []const u8, georgios.threading.Error);
             const buffer = @intToPtr(*[]u8, arg1).*;
             const rv = @intToPtr(*ValueOrError, arg2);
-            if (kernel.threading_manager.get_cwd(buffer)) |dir| {
+            if (kernel.threading_mgr.get_cwd(buffer)) |dir| {
                 rv.set_value(dir);
             } else |e| {
                 rv.set_error(e);
@@ -213,7 +213,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
                 void, georgios.ThreadingOrFsError);
             const dir = @intToPtr(*[]const u8, arg1).*;
             const rv = @intToPtr(*ValueOrError, arg2);
-            if (kernel.threading_manager.set_cwd(dir)) {
+            if (kernel.threading_mgr.set_cwd(dir)) {
                 rv.set_value(.{});
             } else |e| {
                 rv.set_error(e);
@@ -222,12 +222,12 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: sleep_milliseconds(&ms: u64) void
         15 => {
-            kernel.threading_manager.sleep_milliseconds(@intToPtr(*u64, arg1).*);
+            kernel.threading_mgr.sleep_milliseconds(@intToPtr(*u64, arg1).*);
         },
 
         // SYSCALL: sleep_seconds(&s: u64) void
         16 => {
-            kernel.threading_manager.sleep_seconds(@intToPtr(*u64, arg1).*);
+            kernel.threading_mgr.sleep_seconds(@intToPtr(*u64, arg1).*);
         },
 
         // SYSCALL: time() u64

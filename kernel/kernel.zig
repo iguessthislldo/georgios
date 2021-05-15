@@ -5,17 +5,16 @@ const utils = @import("utils");
 const georgios = @import("georgios");
 
 pub const platform = @import("platform.zig");
+pub const fprint = @import("fprint.zig");
 pub const print = @import("print.zig");
-pub const Memory = @import("memory.zig").Memory;
-pub const kmemory = @import("memory.zig");
-// TODO: Rename Memory/memory to Memory_mgr/memory_mgr apply to over managers
-// TODO: Maybe also bring general allocators up to this level?
+pub const memory = @import("memory.zig");
 pub const io = @import("io.zig");
 pub const elf = @import("elf.zig");
-pub const Devices = @import("devices.zig").Devices;
+pub const devices = @import("devices.zig");
 pub const threading = @import("threading.zig");
 pub const fs = @import("fs.zig");
 pub const sync = @import("sync.zig");
+pub const keys = @import("keys.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -35,13 +34,15 @@ pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
     platform.panic(msg, trace);
 }
 
-pub var console: io.File = .{};
-pub var memory: Memory = .{};
-pub var devices: Devices = .{};
+pub var memory_mgr = memory.Manager{};
+pub var device_mgr = devices.Manager{};
+pub var threading_mgr = threading.Manager{};
+
+pub var alloc: *memory.Allocator = undefined;
+pub var console = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var filesystem: fs.Filesystem = .{};
-pub var threading_manager: threading.Manager = .{};
 
 pub fn init() !void {
     print.init(&console, build_options.debug_log);
@@ -49,17 +50,17 @@ pub fn init() !void {
 
     // Filesystem
     if (raw_block_store) |raw| {
-        block_store.init(memory.small_alloc, raw, 128);
-        try filesystem.init(memory.small_alloc, &block_store.block_store);
+        block_store.init(alloc, raw, 128);
+        try filesystem.init(alloc, &block_store.block_store);
     } else {
         print.string(" - No Disk Found\n");
     }
 }
 
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
-    const process = try threading_manager.new_process(info);
+    const process = try threading_mgr.new_process(info);
     var ext2_file = try filesystem.open(info.path);
-    var elf_object = try elf.Object.from_file(memory.small_alloc, &ext2_file.io_file);
+    var elf_object = try elf.Object.from_file(alloc, &ext2_file.io_file);
     var segments = elf_object.segments.iterator();
     while (segments.next()) |segment| {
         switch (segment.what) {
@@ -69,7 +70,7 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
     }
     process.entry = elf_object.header.entry;
     try elf_object.teardown();
-    try threading_manager.start_process(process);
+    try threading_mgr.start_process(process);
     return process.id;
 }
 
@@ -77,8 +78,7 @@ pub fn run() !void {
     try init();
     print.string("\x1bc"); // Reset Console
     // try @import("sync.zig").system_tests();
-    threading_manager.wait_for_process(
-        try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
+    threading_mgr.wait_for_process(try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
 }
 
 pub fn kernel_main() void {

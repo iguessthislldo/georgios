@@ -5,8 +5,6 @@ const builtin = @import("builtin");
 const kernel = @import("root").kernel;
 const io = kernel.io;
 const print = kernel.print;
-const kmemory = kernel.kmemory;
-const Devices = kernel.devices.Devices;
 
 pub const serial_log = @import("serial_log.zig");
 pub const cga_console = @import("cga_console.zig");
@@ -25,7 +23,7 @@ pub const timing = @import("timing.zig");
 pub const bios_int = @import("bios_int.zig");
 
 pub const frame_size = pmemory.frame_size;
-pub const Memory = pmemory.Memory;
+pub const MemoryMgrImpl = pmemory.ManagerImpl;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
 pub const idle = util.idle;
@@ -125,16 +123,16 @@ pub fn init() !void {
     }
 
     // Setup Global Memory Management
-    var real_memory_map = kmemory.RealMemoryMap{};
+    var real_memory_map = kernel.memory.RealMemoryMap{};
     const mmap_tag = try multiboot.find_tag(.Mmap);
     pmemory.process_multiboot2_mmap(&real_memory_map, &mmap_tag);
-    try kernel.memory.init(&real_memory_map);
+    try kernel.memory_mgr.init(&real_memory_map);
 
     // Threading
-    try kernel.threading_manager.init();
+    try kernel.threading_mgr.init();
 
     // Setup Devices
-    kernel.devices.init(kernel.memory.small_alloc);
+    kernel.device_mgr.init(kernel.alloc);
     ps2.init();
     pci.find_pci_devices();
     bios_int.init();

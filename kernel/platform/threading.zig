@@ -3,13 +3,13 @@ const std = @import("std");
 const georgios = @import("georgios");
 const utils = @import("utils");
 
-const kernel = @import("../kernel.zig");
-const kthreading = @import("../threading.zig");
+const kernel = @import("root").kernel;
+const kthreading = kernel.threading;
 const Thread = kthreading.Thread;
 const Process = kthreading.Process;
-const kmemory = @import("../memory.zig");
+const kmemory = kernel.memory;
 const Range = kmemory.Range;
-const print = @import("../print.zig");
+const print = kernel.print;
 
 const platform = @import("platform.zig");
 const pmemory = @import("memory.zig");
@@ -19,7 +19,7 @@ const segments = @import("segments.zig");
 
 pub const Error = georgios.threading.Error;
 
-const pmem = &kernel.memory.platform_memory;
+const pmem = &kernel.memory_mgr.impl;
 
 fn v86(ss: u32, esp: u32, cs: u32, eip: u32) noreturn {
     asm volatile ("push %[ss]" :: [ss] "{ax}" (ss));
@@ -89,7 +89,7 @@ pub const ThreadImpl = struct {
         self.thread = thread;
         self.context_is_setup = boot_thread;
         if (!boot_thread) {
-            self.kernelmode_stack = try kernel.memory.big_alloc.alloc_range(utils.Ki(4));
+            self.kernelmode_stack = try kernel.memory_mgr.big_alloc.alloc_range(utils.Ki(4));
         }
         self.v8086 = if (thread.process) |process| process.impl.v8086 else false;
     }
@@ -166,13 +166,13 @@ pub const ThreadImpl = struct {
         if (!self.thread.kernel_mode) {
             platform.segments.set_interrupt_handler_stack(self.kernelmode_stack.end() - 1);
         }
-        kernel.threading_manager.current_process = self.thread.process;
-        kernel.threading_manager.current_thread = self.thread;
+        kernel.threading_mgr.current_process = self.thread.process;
+        kernel.threading_mgr.current_thread = self.thread;
     }
 
     pub fn switch_to(self: *ThreadImpl) callconv(.C) void {
         // WARNING: A FRAME FOR THIS FUNCTION NEEDS TO BE SETUP IN setup_context!
-        const last = kernel.threading_manager.current_thread.?;
+        const last = kernel.threading_mgr.current_thread.?;
         self.before_switch();
         asm volatile (
             \\pushf
@@ -201,7 +201,7 @@ pub const ThreadImpl = struct {
         if (self.thread.kernel_mode) {
             platform.enable_interrupts();
             asm volatile ("call *%[entry]" : : [entry] "{ax}" (self.thread.entry));
-            kernel.threading_manager.remove_current_thread();
+            kernel.threading_mgr.remove_current_thread();
         } else {
             usermode(self.thread.entry, self.usermode_stack_ptr, self.v8086);
         }
@@ -302,7 +302,7 @@ pub const ProcessImpl = struct {
 
     pub fn switch_to(self: *ProcessImpl) Error!void {
         var current_page_directory: ?[]u32 = null;
-        if (kernel.threading_manager.current_process) |current| {
+        if (kernel.threading_mgr.current_process) |current| {
             current_page_directory = current.impl.page_directory;
         }
         try pmemory.load_page_directory(self.page_directory, current_page_directory);
@@ -327,7 +327,7 @@ pub const ProcessImpl = struct {
 };
 
 pub fn new_v8086_process() !*Process {
-    const p = try kernel.threading_manager.new_process_i();
+    const p = try kernel.threading_mgr.new_process_i();
     p.info = null;
     p.impl.v8086 = true;
     p.entry = platform.frame_size;
@@ -338,5 +338,5 @@ pub fn new_v8086_process() !*Process {
 // const process = try platform.impl.threading.new_v8086_process();
 // try process.address_space_copy(process.entry,
 //     @intToPtr([*]const u8, @ptrToInt(exc))[0..@ptrToInt(&exc_end) - @ptrToInt(exc)]);
-// try threading_manager.start_process(process);
-// threading_manager.wait_for_process(process.id);
+// try threading_mgr.start_process(process);
+// threading_mgr.wait_for_process(process.id);

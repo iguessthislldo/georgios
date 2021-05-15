@@ -52,17 +52,17 @@ pub fn Semaphore(comptime Type: type) type {
         queue: List(threading.Thread.Id) = undefined,
 
         pub fn init(self: *Self) void {
-            self.queue = .{.alloc = kernel.memory.small_alloc};
+            self.queue = .{.alloc = kernel.alloc};
         }
 
         pub fn wait(self: *Self) Error!void {
             self.lock.spin_lock();
             if (self.value == 0) {
-                const thread = kernel.threading_manager.current_thread.?;
+                const thread = kernel.threading_mgr.current_thread.?;
                 try self.queue.push_back(thread.id);
                 thread.state = .Wait;
                 self.lock.unlock();
-                kernel.threading_manager.yield();
+                kernel.threading_mgr.yield();
             } else {
                 self.value -= 1;
                 self.lock.unlock();
@@ -74,7 +74,7 @@ pub fn Semaphore(comptime Type: type) type {
             self.value += 1;
             // TODO: Threads that exit with signalling should be done by kernel.
             while (try self.queue.pop_front()) |tid| {
-                if (kernel.threading_manager.thread_list.find(tid)) |thread| {
+                if (kernel.threading_mgr.thread_list.find(tid)) |thread| {
                     thread.state = .Run;
                     break;
                 }
@@ -133,9 +133,9 @@ pub fn system_tests() !void {
     try thread_b.init(false);
     thread_b.entry = @ptrToInt(system_test_thread_b);
 
-    try kernel.threading_manager.insert_thread(&thread_a);
-    try kernel.threading_manager.insert_thread(&thread_b);
+    try kernel.threading_mgr.insert_thread(&thread_a);
+    try kernel.threading_mgr.insert_thread(&thread_b);
 
-    kernel.threading_manager.wait_for_thread(thread_a.id);
-    kernel.threading_manager.wait_for_thread(thread_b.id);
+    kernel.threading_mgr.wait_for_thread(thread_a.id);
+    kernel.threading_mgr.wait_for_thread(thread_b.id);
 }

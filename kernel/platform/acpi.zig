@@ -112,14 +112,13 @@ export fn AcpiOsGetRootPointer() acpica.PhysicalAddress {
 }
 
 export fn AcpiOsAllocate(size: acpica.Size) ?*c_void {
-    const a = kernel.memory.small_alloc.alloc_array(u8, size) catch return null;
+    const a = kernel.alloc.alloc_array(u8, size) catch return null;
     return @ptrCast(*c_void, a.ptr);
 }
 
 export fn AcpiOsFree(ptr: ?*c_void) void {
     if (ptr != null) {
-        kernel.memory.small_alloc.free_array(
-            utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
+        kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
     }
 }
 
@@ -128,7 +127,7 @@ const Sem = kernel.sync.Semaphore(acpica.Uint32);
 export fn AcpiOsCreateSemaphore(
         max_units: acpica.Uint32, initial_units: acpica.Uint32,
         semaphore: **Sem) acpica.Status {
-    const sem = kernel.memory.small_alloc.alloc(Sem) catch return acpica.NoMemory;
+    const sem = kernel.alloc.alloc(Sem) catch return acpica.NoMemory;
     sem.* = .{.value = initial_units};
     sem.init();
     semaphore.* = sem;
@@ -156,14 +155,14 @@ export fn AcpiOsSignalSemaphore(semaphore: *Sem, units: acpica.Uint32) acpica.St
 }
 
 export fn AcpiOsDeleteSemaphore(semaphore: *Sem) acpica.Status {
-    kernel.memory.small_alloc.free(semaphore) catch return acpica.BadParameter;
+    kernel.alloc.free(semaphore) catch return acpica.BadParameter;
     return acpica.Ok;
 }
 
 const Lock = kernel.sync.Lock;
 
 export fn AcpiOsCreateLock(lock: **Lock) acpica.Status {
-    const l = kernel.memory.small_alloc.alloc(Lock) catch return acpica.NoMemory;
+    const l = kernel.alloc.alloc(Lock) catch return acpica.NoMemory;
     l.* = .{};
     lock.* = l;
     return acpica.Ok;
@@ -179,13 +178,12 @@ export fn AcpiOsReleaseLock(lock: *Lock, flags: acpica.ACPI_CPU_FLAGS) void {
 }
 
 export fn AcpiOsDeleteLock(lock: *Lock) acpica.Status {
-    kernel.memory.small_alloc.free(lock) catch return acpica.BadParameter;
+    kernel.alloc.free(lock) catch return acpica.BadParameter;
     return acpica.Ok;
 }
 
 export fn AcpiOsGetThreadId() acpica.Uint64 {
-    const t = kernel.threading_manager.current_thread orelse
-        &kernel.threading_manager.boot_thread;
+    const t = kernel.threading_mgr.current_thread orelse &kernel.threading_mgr.boot_thread;
     return t.id;
 }
 
@@ -207,10 +205,10 @@ export fn AcpiOsPhysicalTableOverride(existing: [*c]acpica.ACPI_TABLE_HEADER,
     return acpica.Ok;
 }
 
-
-export fn AcpiOsMapMemory(address: acpica.PhysicalAddress, size: acpica.Size) *allowzero c_void {
+export fn AcpiOsMapMemory(
+        address: acpica.PhysicalAddress, size: acpica.Size) *allowzero c_void {
     const page = pmemory.page_size;
-    const pmem = &kernel.memory.platform_memory;
+    const pmem = &kernel.memory_mgr.impl;
     const addr = @intCast(usize, address);
     const start_page = utils.align_down(addr, page);
     const offset = addr % page;
