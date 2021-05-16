@@ -45,10 +45,6 @@ def extract_archive(archive, dest):
     archive.unlink()
 
 
-def get_latest_info():
-    return json.load(download(zig_version_url))["master"]
-
-
 # Main Logic ==================================================================
 
 georgios_root = Path(__file__).resolve().parent.parent
@@ -90,6 +86,13 @@ class Zig:
     @classmethod
     def from_info(cls, zigs_path, info):
         return cls.from_version(zigs_path, info['version'])
+
+    def is_release(self):
+        return self.version_parts()[3] is None
+
+    def guess_url(self):
+        return "https://ziglang.org/{}/{}.tar.xz".format(
+            "download/" + self.version if self.is_release() else "builds", self.name)
 
     def version_parts(self):
         return version_re.match(self.version).groups()
@@ -137,10 +140,7 @@ def set_current_version(version):
 
 
 def get_current(zigs_path):
-    zig = Zig.from_version(zigs_path, get_current_version())
-    if not zig.exists():
-        raise ValueError('Zig in README.md does not exist: ' + str(zig.path))
-    return zig
+    return Zig.from_version(zigs_path, get_current_version())
 
 
 def get_downloaded(zigs_path):
@@ -167,6 +167,10 @@ def use(zigs_path, version=None, zig=None):
     print('Refresh PATH if needed')
 
 
+def get_latest_info():
+    return json.load(download(zig_version_url))["master"]
+
+
 class CheckStatus(enum.Enum):
     UsingLatest = enum.auto(),
     LatestNotCurrent = enum.auto(),
@@ -176,7 +180,7 @@ class CheckStatus(enum.Enum):
 def check(zigs_path, for_update=False):
     current = get_current(zigs_path)
     print('Current is', current)
-    if not update and not current.exists():
+    if not for_update and not current.exists():
         print('  It needs to be downloaded!')
 
     latest_info = get_latest_info()
@@ -192,7 +196,7 @@ def check(zigs_path, for_update=False):
             print('  Latest was downloaded, but isn\'t current')
             status = CheckStatus.LatestNotCurrent
     else:
-        if update:
+        if for_update:
             print('  Will download the latest')
         else:
             print('  Would need to be downloaded')
@@ -201,8 +205,7 @@ def check(zigs_path, for_update=False):
     return status, latest, latest_info
 
 
-def get_zig(zigs_path, zig, info):
-    url = info['{}-{}'.format(cpu, os)]['tarball']
+def download_zig(zigs_path, zig, url):
     extract_archive(download_file(url, zigs_path), zigs_path)
 
 
@@ -212,7 +215,7 @@ def update(zigs_path):
         return
 
     if status == CheckStatus.NeedToDownloadLatest:
-        get_zig(zigs_path, latest, latest_info)
+        download_zig(zigs_path, latest, info['{}-{}'.format(cpu, os)]['tarball'])
         status = CheckStatus.LatestNotCurrent
 
     if status == CheckStatus.LatestNotCurrent:
@@ -222,7 +225,10 @@ def update(zigs_path):
 # Subcommands =================================================================
 
 def current_path_subcmd(args):
-    print(get_current(args.zigs_path).path.resolve())
+    zig = get_current(args.zigs_path)
+    if not zig.exists():
+        raise ValueError('Zig in README.md does not exist: ' + str(zig.path))
+    print(zig.path.resolve())
 
 
 def current_version_subcmd(args):
@@ -244,6 +250,14 @@ def use_subcmd(args):
 
 def update_subcmd(args):
     update(args.zigs_path)
+
+
+def download_subcmd(args):
+    zig = get_current(args.zigs_path)
+    if zig.exists():
+        print('Already downloaded', zig.version)
+        return
+    download_zig(args.zigs_path, zig, zig.guess_url())
 
 
 # Main ========================================================================
@@ -288,6 +302,11 @@ if __name__ == '__main__':
         help='Use the latest version, downloading if needed',
     )
     up.set_defaults(func=update_subcmd)
+
+    dl = subcmds.add_parser('download',
+        help='Downloading the current version if missing',
+    )
+    dl.set_defaults(func=download_subcmd)
 
     args = arg_parser.parse_args()
     if not hasattr(args, 'func'):

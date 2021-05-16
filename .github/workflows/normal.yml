@@ -15,20 +15,13 @@ jobs:
               with:
                   submodules: true
 
-            - name: Get Zig
-              uses: goto-bus-stop/setup-zig@v1
-              with:
-                  version: '0.7.1'
-              if: ${{ github.ref == 'refs/heads/master' }}
-
-            - name: Get Nightly Zig
-              uses: goto-bus-stop/setup-zig@v1
-              with:
-                  version: 'master'
-              if: ${{ github.ref == 'refs/heads/zig-nightly' }}
-
             - name: Install Packages
               run: sudo apt-get install grub-pc-bin
+
+            - name: Get Zig
+              run: |
+                ./scripts/zig.py download
+                ./scripts/zig.py current-path >> $GITHUB_PATH
 
             - name: Build ISO Image
               run: make
