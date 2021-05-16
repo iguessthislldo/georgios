@@ -12,8 +12,8 @@ working on.
 ## Building
 
 Building Georgios requires a Unix-like environment with:
-- [Zig](https://ziglang.org/)
-  - Currently using 0.7.1
+- [Zig](https://ziglang.org/) 0.8.0-dev.2272+d98e39fa6
+- Python 3
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 
