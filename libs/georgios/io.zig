@@ -90,10 +90,10 @@ pub const File = struct {
     id: ?Id = null,
     set_up_writer: bool = false,
     _writer: Writer = undefined,
-    read_impl: fn(*File, []u8) FileError!usize = unsupported.read_impl,
-    write_impl: fn(*File, []const u8) FileError!usize = unsupported.write_impl,
-    seek_impl: fn(*File, isize, SeekType) FileError!usize = unsupported.seek_impl,
-    close_impl: fn(*File) FileError!void = unsupported.close_impl,
+    read_impl: fn(*File, []u8) FileError!usize = default_impl.read_impl,
+    write_impl: fn(*File, []const u8) FileError!usize = default_impl.write_impl,
+    seek_impl: fn(*File, isize, SeekType) FileError!usize = default_impl.seek_impl,
+    close_impl: fn(*File) FileError!void = default_impl.close_impl,
 
     /// Set the file to do nothing when used.
     pub fn set_nop_impl(self: *File) void {
