@@ -1,5 +1,5 @@
-const builtin = @import("builtin");
 const std = @import("std");
+const builtin = std.builtin;
 
 const t_path = "tmp/";
 const k_path = "kernel/";

@@ -1,6 +1,6 @@
 // Platform Initialization and Public Interface
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const kernel = @import("root").kernel;
 const io = kernel.io;

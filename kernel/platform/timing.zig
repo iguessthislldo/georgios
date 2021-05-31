@@ -8,6 +8,8 @@
 
 const util = @import("util.zig");
 
+const acpi = @import("acpi.zig");
+
 /// Base Frequency
 const oscillator: u32 = 1_193_180;
 
@@ -162,3 +164,27 @@ pub fn wait_microseconds(us: u64) void {
 pub fn wait_nanoseconds(ns : u64) void {
     wait_ticks(ns * estimated_ticks_per_nanosecond);
 }
+
+// High Precision Event Timer (HPET) ==========================================
+
+pub const HpetTable = packed struct {
+    pub const PageProtection = packed enum(u4) {
+        None = 0,
+        For4KibPages,
+        For64KibPages,
+        _,
+    };
+
+    header: acpi.TableHeader,
+    hardware_rev_id: u8,
+    comparator_count: u5,
+    counter_size: bool,
+    reserved: bool,
+    legacy_replacment: bool,
+    pci_vendor_id: u16,
+    base_address: acpi.Address,
+    hpet_number: u8,
+    minimum_tick: u16,
+    page_protection: PageProtection,
+    oem_attrs: u4,
+};

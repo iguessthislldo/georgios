@@ -1,6 +1,6 @@
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
-pub const impl = switch(builtin.arch) {
+pub const impl = switch(builtin.cpu.arch) {
     // x86_32
     .i386 => @import("platform/platform.zig"),
     else => @compileError("Architecture Not Supported!"),

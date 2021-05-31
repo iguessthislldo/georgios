@@ -2,7 +2,7 @@
 //
 // TODO: More Info
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const kernel = @import("root").kernel;
 const kutil = kernel.util;

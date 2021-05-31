@@ -1,7 +1,7 @@
 // These are wrappers of what is in fprint.zig for convenience. See there for
 // the implementations.
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const fprint = @import("fprint.zig");
 const io = @import("io.zig");

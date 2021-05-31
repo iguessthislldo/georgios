@@ -8,7 +8,7 @@
 //   https://en.wikipedia.org/wiki/Code_page_437
 //   https://wiki.osdev.org/Printing_to_Screen
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const utils = @import("utils");
 

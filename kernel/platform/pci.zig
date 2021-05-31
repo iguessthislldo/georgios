@@ -1,7 +1,7 @@
 // PCI Interface
 // Based on https://wiki.osdev.org/PCI
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const utils = @import("utils");
 

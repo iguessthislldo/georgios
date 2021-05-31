@@ -1,4 +1,4 @@
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 const build_options = @import("build_options");
 
 const utils = @import("utils");

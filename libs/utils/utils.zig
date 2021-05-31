@@ -1,5 +1,5 @@
-const builtin = @import("builtin");
 const std = @import("std");
+const builtin = std.builtin;
 
 const unicode = @import("unicode.zig");
 pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
