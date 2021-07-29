@@ -367,3 +367,21 @@ pub fn time() callconv(.Inline) u64 {
         );
     return rv;
 }
+
+pub fn get_process_id() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 18)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub fn get_thread_id() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 19)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}

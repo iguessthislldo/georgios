@@ -235,6 +235,26 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             @intToPtr(*u64, arg1).* = kernel.platform.time();
         },
 
+        // SYSCALL: get_process_id() u32
+        18 => {
+            const r = @intToPtr(*u32, arg1);
+            if (kernel.threading_mgr.current_process) |p| {
+                r.* = p.id;
+            } else {
+                r.* = 0;
+            }
+        },
+
+        // SYSCALL: get_thread_id() u32
+        19 => {
+            const r = @intToPtr(*u32, arg1);
+            if (kernel.threading_mgr.current_thread) |t| {
+                r.* = t.id;
+            } else {
+                r.* = 0;
+            }
+        },
+
         else => @panic("Invalid System Call"),
     }
 }

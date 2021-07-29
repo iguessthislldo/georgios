@@ -95,6 +95,7 @@ pub fn build(builder: *std.build.Builder) void {
     kernel.addBuildOption(bool, "vbe", vbe);
     kernel.addBuildOption(bool, "debug_log", debug_log);
     kernel.addBuildOption(bool, "wait_for_anykey", wait_for_anykey);
+    kernel.addBuildOption(bool, "is_kernel", true);
     // Packages
     kernel.addPackage(utils_pkg);
     kernel.addPackage(georgios_pkg);
@@ -111,10 +112,12 @@ pub fn build(builder: *std.build.Builder) void {
 
     // Programs
     build_program("shell");
-    build_program("hello");
-    build_program("ls");
-    build_program("cat");
-    build_program("snake");
+    // build_program("hello");
+    // build_program("ls");
+    // build_program("cat");
+    // build_program("snake");
+    // build_zig_program("hello-zig");
+    // build_c_program("hello-c");
 }
 
 const disable_ubsan = "-fsanitize-blacklist=misc/clang-sanitize-blacklist.txt";
@@ -188,6 +191,14 @@ fn build_acpica() void {
         }
     }
     kernel.addObject(acpica);
+
+    // var crt0 = b.addObject("crt0", "libs/georgios/georgios.zig");
+    // crt0.addBuildOption(bool, "is_crt", true);
+    // crt0.override_dest_dir = std.build.InstallDir{.Custom = "lib"};
+    // crt0.setTarget(target);
+    // crt0.setBuildMode(build_mode);
+    // crt0.addPackage(utils_pkg);
+    // crt0.install();
 }
 
 fn build_program(name: []const u8) void {
@@ -200,3 +211,41 @@ fn build_program(name: []const u8) void {
     prog.addPackage(georgios_pkg);
     prog.install();
 }
+
+fn build_zig_program(name: []const u8) void {
+    const elf = format("{s}.elf", .{name});
+    const bin = format("{s}{s}", .{bin_path, elf});
+    const zig = format("programs/{s}/{s}.zig", .{name, name});
+    const prog = b.addExecutable(elf, zig);
+    prog.setLinkerScriptPath("programs/linking.ld");
+    prog.setTarget(
+        std.zig.CrossTarget.parse(.{
+            .arch_os_abi = "i386-georgios-gnu",
+            .cpu_features = "pentiumpro"
+        }) catch @panic("Failed Making Default Target")
+    );
+    prog.install();
+}
+// fn add_libc(what: *std.build.LibExeObjStep) void {
+//     what.addLibPath("/data/development/os/newlib/newlib/i386-pc-georgios/newlib");
+//     what.addSystemIncludeDir("/data/development/os/newlib/newlib/newlib/libc/include");
+//     what.linkSystemLibraryName("c");
+// }
+
+fn build_c_program(name: []const u8) void {
+    const elf = format("{s}.elf", .{name});
+    const bin = format("{s}{s}", .{bin_path, elf});
+    const c = format("programs/{s}/{s}.c", .{name, name});
+    const prog = b.addExecutable(elf, null);
+    prog.addCSourceFile(c, &[_][]const u8{"--libc /data/development/os/georgios/newlib"});
+    // add_libc(prog);
+    prog.setLinkerScriptPath("programs/linking.ld");
+    prog.setTarget(
+        std.zig.CrossTarget.parse(.{
+            .arch_os_abi = "i386-georgios-gnu",
+            .cpu_features = "pentiumpro"
+        }) catch @panic("Failed Making Default Target")
+    );
+    prog.install();
+}
+

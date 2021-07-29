@@ -143,8 +143,7 @@ pub const Filesystem = struct {
     }
 };
 
-/// TODO
-pub const Filesystems = struct {
+pub const Manager = struct {
     root: *Filesystem,
 };
 

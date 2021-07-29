@@ -55,6 +55,7 @@ pub const Thread = struct {
 
 pub const Process = struct {
     pub const Id = u32;
+    pub const OpenedFiles = MappedList(, *Thread, tid_eql, tid_cmp);
 
     info: ?Info = null,
     id: Id = undefined,

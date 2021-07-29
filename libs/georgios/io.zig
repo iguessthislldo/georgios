@@ -84,7 +84,7 @@ pub const File = struct {
         }
     };
 
-    const default_impl = if (georgios.is_program) system_call else unsupported;
+    const default_impl = unsupported;
 
     valid: bool = false,
     id: ?Id = null,
