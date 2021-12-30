@@ -120,11 +120,11 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: next_dir_entry(iter: *georgios.DirEntry) bool
         // IMPORT: georgios "georgios.zig"
         6 => {
+            const entry = @intToPtr(*georgios.DirEntry, arg1);
             const failure_ptr = @intToPtr(*bool, arg2);
             failure_ptr.* = false;
-            kernel.filesystem.impl.next_dir_entry(
-                    @intToPtr(*georgios.DirEntry, arg1)) catch |e| {
-                print.format("next_dir_iter failed: {}\n", .{@errorName(e)});
+            kernel.filesystem.impl.next_dir_entry(entry) catch |e| {
+                print.format("next_dir_iter failed in dir {}: {}\n", .{entry.dir, @errorName(e)});
                 failure_ptr.* = true;
                 return;
             };

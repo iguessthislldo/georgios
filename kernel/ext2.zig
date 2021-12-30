@@ -48,7 +48,7 @@ const Superblock = packed struct {
     // Start of Rev1 Superblock Extention
     first_nonreserved_inode: u32 = 0,
     inode_size: u32 = 0,
-    // Rest have been left out for now
+    // Rest has been left out for now
 
     pub fn verify(self: *const Superblock) Error!void {
         if (self.magic != expected_magic) {
@@ -449,16 +449,22 @@ pub const Ext2 = struct {
     offset: io.AddressType = 0,
     superblock: Superblock = Superblock{},
     block_size: usize = 0,
+    block_group_descriptor_table: io.AddressType = 0,
     max_entries_per_block: usize = 0,
     max_third_level_entries: usize = 0,
     max_fourth_level_entries: usize = 0,
     third_level_start: usize = 0,
     fourth_level_start: usize = 0,
 
+    fn get_block_address(self: *const Ext2, index: usize) io.AddressType {
+        return self.offset + index * self.block_size;
+    }
+
     pub fn get_block_group_descriptor(self: *Ext2,
             index: usize, dest: *BlockGroupDescriptor) Error!void {
-        const address = utils.Ki(2) + @sizeOf(BlockGroupDescriptor) * index;
-        try self.block_store.read(self.offset + address, utils.to_bytes(dest));
+        try self.block_store.read(
+            self.block_group_descriptor_table + @sizeOf(BlockGroupDescriptor) * index,
+            utils.to_bytes(dest));
     }
 
     pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) Error!void {
@@ -473,7 +479,7 @@ pub const Ext2 = struct {
     }
 
     pub fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
-        try self.block_store.read(self.offset + index * self.block_size, block);
+        try self.block_store.read(self.get_block_address(index), block);
     }
 
     pub fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
@@ -492,6 +498,8 @@ pub const Ext2 = struct {
 
         self.block_size = self.superblock.block_size();
         self.max_entries_per_block = self.block_size / @sizeOf(u32);
+        self.block_group_descriptor_table = self.get_block_address(
+            if (self.block_size >= utils.Ki(2)) 1 else 2);
         self.third_level_start = second_level_start + self.max_entries_per_block;
         self.max_third_level_entries =
             self.max_entries_per_block * self.max_entries_per_block;
