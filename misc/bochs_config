@@ -1,5 +1,5 @@
 megs:            32
-romimage:        file=/usr/share/bochs/BIOS-bochs-latest
+romimage:        file=/usr/share/bochs/BIOS-bochs-legacy
 vgaromimage:     file=/usr/share/bochs/VGABIOS-lgpl-latest
 ata0-master:     type=disk, path=disk.img, mode=flat
 ata1-master:     type=cdrom, path=georgios.iso, status=inserted
