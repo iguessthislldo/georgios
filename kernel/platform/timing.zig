@@ -12,9 +12,7 @@ const util = @import("util.zig");
 const oscillator: u32 = 1_193_180;
 
 // I/O Ports
-const channel_0_port: u16 = 0x40;
-const channel_1_port: u16 = 0x41;
-const channel_2_port: u16 = 0x42;
+const channel_arg_base_port: u16 = 0x40;
 const command_port: u16 = 0x43;
 const pc_speaker_port: u16 = 0x61;
 
@@ -44,6 +42,10 @@ const Channel = packed enum(u2) {
     Channel1, // Assume to be Unusable
     Speaker, // (Channel 2)
     Channel3, // ?
+
+    pub fn get_arg_port(self: Channel) u16 {
+        return channel_arg_base_port + @enumToInt(self);
+    }
 };
 
 const Command = packed struct {
@@ -68,8 +70,9 @@ pub fn set_pit_both_bytes(channel: Channel, mode: Mode, arg: u16) void {
     cmd.perform();
 
     // Issue Two Byte Argument Required by BothBytes
-    util.out8(0x42, @truncate(u8, arg));
-    util.out8(0x42, @truncate(u8, arg >> 8));
+    const port: u16 = channel.get_arg_port();
+    util.out8(port, @truncate(u8, arg));
+    util.out8(port, @truncate(u8, arg >> 8));
 }
 
 pub fn set_pit_freq(channel: Channel, frequency: u32) void {

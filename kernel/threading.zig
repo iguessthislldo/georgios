@@ -454,6 +454,7 @@ pub const Manager = struct {
         if (self.waiting_for_keyboard) |t| {
             t.state = .Run;
             self.waiting_for_keyboard = null;
+            // TODO: yield to waiting process?
         }
     }
 

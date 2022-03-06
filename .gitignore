@@ -1,6 +1,7 @@
 /tmp
 /*.iso
 /*.img
+/*.img.lock
 /bochslog.txt
 /bx_enh_dbg.ini
 /zig-cache

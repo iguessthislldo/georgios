@@ -141,6 +141,6 @@ pub fn init() !void {
     // acpi.init();
 
     // Start Ticking
-    timing.set_pit_freq(.Irq0, 10000);
+    timing.set_pit_freq(.Irq0, 100);
     interrupts.pic.allow_irq(0, true);
 }

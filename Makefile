@@ -11,6 +11,7 @@ GRUB_LOCATION:=$(GRUB_PREFIX)/lib/grub/i386-pc
 GRUB_CFG:=$(BOOT_DIR)/grub/grub.cfg
 
 DEBUGGER:=gdb
+BOCHS?=bochs
 
 zig_build_args="build"
 ifdef multiboot_vbe
@@ -62,7 +63,8 @@ $(USBDRIVE): $(DISK)
 
 .PHONY: bochs
 bochs:
-	bochs -q -f misc/bochs_config -rc misc/bochs_rc
+	rm -f $(DISK).lock
+	$(BOCHS) -q -f misc/bochs_config -rc misc/bochs_rc
 
 .PHONY: qemu
 qemu:
