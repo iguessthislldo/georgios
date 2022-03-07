@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 import subprocess
 import re
+import traceback
 
 def git(*args):
     result = subprocess.run(["git"] + list(args), check=True, stdout=subprocess.PIPE)
@@ -19,34 +20,34 @@ def get_files():
 status = 0
 
 # Find Files ==================================================================
-trailing_whitespace = re.compile(r'.*\s$')
+trailing_whitespace = re.compile(r'\s$')
 zig_test_re = re.compile(r'^test "(.*)" {$')
 zig_test_roots = set()
 zig_files_with_tests = set()
 for path in get_files():
     if not path.is_file() or path.suffix in ('.img', '.png'):
         continue
-    with path.open() as f:
-        try:
+    try:
+        with path.open() as f:
             lines = [line[:-1] for line in f.readlines()]
-        except Exception as e:
-            print(str(path), str(e), file=sys.stderr)
-            status = 1
-            continue
-        zig_file = path.suffix == ".zig"
-        lineno = 1
-        for line in lines:
-            if trailing_whitespace.match(line):
-                print('Trailing space on {}:{}'.format(str(path), lineno))
-                status = 1
-            if zig_file:
-                m = zig_test_re.match(line)
-                if m:
-                    if m.group(1).endswith("test root"):
-                        zig_test_roots |= {path}
-                    else:
-                        zig_files_with_tests |= {path}
-            lineno += 1
+            zig_file = path.suffix == ".zig"
+            lineno = 1
+            for line in lines:
+                if trailing_whitespace.match(line):
+                    print('Trailing space on {}:{}'.format(str(path), lineno))
+                    status = 1
+                if zig_file:
+                    m = zig_test_re.match(line)
+                    if m:
+                        if m.group(1).endswith("test root"):
+                            zig_test_roots |= {path}
+                        else:
+                            zig_files_with_tests |= {path}
+                lineno += 1
+    except Exception:
+        print('ERROR: Exception thrown while reading {}:', repr(str(path)), file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        status = 1
 
 # Make sure all tests are being tested ========================================
 

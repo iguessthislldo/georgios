@@ -2,6 +2,8 @@ import sys
 
 # dump data in gdb using something like
 #     dump binary memory FILE ((unsigned*)&WHAT) (((unsigned*)&WHAT)+1024)
+#   This dumps the current one:
+#     dump binary memory FILE ((unsigned*)($cr3+0xc0000000)) (((unsigned*)($cr3+0xc0000000))+1024)
 # And read using:
 #     read_paging.py directory FILE
 #     read_paging.py table FILE
