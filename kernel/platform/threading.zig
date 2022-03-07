@@ -89,7 +89,13 @@ pub const ThreadImpl = struct {
         self.thread = thread;
         self.context_is_setup = boot_thread;
         if (!boot_thread) {
-            self.kernelmode_stack = try kernel.memory_mgr.big_alloc.alloc_range(utils.Ki(4));
+            const stack_size = utils.Ki(8);
+            const guard_size = utils.Ki(4);
+            self.kernelmode_stack =
+                try kernel.memory_mgr.big_alloc.alloc_range(guard_size + stack_size);
+            try kernel.memory_mgr.impl.make_guard_page(null, self.kernelmode_stack.start, true);
+            self.kernelmode_stack.start += guard_size;
+            self.kernelmode_stack.size -= guard_size;
         }
         self.v8086 = if (thread.process) |process| process.impl.v8086 else false;
     }
@@ -303,7 +309,11 @@ pub const ProcessImpl = struct {
     pub fn switch_to(self: *ProcessImpl) Error!void {
         var current_page_directory: ?[]u32 = null;
         if (kernel.threading_mgr.current_process) |current| {
-            current_page_directory = current.impl.page_directory;
+            if (current == self.process) {
+                return;
+            } else {
+                current_page_directory = current.impl.page_directory;
+            }
         }
         try pmemory.load_page_directory(self.page_directory, current_page_directory);
         // TODO: Try to undo the effects if there is an error.

@@ -1,9 +1,14 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const georgios = @import("georgios");
 comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
 const utils = georgios.utils;
+
+pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+    georgios.panic(msg, trace);
+}
 
 fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 {
     var dir_entry = georgios.DirEntry{.dir = path};
@@ -134,6 +139,8 @@ pub fn main() void {
                             system_calls.print_string("invalid argument\n");
                         }
                     }
+                } else if (utils.memory_compare(command_parts[0], "koverflow")) {
+                    system_calls.overflow_kernel_stack();
                 } else {
                     var command_path = command_parts[0];
                     if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {

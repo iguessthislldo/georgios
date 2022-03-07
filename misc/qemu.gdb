@@ -7,7 +7,7 @@ set logging overwrite on
 set logging on
 
 break kernel.panic
-# break platform.interrupts.BaseInterruptHandler(14,false,false).handler
+# break platform.interrupts.BaseInterruptHandler(14,platform.interrupts.StackTemplate(true),false,platform.interrupts.PanicMessage(platform.interrupts.StackTemplate(true)).show).handler
 # break usermode_iret
 
 target remote | qemu-system-i386 \

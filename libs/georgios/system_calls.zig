@@ -367,3 +367,9 @@ pub inline fn time() u64 {
         );
     return rv;
 }
+
+pub inline fn overflow_kernel_stack() void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 18)),
+        );
+}

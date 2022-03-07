@@ -31,7 +31,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // like the intended Zig signature in it. This pseudo-signature is the
         // same as normal, but with 2 differences:
         //
-        // - One is a & before names of arguments indented to be passed to the
+        // - One is a & before names of arguments intended to be passed to the
         //   system call implementation as pointers. This is necessary for things
         //   larger than a register.
         //   Example: \\ SYSCALL: cool_syscall(&cool_arg: []const u8) void
@@ -58,8 +58,8 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // system call implementation:
         //
         // - An IMPORT comment will combine with other system call imports and
-        //   import Zig namespace needed for the system calls.
-        //   arguments and return.
+        //   import Zig namespace needed for the system calls arguments and
+        //   return.
         //   Example: \\ IMPORT: cool "cool"
         //   Will insert: const cool = @import("cool")
         //
@@ -103,14 +103,15 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // IMPORT: georgios "georgios.zig"
         5 => {
             const blocking = @intToPtr(*georgios.Blocking, arg1).* == .Blocking;
+            const rv = @intToPtr(*?georgios.keyboard.Event, arg2);
             while (true) {
                 if (ps2.get_key()) |key| {
-                    @intToPtr(*?georgios.keyboard.Event, arg2).* = key;
+                    rv.* = key;
                     break;
                 } else if (blocking) {
                     kernel.threading_mgr.wait_for_keyboard();
                 } else {
-                    @intToPtr(*?georgios.keyboard.Event, arg2).* = null;
+                    rv.* = null;
                     break;
                 }
             }
@@ -235,6 +236,31 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             @intToPtr(*u64, arg1).* = kernel.platform.time();
         },
 
+        // SYSCALL: overflow_kernel_stack() void
+        18 => {
+            overflow_kernel_stack();
+        },
+
         else => @panic("Invalid System Call"),
     }
+}
+
+fn overflow_kernel_stack() void {
+    if (kernel.threading_mgr.current_thread) |thread| {
+        print.format("kernelmode_stack: {:a} - {:a}", .{
+            thread.impl.kernelmode_stack.start,
+            thread.impl.kernelmode_stack.end(),
+        });
+    }
+    overflow_kernel_stack_i();
+}
+
+fn overflow_kernel_stack_i() void {
+    var use_to_find_guard_page: [128]u8 = undefined;
+    print.format("overflow_kernel_stack: esp: {:a}\n", .{
+        asm volatile ("mov %%esp, %[x]" : [x] "=r" (-> usize))});
+    for (use_to_find_guard_page) |*ptr, i| {
+        ptr.* = @truncate(u8, i);
+    }
+    overflow_kernel_stack_i();
 }

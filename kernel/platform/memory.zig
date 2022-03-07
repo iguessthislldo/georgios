@@ -60,7 +60,18 @@ pub inline fn get_table_index(address: u32) u32 {
 }
 
 pub inline fn page_is_present(entry: u32) bool {
-    return (entry & 1) == 1;
+    // Bit 9 (0x200) marks a guard page to Georgios. This will be marked as not
+    // present in the entry itself (bit 1) so that it causes a page fault if
+    // accessed.
+    return (entry & 0x201) != 0;
+}
+
+pub inline fn as_guard_page(entry: u32) u32 {
+    return (entry & 0xfffffffe) | 0x200;
+}
+
+pub inline fn page_is_guard_page(entry: u32) bool {
+    return (entry & 0x201) == 0x200;
 }
 
 pub inline fn get_page_address(entry: u32) u32 {
@@ -279,7 +290,7 @@ pub const ManagerImpl = struct {
     // TODO: Read/Write and Any Other Options
     pub fn mark_virtual_memory_present(self: *ManagerImpl,
             page_directory: []u32, range: Range, user: bool) AllocError!void {
-        // print.format("mark_virtual_memory_present {:a} {:a}\n", range.start, range.size);
+        // print.format("mark_virtual_memory_present {:a} {:a}\n", .{range.start, range.size});
         const dir_index_start = get_directory_index(range.start);
         const table_index_start = get_table_index(range.start);
         var dir_index: usize = dir_index_start;
@@ -321,6 +332,27 @@ pub const ManagerImpl = struct {
 
     // TODO
     fn mark_virtual_memory_absent(self: *ManagerImpl, range: Range) void {
+    }
+
+    pub fn make_guard_page(self: *ManagerImpl, page_directory: ?[]u32,
+            address: usize, user: bool) AllocError!void {
+        const page_dir = page_directory orelse active_page_directory[0..];
+        const dir_index = get_directory_index(address);
+        if (!table_is_present(page_dir[dir_index])) {
+            try self.new_page_table(page_dir, dir_index, user);
+        }
+        self.map_virtual_page(get_table_address(page_dir[dir_index]));
+        const table = @intToPtr([*]u32, self.virtual_page_address);
+        const table_index = get_table_index(address);
+        const free_frame: ?u32 = if (page_is_present(table[table_index]))
+            get_page_address(table[table_index]) else null;
+        table[table_index] = as_guard_page(table[table_index]);
+        if (&page_dir[0] == &active_page_directory[0]) {
+            invalidate_page(get_address(dir_index, table_index));
+        }
+        if (free_frame) |addr| {
+            self.push_frame(addr);
+        }
     }
 
     fn page_alloc(allocator: *memory.Allocator, size: usize) AllocError![]u8 {
