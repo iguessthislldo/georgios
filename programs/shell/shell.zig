@@ -6,7 +6,7 @@ comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
 const utils = georgios.utils;
 
-pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     georgios.panic(msg, trace);
 }
 

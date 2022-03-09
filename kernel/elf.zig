@@ -220,8 +220,7 @@ pub const Object = struct {
         if (debug) print.format("Program Header Count: {}\n",
             .{object.header.program_header_entry_count});
         {
-            _ = try file.seek(@
-                intCast(isize, object.header.program_header_offset), .FromStart);
+            _ = try file.seek(@intCast(isize, object.header.program_header_offset), .FromStart);
             const count = @intCast(usize, object.header.program_header_entry_count);
             const size = @intCast(usize, object.header.program_header_entry_size);
             const skip = @intCast(isize, size - @sizeOf(ProgramHeader));
