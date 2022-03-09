@@ -232,50 +232,50 @@ test "Map" {
     const niln: ?*UsizeUsizeMap.Node = null;
 
     // Empty
-    equal(@as(usize, 0), map.len);
-    equal(nil, map.find(45));
+    try equal(@as(usize, 0), map.len);
+    try equal(nil, map.find(45));
 
     // Insert Some Values
     _ = try map.insert(4, 65);
-    equal(@as(usize, 1), map.len);
+    try equal(@as(usize, 1), map.len);
     _ = try map.insert(1, 44);
     _ = try map.insert(10, 12345);
     _ = try map.insert(23, 5678);
     _ = try map.insert(7, 53);
-    equal(@as(usize, 5), map.len);
+    try equal(@as(usize, 5), map.len);
 
     // Find Them
-    equal(@as(usize, 12345), map.find(10).?);
-    equal(@as(usize, 44), map.find(1).?);
-    equal(@as(usize, 5678), map.find(23).?);
-    equal(@as(usize, 65), map.find(4).?);
-    equal(@as(usize, 53), map.find(7).?);
+    try equal(@as(usize, 12345), map.find(10).?);
+    try equal(@as(usize, 44), map.find(1).?);
+    try equal(@as(usize, 5678), map.find(23).?);
+    try equal(@as(usize, 65), map.find(4).?);
+    try equal(@as(usize, 53), map.find(7).?);
 
     var it = map.iterate();
-    equal(@as(usize, 1), it.next().?.key);
-    equal(@as(usize, 4), it.next().?.key);
-    equal(@as(usize, 7), it.next().?.key);
-    equal(@as(usize, 10), it.next().?.key);
-    equal(@as(usize, 23), it.next().?.key);
-    equal(niln, it.next());
+    try equal(@as(usize, 1), it.next().?.key);
+    try equal(@as(usize, 4), it.next().?.key);
+    try equal(@as(usize, 7), it.next().?.key);
+    try equal(@as(usize, 10), it.next().?.key);
+    try equal(@as(usize, 23), it.next().?.key);
+    try equal(niln, it.next());
 
     // Try to Find Non-Existent Key
-    equal(nil, map.find(45));
-    equal(false, try map.remove(45));
+    try equal(nil, map.find(45));
+    try equal(false, try map.remove(45));
 
     // Remove Node with Two Children
-    equal(true, try map.remove(10));
-    equal(@as(usize, 4), map.len);
-    equal(@as(usize, 4), map.find_node(7).?.parent.?.key);
+    try equal(true, try map.remove(10));
+    try equal(@as(usize, 4), map.len);
+    try equal(@as(usize, 4), map.find_node(7).?.parent.?.key);
 
     // Remove the Rest
-    equal(true, try map.remove(1));
-    equal(true, try map.remove(23));
-    equal(true, try map.remove(4));
-    equal(true, try map.remove(7));
-    equal(@as(usize, 0), map.len);
+    try equal(true, try map.remove(1));
+    try equal(true, try map.remove(23));
+    try equal(true, try map.remove(4));
+    try equal(true, try map.remove(7));
+    try equal(@as(usize, 0), map.len);
 
     // Try to Find Keys That Once Existed
-    equal(nil, map.find(1));
-    equal(nil, map.find(4));
+    try equal(nil, map.find(1));
+    try equal(nil, map.find(4));
 }

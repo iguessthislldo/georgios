@@ -11,7 +11,7 @@
 // an exception for platforms.
 
 const std = @import("std");
-const builtin = @import("builtin");
+const builtin = std.builtin;
 const build_options = @import("build_options");
 
 pub const kernel = @import("kernel.zig");
@@ -19,7 +19,7 @@ const kernel_main = kernel.kernel_main;
 const utils = @import("utils");
 
 pub const sse_enabled: bool = comptime {
-    for (builtin.arch.allFeaturesList()) |feature, index_usize| {
+    for (builtin.cpu.arch.allFeaturesList()) |feature, index_usize| {
         const index = @intCast(std.Target.Cpu.Feature.Set.Index, index_usize);
         if (builtin.cpu.features.isEnabled(index)) {
             if (feature.name.len >= 3 and std.mem.eql(u8, feature.name[0..3], "sse")) {

@@ -299,7 +299,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
             error('System call {} requires {} registers, but the max is {}'.format(
                 repr(sig), required_regs, avail_regs))
 
-        print('\npub inline fn {}({}) {} {{'.format(
+        print('\npub fn {}({}) callconv(.Inline) {} {{'.format(
             name,
             ', '.join([a[1:] if a.startswith('&') else a for a in args]),
             return_type), file=f)

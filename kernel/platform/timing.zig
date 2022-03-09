@@ -8,6 +8,8 @@
 
 const util = @import("util.zig");
 
+const acpi = @import("acpi.zig");
+
 /// Base Frequency
 const oscillator: u32 = 1_193_180;
 
@@ -81,7 +83,7 @@ pub fn set_pit_freq(channel: Channel, frequency: u32) void {
 
 // PC Speaker =================================================================
 
-inline fn speaker_enabled(enable: bool) void {
+fn speaker_enabled(enable: bool) callconv(.Inline) void {
     const mask: u8 = 0b10;
     const current = util.in8(pc_speaker_port);
     const desired = if (enable) current | mask else current & ~mask;
@@ -143,7 +145,7 @@ pub fn milliseconds_to_ticks(ms: u64) u64 {
     return ms * estimated_ticks_per_millisecond;
 }
 
-inline fn wait_ticks(ticks: u64) void {
+fn wait_ticks(ticks: u64) callconv(.Inline) void {
     const until = rdtsc() + ticks;
     while (until > rdtsc()) {
         asm volatile ("nop");
@@ -165,3 +167,27 @@ pub fn wait_microseconds(us: u64) void {
 pub fn wait_nanoseconds(ns : u64) void {
     wait_ticks(ns * estimated_ticks_per_nanosecond);
 }
+
+// High Precision Event Timer (HPET) ==========================================
+
+pub const HpetTable = packed struct {
+    pub const PageProtection = packed enum(u4) {
+        None = 0,
+        For4KibPages,
+        For64KibPages,
+        _,
+    };
+
+    header: acpi.TableHeader,
+    hardware_rev_id: u8,
+    comparator_count: u5,
+    counter_size: bool,
+    reserved: bool,
+    legacy_replacment: bool,
+    pci_vendor_id: u16,
+    base_address: acpi.Address,
+    hpet_number: u8,
+    minimum_tick: u16,
+    page_protection: PageProtection,
+    oem_attrs: u4,
+};

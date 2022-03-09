@@ -1,6 +1,6 @@
 // Platform Initialization and Public Interface
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const kernel = @import("root").kernel;
 const io = kernel.io;
@@ -15,7 +15,7 @@ pub const pmemory = @import("memory.zig");
 pub const util = @import("util.zig");
 pub const pci = @import("pci.zig");
 pub const ata = @import("ata.zig");
-// pub const acpi = @import("acpi.zig");
+pub const acpi = @import("acpi.zig");
 pub const ps2 = @import("ps2.zig");
 pub const threading = @import("threading.zig");
 pub const vbe = @import("vbe.zig");
@@ -27,7 +27,6 @@ pub const MemoryMgrImpl = pmemory.ManagerImpl;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
 pub const idle = util.idle;
-pub const done = util.done;
 
 pub const Time = u64;
 pub const time = timing.rdtsc;
@@ -138,9 +137,13 @@ pub fn init() !void {
     bios_int.init();
     vbe.init();
 
-    // acpi.init();
+    try acpi.init();
 
     // Start Ticking
     timing.set_pit_freq(.Irq0, 100);
     interrupts.pic.allow_irq(0, true);
+}
+
+pub fn done() void {
+    acpi.power_off();
 }

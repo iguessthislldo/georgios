@@ -9,7 +9,7 @@
 //   https://wiki.osdev.org/Global_Descriptor_Table
 //   https://wiki.osdev.org/Segmentation
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const utils = @import("utils");
 

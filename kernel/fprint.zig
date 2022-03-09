@@ -1,4 +1,5 @@
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
+
 const utils = @import("utils");
 
 const io = @import("io.zig");
@@ -135,7 +136,7 @@ test "address" {
         "@0x000000007bc75e39"
     else
         @compileError("usize size missing in this test");
-    std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
+    try std.testing.expectEqualSlices(u8, expected[0..], file_buffer[0..length]);
 }
 
 /// Print a hexadecimal representation of a byte (no "0x" prefix)
@@ -157,7 +158,7 @@ pub fn any(file: *File, value: anytype) FileError!void {
     var invalid: bool = false;
     switch (Traits) {
         builtin.TypeId.Int => |int_type| {
-            if (int_type.is_signed) {
+            if (int_type.signedness == .signed) {
                 try int(file, value);
             } else {
                 if (int_type.bits * 8 > @sizeOf(usize)) {
@@ -182,7 +183,9 @@ pub fn any(file: *File, value: anytype) FileError!void {
         },
         builtin.TypeId.Pointer => |ptr_type| {
             const t = ptr_type.child;
-            if (t == u8) {
+            if (ptr_type.is_allowzero and value == 0) {
+                try string(file, "null");
+            } else if (t == u8) {
                 if (ptr_type.size == builtin.TypeInfo.Pointer.Size.Slice) {
                     try string(file, value);
                 } else {

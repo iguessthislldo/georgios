@@ -1,5 +1,5 @@
-const builtin = @import("builtin");
 const std = @import("std");
+const builtin = std.builtin;
 
 const unicode = @import("unicode.zig");
 pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
@@ -19,19 +19,19 @@ pub const Error = error {
 };
 
 // NOTE: DO NOT TRY TO REMOVE INLINE ON THESE, WILL BREAK LOW KERNEL
-pub inline fn Ki(x: usize) usize {
+pub fn Ki(x: usize) callconv(.Inline) usize {
     return x << 10;
 }
 
-pub inline fn Mi(x: usize) usize {
+pub fn Mi(x: usize) callconv(.Inline) usize {
     return x << 20;
 }
 
-pub inline fn Gi(x: usize) usize {
+pub fn Gi(x: usize) callconv(.Inline) usize {
     return x << 30;
 }
 
-pub inline fn Ti(x: usize) usize {
+pub fn Ti(x: usize) callconv(.Inline) usize {
     return x << 40;
 }
 
@@ -43,27 +43,27 @@ pub fn align_up(value: usize, align_by: usize) usize {
     return align_down(value +% align_by -% 1, align_by);
 }
 
-pub inline fn padding(value: usize, align_by: usize) usize {
+pub fn padding(value: usize, align_by: usize) callconv(.Inline) usize {
     return -%value & (align_by - 1);
 }
 
-pub inline fn div_round_up(comptime Type: type, n: Type, d: Type) Type {
+pub fn div_round_up(comptime Type: type, n: Type, d: Type) callconv(.Inline) Type {
     return n / d + (if (n % d != 0) @as(Type, 1) else @as(Type, 0));
 }
 
 test "div_round_up" {
-    std.testing.expectEqual(@as(u8, 0), div_round_up(u8, 0, 2));
-    std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 1, 2));
-    std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 2, 2));
-    std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 3, 2));
-    std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 4, 2));
+    try std.testing.expectEqual(@as(u8, 0), div_round_up(u8, 0, 2));
+    try std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 1, 2));
+    try std.testing.expectEqual(@as(u8, 1), div_round_up(u8, 2, 2));
+    try std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 3, 2));
+    try std.testing.expectEqual(@as(u8, 2), div_round_up(u8, 4, 2));
 }
 
 pub fn isspace(c: u8) bool {
     return c == ' ' or c == '\n' or c == '\t' or c == '\r';
 }
 
-pub inline fn stripped_string_size(str: []const u8) usize {
+pub fn stripped_string_size(str: []const u8) callconv(.Inline) usize {
     var stripped_size: usize = 0;
     for (str) |c, i| {
         if (!isspace(c)) stripped_size = i + 1;
@@ -127,7 +127,7 @@ pub fn packed_bit_size(comptime Type: type) comptime_int {
 
 /// @intToEnum can't be used to test if a value is a valid Enum, so this wraps
 /// it and gives that functionality.
-pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType {
+pub fn int_to_enum(comptime EnumType: type, value: std.meta.Tag(EnumType)) ?EnumType {
     const type_info = @typeInfo(EnumType).Enum;
     inline for (type_info.fields) |*field| {
         if (@intCast(type_info.tag_type, field.value) == value) {
@@ -138,7 +138,7 @@ pub fn int_to_enum(comptime EnumType: type, value: @TagType(EnumType)) ?EnumType
 }
 
 pub fn valid_enum(comptime EnumType: type, value: EnumType) bool {
-    return int_to_enum(EnumType, @bitCast(@TagType(EnumType), value)) != null;
+    return int_to_enum(EnumType, @bitCast(std.meta.Tag(EnumType), value)) != null;
 }
 
 test "int_to_enum" {
@@ -151,16 +151,16 @@ test "int_to_enum" {
     };
 
     // Check with Literals
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0)).? == Abc.A);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 1)).? == Abc.B);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 2)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 11)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 12)).? == Abc.C);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 13)) == null);
-    assert(int_to_enum(Abc, @intCast(@TagType(Abc), 0xFF)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 0)).? == Abc.A);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 1)).? == Abc.B);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 2)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 11)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 12)).? == Abc.C);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 13)) == null);
+    assert(int_to_enum(Abc, @intCast(std.meta.Tag(Abc), 0xFF)) == null);
 
     // Check with Variable
-    var x: @TagType(Abc) = 0;
+    var x: std.meta.Tag(Abc) = 0;
     assert(int_to_enum(Abc, x).? == Abc.A);
     x = 0xFF;
     assert(int_to_enum(Abc, x) == null);
@@ -194,7 +194,7 @@ pub fn min(comptime T: type, a: T, b: T) T {
 }
 
 /// Returns true if the contents of the slices `a` and `b` are the same.
-pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
+pub fn memory_compare(a: []const u8, b: []const u8) callconv(.Inline) bool {
     if (a.len != b.len) return false;
     for (a[0..]) |value, i| {
         if (value != b[i]) return false;
@@ -205,7 +205,7 @@ pub inline fn memory_compare(a: []const u8, b: []const u8) bool {
 /// Copy contents from `source` to `destination`.
 ///
 /// If `source.len != destination.len` then the copy is truncated.
-pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize {
+pub fn memory_copy_truncate(destination: []u8, source: []const u8) callconv(.Inline) usize {
     const size = min(usize, destination.len, source.len);
     for (destination[0..size]) |*ptr, i| {
         ptr.* = source[i];
@@ -213,7 +213,7 @@ pub inline fn memory_copy_truncate(destination: []u8, source: []const u8) usize 
     return size;
 }
 
-pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usize {
+pub fn memory_copy_error(destination: []u8, source: []const u8) callconv(.Inline) Error!usize {
     if (destination.len < source.len) {
         return Error.NotEnoughDestination;
     }
@@ -224,7 +224,7 @@ pub inline fn memory_copy_error(destination: []u8, source: []const u8) Error!usi
     return size;
 }
 
-pub inline fn memory_copy_anyptr(destination: []u8, source: anytype) void {
+pub fn memory_copy_anyptr(destination: []u8, source: anytype) callconv(.Inline) void {
     const s = @ptrCast([*]const u8, source);
     for (destination[0..]) |*ptr, i| {
         ptr.* = s[i];
@@ -232,7 +232,7 @@ pub inline fn memory_copy_anyptr(destination: []u8, source: anytype) void {
 }
 
 /// Set all the elements of `destination` to `value`.
-pub inline fn memory_set(destination: []u8, value: u8) void {
+pub fn memory_set(destination: []u8, value: u8) callconv(.Inline) void {
     for (destination[0..]) |*ptr| {
         ptr.* = value;
     }
@@ -240,15 +240,15 @@ pub inline fn memory_set(destination: []u8, value: u8) void {
 
 pub fn max_of_int(comptime T: type) T {
     comptime const Traits = @typeInfo(T);
-    return if (Traits.Int.is_signed)
+    return if (Traits.Int.signedness == .signed)
         (1 << (Traits.Int.bits - 1)) - 1
     else
         @as(T, 0) -% 1;
 }
 
 test "max_of_int" {
-    std.testing.expect(max_of_int(u16) == 0xffff);
-    std.testing.expect(max_of_int(i16) == 0x7fff);
+    try std.testing.expect(max_of_int(u16) == 0xffff);
+    try std.testing.expect(max_of_int(i16) == 0x7fff);
 }
 
 pub fn add_signed_to_unsigned(
@@ -264,21 +264,21 @@ pub fn add_signed_to_unsigned(
     return result;
 }
 
-pub inline fn add_isize_to_usize(a: usize, b: isize) ?usize {
+pub fn add_isize_to_usize(a: usize, b: isize) callconv(.Inline) ?usize {
     return add_signed_to_unsigned(usize, a, isize, b);
 }
 
 test "add_signed_to_unsigned" {
-    std.testing.expect(add_isize_to_usize(0, 0).? == 0);
-    std.testing.expect(add_isize_to_usize(0, 10).? == 10);
-    std.testing.expect(add_isize_to_usize(0, -10) == null);
+    try std.testing.expect(add_isize_to_usize(0, 0).? == 0);
+    try std.testing.expect(add_isize_to_usize(0, 10).? == 10);
+    try std.testing.expect(add_isize_to_usize(0, -10) == null);
     const max_usize = max_of_int(usize);
-    std.testing.expect(add_isize_to_usize(max_usize, 0).? == max_usize);
-    std.testing.expect(add_isize_to_usize(max_usize, -10).? == max_usize - 10);
-    std.testing.expect(add_isize_to_usize(max_usize, 10) == null);
+    try std.testing.expect(add_isize_to_usize(max_usize, 0).? == max_usize);
+    try std.testing.expect(add_isize_to_usize(max_usize, -10).? == max_usize - 10);
+    try std.testing.expect(add_isize_to_usize(max_usize, 10) == null);
 }
 
-pub inline fn string_length(bytes: []const u8) usize {
+pub fn string_length(bytes: []const u8) callconv(.Inline) usize {
     for (bytes[0..]) |*ptr, i| {
         if (ptr.* == 0) {
             return i;
@@ -307,19 +307,19 @@ pub fn int_log2(comptime Type: type, value: Type) Type {
     return @sizeOf(Type) * 8 - 1 - @clz(Type, value);
 }
 
-fn test_int_log2(value: usize, expected: usize) void {
-    std.testing.expectEqual(expected, int_log2(usize, value));
+fn test_int_log2(value: usize, expected: usize) !void {
+    try std.testing.expectEqual(expected, int_log2(usize, value));
 }
 
 test "int_log2" {
-    test_int_log2(1, 0);
-    test_int_log2(2, 1);
-    test_int_log2(4, 2);
-    test_int_log2(8, 3);
-    test_int_log2(16, 4);
-    test_int_log2(32, 5);
-    test_int_log2(64, 6);
-    test_int_log2(128, 7);
+    try test_int_log2(1, 0);
+    try test_int_log2(2, 1);
+    try test_int_log2(4, 2);
+    try test_int_log2(8, 3);
+    try test_int_log2(16, 4);
+    try test_int_log2(32, 5);
+    try test_int_log2(64, 6);
+    try test_int_log2(128, 7);
 }
 
 pub fn hex_char_len(comptime Type: type, value: Type) Type {
@@ -329,19 +329,19 @@ pub fn hex_char_len(comptime Type: type, value: Type) Type {
     return int_log2(Type, value) / 4 + 1;
 }
 
-fn test_hex_char_len(value: usize, expected: usize) void {
-    std.testing.expectEqual(expected, hex_char_len(usize, value));
+fn test_hex_char_len(value: usize, expected: usize) !void {
+    try std.testing.expectEqual(expected, hex_char_len(usize, value));
 }
 
 test "hex_char_len" {
-    test_hex_char_len(0x0, 1);
-    test_hex_char_len(0x1, 1);
-    test_hex_char_len(0xf, 1);
-    test_hex_char_len(0x10, 2);
-    test_hex_char_len(0x11, 2);
-    test_hex_char_len(0xff, 2);
-    test_hex_char_len(0x100, 3);
-    test_hex_char_len(0x101, 3);
+    try test_hex_char_len(0x0, 1);
+    try test_hex_char_len(0x1, 1);
+    try test_hex_char_len(0xf, 1);
+    try test_hex_char_len(0x10, 2);
+    try test_hex_char_len(0x11, 2);
+    try test_hex_char_len(0xff, 2);
+    try test_hex_char_len(0x100, 3);
+    try test_hex_char_len(0x101, 3);
 }
 
 pub fn int_bit_size(comptime Type: type) usize {
@@ -350,19 +350,19 @@ pub fn int_bit_size(comptime Type: type) usize {
 
 pub fn IntLog2Type(comptime Type: type) type {
     return @Type(builtin.TypeInfo{.Int = builtin.TypeInfo.Int{
-        .is_signed = false,
+        .signedness = .unsigned,
         .bits = int_log2(usize, int_bit_size(Type)),
     }});
 }
 
-fn test_IntLog2Type(comptime Type: type, expected: usize) void {
-    std.testing.expectEqual(expected, int_bit_size(IntLog2Type(Type)));
+fn test_IntLog2Type(comptime Type: type, expected: usize) !void {
+    try std.testing.expectEqual(expected, int_bit_size(IntLog2Type(Type)));
 }
 
 test "Log2Int" {
-    test_IntLog2Type(u2, 1);
-    test_IntLog2Type(u32, 5);
-    test_IntLog2Type(u64, 6);
+    try test_IntLog2Type(u2, 1);
+    try test_IntLog2Type(u32, 5);
+    try test_IntLog2Type(u64, 6);
 }
 
 pub const UsizeLog2Type = IntLog2Type(usize);
@@ -373,17 +373,17 @@ pub fn select_nibble(comptime Type: type, value: Type, which: usize) u4 {
 }
 
 fn test_select_nibble(comptime Type: type,
-        value: Type, which: usize, expected: u4) void {
-    std.testing.expectEqual(expected, select_nibble(Type, value, which));
+        value: Type, which: usize, expected: u4) !void {
+    try std.testing.expectEqual(expected, select_nibble(Type, value, which));
 }
 
 test "select_nibble" {
-    test_select_nibble(u8, 0xaf, 0, 0xf);
-    test_select_nibble(u8, 0xaf, 1, 0xa);
-    test_select_nibble(u16, 0x1234, 0, 0x4);
-    test_select_nibble(u16, 0x1234, 1, 0x3);
-    test_select_nibble(u16, 0x1234, 2, 0x2);
-    test_select_nibble(u16, 0x1234, 3, 0x1);
+    try test_select_nibble(u8, 0xaf, 0, 0xf);
+    try test_select_nibble(u8, 0xaf, 1, 0xa);
+    try test_select_nibble(u16, 0x1234, 0, 0x4);
+    try test_select_nibble(u16, 0x1234, 1, 0x3);
+    try test_select_nibble(u16, 0x1234, 2, 0x2);
+    try test_select_nibble(u16, 0x1234, 3, 0x1);
 }
 
 pub fn PackedArray(comptime T: type, count: usize) type {
@@ -457,31 +457,31 @@ fn test_PackedBoolArray(comptime size: usize) !void {
     pa.reset();
 
     // Make sure get works
-    std.testing.expectEqual(false, try pa.get(0));
-    std.testing.expectEqual(false, try pa.get(1));
-    std.testing.expectEqual(false, try pa.get(size - 3));
-    std.testing.expectEqual(false, try pa.get(size - 2));
-    std.testing.expectEqual(false, try pa.get(size - 1));
+    try std.testing.expectEqual(false, try pa.get(0));
+    try std.testing.expectEqual(false, try pa.get(1));
+    try std.testing.expectEqual(false, try pa.get(size - 3));
+    try std.testing.expectEqual(false, try pa.get(size - 2));
+    try std.testing.expectEqual(false, try pa.get(size - 1));
 
     // Set and unset the first bit and check it
     try pa.set(0, true);
-    std.testing.expectEqual(true, try pa.get(0));
+    try std.testing.expectEqual(true, try pa.get(0));
     try pa.set(0, false);
-    std.testing.expectEqual(false, try pa.get(0));
+    try std.testing.expectEqual(false, try pa.get(0));
 
     // Set a spot near the end
     try pa.set(size - 2, true);
-    std.testing.expectEqual(false, try pa.get(0));
-    std.testing.expectEqual(false, try pa.get(1));
-    std.testing.expectEqual(false, try pa.get(size - 3));
-    std.testing.expectEqual(true, try pa.get(size - 2));
-    std.testing.expectEqual(false, try pa.get(size - 1));
+    try std.testing.expectEqual(false, try pa.get(0));
+    try std.testing.expectEqual(false, try pa.get(1));
+    try std.testing.expectEqual(false, try pa.get(size - 3));
+    try std.testing.expectEqual(true, try pa.get(size - 2));
+    try std.testing.expectEqual(false, try pa.get(size - 1));
 
     // Invalid Operations
-    std.testing.expectError(Error.OutOfBounds, pa.get(size));
-    std.testing.expectError(Error.OutOfBounds, pa.get(size + 100));
-    std.testing.expectError(Error.OutOfBounds, pa.set(size, true));
-    std.testing.expectError(Error.OutOfBounds, pa.set(size + 100, true));
+    try std.testing.expectError(Error.OutOfBounds, pa.get(size));
+    try std.testing.expectError(Error.OutOfBounds, pa.get(size + 100));
+    try std.testing.expectError(Error.OutOfBounds, pa.set(size, true));
+    try std.testing.expectError(Error.OutOfBounds, pa.set(size + 100, true));
 }
 
 test "PackedArray" {
@@ -495,12 +495,12 @@ test "PackedArray" {
         var pa: PackedArray(u7, 9) = undefined;
         pa.reset();
         try pa.set(0, 13);
-        std.testing.expectEqual(@as(u7, 13), try pa.get(0));
+        try std.testing.expectEqual(@as(u7, 13), try pa.get(0));
         try pa.set(1, 12);
-        std.testing.expectEqual(@as(u7, 12), try pa.get(1));
-        std.testing.expectEqual(@as(u7, 13), try pa.get(0));
+        try std.testing.expectEqual(@as(u7, 12), try pa.get(1));
+        try std.testing.expectEqual(@as(u7, 13), try pa.get(0));
         try pa.set(8, 47);
-        std.testing.expectEqual(@as(u7, 47), try pa.get(8));
+        try std.testing.expectEqual(@as(u7, 47), try pa.get(8));
     }
 
     // Enum Type
@@ -514,12 +514,12 @@ test "PackedArray" {
         var pa: PackedArray(Type, 9) = undefined;
         pa.reset();
         try pa.set(0, .a);
-        std.testing.expectEqual(Type.a, try pa.get(0));
+        try std.testing.expectEqual(Type.a, try pa.get(0));
         try pa.set(1, .b);
-        std.testing.expectEqual(Type.b, try pa.get(1));
-        std.testing.expectEqual(Type.a, try pa.get(0));
+        try std.testing.expectEqual(Type.b, try pa.get(1));
+        try std.testing.expectEqual(Type.a, try pa.get(0));
         try pa.set(8, .d);
-        std.testing.expectEqual(Type.d, try pa.get(8));
+        try std.testing.expectEqual(Type.d, try pa.get(8));
     }
 }
 
@@ -533,28 +533,28 @@ pub fn pow2_round_up(comptime Type: type, value: Type) Type {
 }
 
 test "pow2_round_up" {
-    std.testing.expectEqual(@as(u8, 0), pow2_round_up(u8, 0));
-    std.testing.expectEqual(@as(u8, 1), pow2_round_up(u8, 1));
-    std.testing.expectEqual(@as(u8, 2), pow2_round_up(u8, 2));
-    std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 3));
-    std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 4));
-    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 5));
-    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 6));
-    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 7));
-    std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 8));
-    std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 9));
-    std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 16));
-    std.testing.expectEqual(@as(u8, 32), pow2_round_up(u8, 17));
+    try std.testing.expectEqual(@as(u8, 0), pow2_round_up(u8, 0));
+    try std.testing.expectEqual(@as(u8, 1), pow2_round_up(u8, 1));
+    try std.testing.expectEqual(@as(u8, 2), pow2_round_up(u8, 2));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 3));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_up(u8, 4));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 5));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 6));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 7));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_up(u8, 8));
+    try std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 9));
+    try std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 16));
+    try std.testing.expectEqual(@as(u8, 32), pow2_round_up(u8, 17));
 }
 
-pub inline fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) []Type {
+pub fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) callconv(.Inline) []Type {
     var slice: []Type = undefined;
     slice.ptr = ptr;
     slice.len = len;
     return slice;
 }
 
-pub inline fn to_bytes(value: anytype) []u8 {
+pub fn to_bytes(value: anytype) callconv(.Inline) []u8 {
     comptime const Type = @TypeOf(value);
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
@@ -577,14 +577,15 @@ pub inline fn to_bytes(value: anytype) []u8 {
     }
 }
 
-pub inline fn make_const_slice(comptime Type: type, ptr: [*]const Type, len: usize) []const Type {
+pub fn make_const_slice(
+        comptime Type: type, ptr: [*]const Type, len: usize) callconv(.Inline) []const Type {
     var slice: []const Type = undefined;
     slice.ptr = ptr;
     slice.len = len;
     return slice;
 }
 
-pub inline fn to_const_bytes(value: anytype) []const u8 {
+pub fn to_const_bytes(value: anytype) callconv(.Inline) []const u8 {
     comptime const Type = @TypeOf(value);
     comptime const Traits = @typeInfo(Type);
     switch (Traits) {
@@ -628,11 +629,11 @@ pub fn CircularBuffer(
             self.len = 0;
         }
 
-        inline fn wrapped_offset(pos: usize, offset: usize) usize {
+        fn wrapped_offset(pos: usize, offset: usize) callconv(.Inline) usize {
             return (pos + offset) % max_len;
         }
 
-        inline fn increment(pos: *usize) void {
+        fn increment(pos: *usize) callconv(.Inline) void {
             pos.* = wrapped_offset(pos.*, 1);
         }
 
@@ -672,111 +673,111 @@ pub fn CircularBuffer(
     };
 }
 
-fn test_circular_buffer(comptime discard: CircularBufferDiscard) void {
+fn test_circular_buffer(comptime discard: CircularBufferDiscard) !void {
     var buffer = CircularBuffer(usize, 4, discard){};
     const nil: ?usize = null;
 
     // Empty
-    std.testing.expectEqual(@as(usize, 0), buffer.len);
-    std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek_start());
-    std.testing.expectEqual(nil, buffer.get(0));
-    std.testing.expectEqual(nil, buffer.peek_end());
+    try std.testing.expectEqual(@as(usize, 0), buffer.len);
+    try std.testing.expectEqual(nil, buffer.pop());
+    try std.testing.expectEqual(nil, buffer.peek_start());
+    try std.testing.expectEqual(nil, buffer.get(0));
+    try std.testing.expectEqual(nil, buffer.peek_end());
 
     // Push Some Values
     buffer.push(1);
-    std.testing.expectEqual(@as(usize, 1), buffer.len);
-    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 1), buffer.len);
+    try std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
     buffer.push(2);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(3);
-    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.len);
+    try std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.len);
 
     // Test get
-    std.testing.expectEqual(@as(usize, 1), buffer.get(0).?);
-    std.testing.expectEqual(@as(usize, 2), buffer.get(1).?);
-    std.testing.expectEqual(@as(usize, 3), buffer.get(2).?);
-    std.testing.expectEqual(nil, buffer.get(3));
+    try std.testing.expectEqual(@as(usize, 1), buffer.get(0).?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.get(1).?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.get(2).?);
+    try std.testing.expectEqual(nil, buffer.get(3));
 
     // Pop The Values
-    std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
 
     // It's empty again
-    std.testing.expectEqual(@as(usize, 0), buffer.len);
-    std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek_start());
-    std.testing.expectEqual(nil, buffer.get(0));
-    std.testing.expectEqual(nil, buffer.peek_end());
+    try std.testing.expectEqual(@as(usize, 0), buffer.len);
+    try std.testing.expectEqual(nil, buffer.pop());
+    try std.testing.expectEqual(nil, buffer.peek_start());
+    try std.testing.expectEqual(nil, buffer.get(0));
+    try std.testing.expectEqual(nil, buffer.peek_end());
 
     // Fill it past capacity
     buffer.push(5);
-    std.testing.expectEqual(@as(usize, 5), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 5), buffer.peek_end().?);
     buffer.push(4);
-    std.testing.expectEqual(@as(usize, 4), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 4), buffer.peek_end().?);
     buffer.push(3);
-    std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.peek_end().?);
     buffer.push(2);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.peek_end().?);
     buffer.push(1);
     if (discard == .DiscardOldest) {
-        std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
+        try std.testing.expectEqual(@as(usize, 1), buffer.peek_end().?);
     }
-    std.testing.expectEqual(@as(usize, 4), buffer.len);
+    try std.testing.expectEqual(@as(usize, 4), buffer.len);
 
     // Test get
     var index: usize = 0;
     if (discard == .DiscardNewest) {
-        std.testing.expectEqual(@as(usize, 5), buffer.get(index).?);
+        try std.testing.expectEqual(@as(usize, 5), buffer.get(index).?);
         index += 1;
     }
-    std.testing.expectEqual(@as(usize, 4), buffer.get(index).?);
+    try std.testing.expectEqual(@as(usize, 4), buffer.get(index).?);
     index += 1;
-    std.testing.expectEqual(@as(usize, 3), buffer.get(index).?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.get(index).?);
     index += 1;
-    std.testing.expectEqual(@as(usize, 2), buffer.get(index).?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.get(index).?);
     index += 1;
     if (discard == .DiscardOldest) {
-        std.testing.expectEqual(@as(usize, 1), buffer.get(index).?);
+        try std.testing.expectEqual(@as(usize, 1), buffer.get(index).?);
         index += 1;
     }
-    std.testing.expectEqual(nil, buffer.get(index));
+    try std.testing.expectEqual(nil, buffer.get(index));
 
     // Pop The Values
     if (discard == .DiscardNewest) {
-        std.testing.expectEqual(@as(usize, 5), buffer.peek_start().?);
-        std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
+        try std.testing.expectEqual(@as(usize, 5), buffer.peek_start().?);
+        try std.testing.expectEqual(@as(usize, 5), buffer.pop().?);
     }
-    std.testing.expectEqual(@as(usize, 4), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 4), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
-    std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 4), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 4), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 3), buffer.pop().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.peek_start().?);
+    try std.testing.expectEqual(@as(usize, 2), buffer.pop().?);
     if (discard == .DiscardOldest) {
-        std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
-        std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
+        try std.testing.expectEqual(@as(usize, 1), buffer.peek_start().?);
+        try std.testing.expectEqual(@as(usize, 1), buffer.pop().?);
     }
 
     // It's empty yet again
-    std.testing.expectEqual(@as(usize, 0), buffer.len);
-    std.testing.expectEqual(nil, buffer.pop());
-    std.testing.expectEqual(nil, buffer.peek_start());
-    std.testing.expectEqual(nil, buffer.get(0));
-    std.testing.expectEqual(nil, buffer.peek_end());
+    try std.testing.expectEqual(@as(usize, 0), buffer.len);
+    try std.testing.expectEqual(nil, buffer.pop());
+    try std.testing.expectEqual(nil, buffer.peek_start());
+    try std.testing.expectEqual(nil, buffer.get(0));
+    try std.testing.expectEqual(nil, buffer.peek_end());
 }
 
 test "CircularBuffer(.DiscardNewest)" {
-    test_circular_buffer(.DiscardNewest);
+    try test_circular_buffer(.DiscardNewest);
 }
 
 test "CircularBuffer(.DiscardOldest)" {
-    test_circular_buffer(.DiscardOldest);
+    try test_circular_buffer(.DiscardOldest);
 }
 
 pub fn nibble_char(value: u4) u8 {
@@ -813,9 +814,9 @@ pub fn Rand(comptime Type: type) type {
 
 test "Rand" {
     var r = Rand(u64){.seed = 0};
-    std.testing.expectEqual(@as(u64, 1442695040888963407), r.get());
-    std.testing.expectEqual(@as(u64, 1876011003808476466), r.get());
-    std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
+    try std.testing.expectEqual(@as(u64, 1442695040888963407), r.get());
+    try std.testing.expectEqual(@as(u64, 1876011003808476466), r.get());
+    try std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
 }
 
 pub fn starts_with(what: []const u8, prefix: []const u8) bool {

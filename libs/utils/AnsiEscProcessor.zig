@@ -267,7 +267,7 @@ test "AnsiEscProcessor" {
         .invert_colors = test_invert_colors,
     };
     esc.feed_str("Hello \x1b[7mBob\x1b[0m Goodbye");
-    std.testing.expectEqualSlices(u8, "Hello IBobR Goodbye",
+    try std.testing.expectEqualSlices(u8, "Hello IBobR Goodbye",
         test_print_char_buffer[0..test_print_char_got]);
 
     // TODO: More Tests

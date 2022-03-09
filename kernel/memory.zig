@@ -155,7 +155,8 @@ pub const UnitTestAllocator = struct {
     }
 
     pub fn done(self: *Self) void {
-        std.testing.expectEqual(@as(usize, 0), self.allocated);
+        std.testing.expectEqual(@as(usize, 0), self.allocated)
+            catch @panic("outstanding allocations or wrong sizes");
         self.impl.deinit();
     }
 
@@ -172,7 +173,8 @@ pub const UnitTestAllocator = struct {
 
     pub fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
         const self = @fieldParentPtr(Self, "allocator", allocator);
-        std.testing.expectEqual(true, self.allocated >= value.len);
+        std.testing.expectEqual(true, self.allocated >= value.len)
+            catch @panic("free arg is bigger than allocated sum");
         self.allocated -= value.len;
         _ = self.impl.allocator.shrinkBytes(
             @intToPtr([*]u8, @ptrToInt(value.ptr))[0..value.len],

@@ -27,7 +27,7 @@ const intel8042 = struct {
     const data_port: u16 = 0x60;
     const command_status_port: u16 = 0x64;
 
-    pub inline fn get_kb_byte() u8 {
+    pub fn get_kb_byte() callconv(.Inline) u8 {
         return putil.in8(data_port);
     }
 };

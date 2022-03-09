@@ -32,14 +32,14 @@ pub const Lock = struct {
 
 test "Lock" {
     var lock = Lock{};
-    std.testing.expect(!lock.lock());
-    std.testing.expect(lock.lock());
+    try std.testing.expect(!lock.lock());
+    try std.testing.expect(lock.lock());
     lock.unlock();
-    std.testing.expect(!lock.lock());
-    std.testing.expect(lock.lock());
+    try std.testing.expect(!lock.lock());
+    try std.testing.expect(lock.lock());
     lock.unlock();
     lock.spin_lock();
-    std.testing.expect(lock.lock());
+    try std.testing.expect(lock.lock());
     lock.unlock();
 }
 

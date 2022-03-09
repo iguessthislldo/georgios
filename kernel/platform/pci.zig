@@ -1,7 +1,7 @@
 // PCI Interface
 // Based on https://wiki.osdev.org/PCI
 
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const utils = @import("utils");
 
@@ -70,7 +70,7 @@ const Config = packed struct {
     enabled: bool = true,
 };
 
-inline fn config_port(comptime Type: type, location: Location, offset: Offset) u16 {
+fn config_port(comptime Type: type, location: Location, offset: Offset) callconv(.Inline) u16 {
     const config = Config{
         .offset = offset & 0xFC,
         .location = location,
@@ -79,12 +79,13 @@ inline fn config_port(comptime Type: type, location: Location, offset: Offset) u
     return 0x0CFC + @intCast(u16, if (Type == u32) 0 else (offset & 3));
 }
 
-inline fn read_config(comptime Type: type, location: Location, offset: Offset) Type {
+pub fn read_config(comptime Type: type,
+        location: Location, offset: Offset) callconv(.Inline) Type {
     return putil.in(Type, config_port(Type, location, offset));
 }
 
-inline fn write_config(
-        comptime Type: type, location: Location, offset: Offset, value: Type) void {
+pub fn write_config(comptime Type: type,
+        location: Location, offset: Offset, value: Type) callconv(.Inline) void {
     putil.out(Type, config_port(Type, location, offset), value);
 }
 

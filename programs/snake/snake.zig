@@ -1,4 +1,4 @@
-const builtin = @import("builtin");
+const builtin = @import("std").builtin;
 
 const georgios = @import("georgios");
 comptime {_ = georgios;}

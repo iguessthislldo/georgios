@@ -213,20 +213,20 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
 }
 
 
-pub inline fn print_string(s: []const u8) void {
+pub fn print_string(s: []const u8) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 0)),
         [arg1] "{ebx}" (@ptrToInt(&s)),
         );
 }
 
-pub inline fn yield() void {
+pub fn yield() callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 2)),
         );
 }
 
-pub inline fn exit(status: u8) noreturn {
+pub fn exit(status: u8) callconv(.Inline) noreturn {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 3)),
         [arg1] "{ebx}" (status),
@@ -234,7 +234,7 @@ pub inline fn exit(status: u8) noreturn {
     unreachable;
 }
 
-pub inline fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!void {
+pub fn exec(info: *const georgios.ProcessInfo) callconv(.Inline) georgios.ExecError!void {
     var rv: ValueOrError(void, georgios.ExecError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 4)),
@@ -244,7 +244,7 @@ pub inline fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!void {
     return rv.get();
 }
 
-pub inline fn get_key(blocking: georgios.Blocking) ?georgios.keyboard.Event {
+pub fn get_key(blocking: georgios.Blocking) callconv(.Inline) ?georgios.keyboard.Event {
     var key: ?georgios.keyboard.Event = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 5)),
@@ -254,7 +254,7 @@ pub inline fn get_key(blocking: georgios.Blocking) ?georgios.keyboard.Event {
     return key;
 }
 
-pub inline fn next_dir_entry(iter: *georgios.DirEntry) bool {
+pub fn next_dir_entry(iter: *georgios.DirEntry) callconv(.Inline) bool {
     var rv: bool = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 6)),
@@ -264,14 +264,14 @@ pub inline fn next_dir_entry(iter: *georgios.DirEntry) bool {
     return rv;
 }
 
-pub inline fn print_hex(value: u32) void {
+pub fn print_hex(value: u32) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 7)),
         [arg1] "{ebx}" (value),
         );
 }
 
-pub inline fn file_open(path: []const u8) georgios.fs.Error!georgios.io.File.Id {
+pub fn file_open(path: []const u8) callconv(.Inline) georgios.fs.Error!georgios.io.File.Id {
     var rv: ValueOrError(georgios.io.File.Id, georgios.fs.Error) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 8)),
@@ -281,7 +281,7 @@ pub inline fn file_open(path: []const u8) georgios.fs.Error!georgios.io.File.Id 
     return rv.get();
 }
 
-pub inline fn file_read(id: georgios.io.File.Id, to: []u8) georgios.io.FileError!usize {
+pub fn file_read(id: georgios.io.File.Id, to: []u8) callconv(.Inline) georgios.io.FileError!usize {
     var rv: ValueOrError(usize, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 9)),
@@ -292,7 +292,7 @@ pub inline fn file_read(id: georgios.io.File.Id, to: []u8) georgios.io.FileError
     return rv.get();
 }
 
-pub inline fn file_write(id: georgios.io.File.Id, from: []const u8) georgios.io.FileError!usize {
+pub fn file_write(id: georgios.io.File.Id, from: []const u8) callconv(.Inline) georgios.io.FileError!usize {
     var rv: ValueOrError(usize, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 10)),
@@ -303,7 +303,7 @@ pub inline fn file_write(id: georgios.io.File.Id, from: []const u8) georgios.io.
     return rv.get();
 }
 
-pub inline fn file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.File.SeekType) georgios.io.FileError!usize {
+pub fn file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.File.SeekType) callconv(.Inline) georgios.io.FileError!usize {
     var rv: ValueOrError(usize, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 11)),
@@ -315,7 +315,7 @@ pub inline fn file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georg
     return rv.get();
 }
 
-pub inline fn file_close(id: georgios.io.File.Id) georgios.io.FileError!void {
+pub fn file_close(id: georgios.io.File.Id) callconv(.Inline) georgios.io.FileError!void {
     var rv: ValueOrError(void, georgios.io.FileError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 12)),
@@ -325,7 +325,7 @@ pub inline fn file_close(id: georgios.io.File.Id) georgios.io.FileError!void {
     return rv.get();
 }
 
-pub inline fn get_cwd(buffer: []u8) georgios.threading.Error![]const u8 {
+pub fn get_cwd(buffer: []u8) callconv(.Inline) georgios.threading.Error![]const u8 {
     var rv: ValueOrError([]const u8, georgios.threading.Error) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 13)),
@@ -335,7 +335,7 @@ pub inline fn get_cwd(buffer: []u8) georgios.threading.Error![]const u8 {
     return rv.get();
 }
 
-pub inline fn set_cwd(dir: []const u8) georgios.ThreadingOrFsError!void {
+pub fn set_cwd(dir: []const u8) callconv(.Inline) georgios.ThreadingOrFsError!void {
     var rv: ValueOrError(void, georgios.ThreadingOrFsError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 14)),
@@ -345,21 +345,21 @@ pub inline fn set_cwd(dir: []const u8) georgios.ThreadingOrFsError!void {
     return rv.get();
 }
 
-pub inline fn sleep_milliseconds(ms: u64) void {
+pub fn sleep_milliseconds(ms: u64) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 15)),
         [arg1] "{ebx}" (@ptrToInt(&ms)),
         );
 }
 
-pub inline fn sleep_seconds(s: u64) void {
+pub fn sleep_seconds(s: u64) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 16)),
         [arg1] "{ebx}" (@ptrToInt(&s)),
         );
 }
 
-pub inline fn time() u64 {
+pub fn time() callconv(.Inline) u64 {
     var rv: u64 = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 17)),
@@ -368,8 +368,26 @@ pub inline fn time() u64 {
     return rv;
 }
 
-pub inline fn overflow_kernel_stack() void {
+pub fn get_process_id() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 18)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub fn get_thread_id() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 19)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub fn overflow_kernel_stack() callconv(.Inline) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 20)),
         );
 }

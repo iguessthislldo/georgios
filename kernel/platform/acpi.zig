@@ -26,41 +26,59 @@ const acpica = @cImport({
 var page_directory: [1024]u32 = undefined;
 var prev_page_directory: [1024]u32 = undefined;
 
-pub fn check_status(comptime what: []const u8, status: acpica.Status) void {
+fn check_status(comptime what: []const u8, status: acpica.Status) void {
     if (status != acpica.Ok) {
         print.format(what ++ " returned {:x}\n", .{status});
         @panic(what ++ " failed");
     }
 }
 
+pub const TableHeader = packed struct {
+    signature: [4]u8,
+    size: u32,
+    revision: u8,
+    checksum: u8,
+    // TODO: Zig Bug, stage1 panics on [6]u8
+    // oem_id: [6]u8,
+    oem_id1: [4]u8,
+    oem_id2: [2]u8,
+    oem_table_id: [8]u8,
+    oem_revision: u32,
+    creator_id: [4]u8,
+    creator_revision: u32,
+};
+
+pub const Address = packed struct {
+    pub const Kind = packed enum(u8) {
+        Memory = 0,
+        Io = 1,
+        _,
+    };
+
+    kind: Kind,
+    register_width: u8,
+    register_offset: u8,
+    reserved: u8,
+    address: u64,
+};
+
 fn device_callback(obj: acpica.ACPI_HANDLE, level: acpica.Uint32, context: ?*c_void,
         return_value: [*c]?*c_void) callconv(.C) acpica.Status {
-    var name_buffer =
-        acpica.ACPI_BUFFER{.Length = acpica.ACPI_ALLOCATE_BUFFER, .Pointer = null};
-    var status = acpica.AcpiGetName(obj, acpica.ACPI_FULL_PATHNAME, &name_buffer);
-    if (status == acpica.Ok) {
-        const name = utils.cstring_to_string(@ptrCast([*:0]const u8, name_buffer.Pointer));
-        print.format("acpi.device_callback: {}\n", .{name});
-        if (utils.ends_with(name, "HPET")) {
-            print.string("  HPET Found\n");
-        }
-        acpica.AcpiOsFree(name_buffer.Pointer);
-        // TODO: Wait for https://github.com/ziglang/zig/issues/8759 to be resolved?
-        // var devinfo: *acpica.ACPI_DEVICE_INFO = undefined;
-        // var status = acpica.AcpiGetObjectInfo(obj, &devinfo);
-        // if (status == acpica.Ok) {
-        //     print.format("{}\n", .{devinfo.*});
-        // } else {
-        //     print.format("acpi.device_callback: AcpiGetObjectInfo failed, returned {}\n",
-        //         .{status});
-        // }
-    } else {
-        print.format("acpi.device_callback: AcpiGetName failed, returned {}\n", .{status});
+    var devinfo: [*c]acpica.ACPI_DEVICE_INFO = undefined;
+    check_status("acpi.device_callback: AcpiGetObjectInfo",
+        acpica.AcpiGetObjectInfo(obj, &devinfo));
+    const name = @ptrCast(*[4]u8, &devinfo.*.Name);
+    print.format("   - {}\n", .{name});
+    if (utils.memory_compare(name, "HPET")) {
+        print.string("     - HPET Found\n");
     }
+    acpica.AcpiOsFree(devinfo);
     return acpica.Ok;
 }
 
 pub fn init() !void {
+    print.string(" - Initializing ACPI Subsystem\n");
+
     _ = utils.memory_set(utils.to_bytes(page_directory[0..]), 0);
     try pmemory.load_page_directory(&page_directory, &prev_page_directory);
 
@@ -74,9 +92,16 @@ pub fn init() !void {
     // check_status("acpi.init: AcpiInitializeObjects",
     //     acpica.AcpiInitializeObjects(acpica.ACPI_FULL_INITIALIZATION));
 
-    var devcb_rv: ?*c_void = null;
-    check_status("acpi.init: AcpiGetDevices", acpica.AcpiGetDevices(
-        null, device_callback, null, &devcb_rv));
+    // var devcb_rv: ?*c_void = null;
+    // check_status("acpi.init: AcpiGetDevices", acpica.AcpiGetDevices(
+    //     null, device_callback, null, &devcb_rv));
+
+    var table: [*c]acpica.ACPI_TABLE_HEADER = undefined;
+    var hpet: [4]u8 = "HPET".*;
+    check_status("acpi.init: AcpiGetTable",
+        acpica.AcpiGetTable(@ptrCast([*c]u8, &hpet), 1,
+            @ptrCast([*c][*c]acpica.ACPI_TABLE_HEADER, &table)));
+    print.format("{}\n", .{@ptrCast(*timing.HpetTable, table).*});
 
     try pmemory.load_page_directory(&prev_page_directory, &page_directory);
 }
