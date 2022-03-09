@@ -203,7 +203,6 @@ fn build_acpica() void {
 
 fn build_program(name: []const u8) void {
     const elf = format("{s}.elf", .{name});
-    const bin = format("{s}{s}", .{bin_path, elf});
     const zig = format("programs/{s}/{s}.zig", .{name, name});
     const prog = b.addExecutable(elf, zig);
     prog.setLinkerScriptPath("programs/linking.ld");
@@ -214,7 +213,6 @@ fn build_program(name: []const u8) void {
 
 fn build_zig_program(name: []const u8) void {
     const elf = format("{s}.elf", .{name});
-    const bin = format("{s}{s}", .{bin_path, elf});
     const zig = format("programs/{s}/{s}.zig", .{name, name});
     const prog = b.addExecutable(elf, zig);
     prog.setLinkerScriptPath("programs/linking.ld");
@@ -234,7 +232,6 @@ fn build_zig_program(name: []const u8) void {
 
 fn build_c_program(name: []const u8) void {
     const elf = format("{s}.elf", .{name});
-    const bin = format("{s}{s}", .{bin_path, elf});
     const c = format("programs/{s}/{s}.c", .{name, name});
     const prog = b.addExecutable(elf, null);
     prog.addCSourceFile(c, &[_][]const u8{"--libc /data/development/os/georgios/newlib"});
