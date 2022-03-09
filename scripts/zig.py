@@ -215,7 +215,7 @@ def update(zigs_path):
         return
 
     if status == CheckStatus.NeedToDownloadLatest:
-        download_zig(zigs_path, latest, info['{}-{}'.format(cpu, os)]['tarball'])
+        download_zig(zigs_path, latest, latest_info['{}-{}'.format(cpu, os)]['tarball'])
         status = CheckStatus.LatestNotCurrent
 
     if status == CheckStatus.LatestNotCurrent:
