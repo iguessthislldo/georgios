@@ -2,14 +2,14 @@ ISO:=georgios.iso
 DISK:=disk.img
 USBDRIVE:=usbdrive.img
 
-ROOT_DIR:=tmp/root
-BOOT_DIR:=$(ROOT_DIR)/boot
+BASE_ROOT_DIR:=root
+STAGE_ROOT_DIR:=tmp/root
+BOOT_DIR:=$(STAGE_ROOT_DIR)/boot
 KERNEL:=$(BOOT_DIR)/kernel.elf
+
 ZIG?=zig
 GRUB_PREFIX:=/usr
 GRUB_LOCATION:=$(GRUB_PREFIX)/lib/grub/i386-pc
-GRUB_CFG:=$(BOOT_DIR)/grub/grub.cfg
-
 DEBUGGER:=gdb
 BOCHS?=bochs
 
@@ -30,8 +30,14 @@ endif
 
 all: $(ISO) $(DISK) $(USBDRIVE)
 
+$(STAGE_ROOT_DIR): $(shell find $(BASE_ROOT_DIR) -name '*')
+	@mkdir -p $(dir $@)
+	cp -rT $(BASE_ROOT_DIR) $@
+	cp $(GRUB_PREFIX)/share/grub/unicode.pf2 $(BOOT_DIR)/grub
+	touch $(STAGE_ROOT_DIR)
+
 .PHONY: build_georgios
-build_georgios:
+build_georgios: $(STAGE_ROOT_DIR)
 	python3 scripts/lint.py
 	$(ZIG) $(zig_build_args)
 
@@ -43,20 +49,12 @@ build_georgios:
 test:
 	$(ZIG) build test
 
-$(GRUB_CFG): misc/grub.cfg
-	@mkdir -p $(dir $@)
-	cp $< $(GRUB_CFG)
+$(ISO): build_georgios
+	grub-mkrescue --directory=$(GRUB_LOCATION) --output=$(ISO) --modules="$(GRUB_MODULES)" $(STAGE_ROOT_DIR)
 
-.PHONY: root
-root: build_georgios $(GRUB_CFG)
-
-$(ISO): root
-	cp $(GRUB_PREFIX)/share/grub/unicode.pf2 $(BOOT_DIR)/grub
-	grub-mkrescue --directory=$(GRUB_LOCATION) --output=$(ISO) --modules="$(GRUB_MODULES)" $(ROOT_DIR)
-
-$(DISK): root
+$(DISK): build_georgios
 	rm -f $(DISK)
-	mke2fs -L '' -N 0 -O none -d $(ROOT_DIR) -r 1 -t ext2 $(DISK) 20m
+	mke2fs -L '' -N 0 -O none -d $(STAGE_ROOT_DIR) -r 1 -t ext2 $(DISK) 20m
 
 $(USBDRIVE): $(DISK)
 	cp $(DISK) $(USBDRIVE)
