@@ -143,7 +143,7 @@ pub fn main() void {
                     system_calls.overflow_kernel_stack();
                 } else {
                     var command_path = command_parts[0];
-                    if (check_bin_path("bin", command_parts[0], path_buffer[0..])) |path| {
+                    if (check_bin_path("/bin", command_parts[0], path_buffer[0..])) |path| {
                         command_path = path[0..];
                     }
                     system_calls.exec(&georgios.ProcessInfo{

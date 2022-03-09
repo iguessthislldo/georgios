@@ -3,7 +3,7 @@ comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
 
 pub fn main() void {
-    var path: []const u8 = "/";
+    var path: []const u8 = ".";
     if (georgios.proc_info.args.len > 0) {
         path = georgios.proc_info.args[0];
     }

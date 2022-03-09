@@ -8,7 +8,9 @@ const print = @import("print.zig");
 usingnamespace @import("georgios").io;
 
 pub const BlockError = error {
-    InvalidBlockSize,
+    // TODO: This is unused, but causes compile issues with fs, completely
+    // remove this or fix the other issues.
+    // InvalidBlockSize,
 } || FileError || MemoryError;
 
 pub const AddressType = u64;

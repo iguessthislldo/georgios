@@ -142,6 +142,10 @@ pub const Filesystem = struct {
             return io.FileError.InvalidFileId;
         }
     }
+
+    pub fn resolve_directory_path(self: *Filesystem, path: []const u8) Error![]const u8 {
+        return self.impl.resolve_directory_path(path);
+    }
 };
 
 /// TODO

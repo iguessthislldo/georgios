@@ -8,6 +8,7 @@
 const utils = @import("utils");
 const georgios = @import("georgios");
 
+const kernel = @import("kernel.zig");
 const print = @import("print.zig");
 const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
@@ -510,43 +511,117 @@ pub const Ext2 = struct {
         self.initialized = true;
     }
 
-    pub fn open(self: *Ext2, path: []const u8) fs.Error!*File {
-        if (!self.initialized) return fs.Error.InvalidFilesystem;
-        var dir_inode: Inode = undefined;
-        self.get_inode(Ext2.root_inode_number, &dir_inode) catch return fs.Error.Internal;
+    fn find_in_directory(
+            self: *Ext2, dir_inode: *Inode, name: []const u8, inode: *Inode) Error!u32 {
+        if (!dir_inode.is_directory()) {
+            return fs.Error.NotADirectory;
+        }
 
-        var it = fs.PathIterator.new(path);
-        while (it.next()) |component| {
-            // See if That Component is in the Current Directory
-            var dir_iter = try DirectoryIterator.new(self, &dir_inode);
-            defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
-            var not_found = true;
-            while (not_found and try dir_iter.next()) {
-                // print.format("entry: {}\n", .{dir_iter.value});
-                if (utils.memory_compare(component, dir_iter.value.name)) {
-                    if (dir_iter.value.inode.is_file()) {
-                        if (!it.done()) {
-                            return fs.Error.NotADirectory;
-                        }
-                        const file = try self.alloc.alloc(File);
-                        file.init(self, dir_iter.value.inode_number) catch
-                            return fs.Error.Internal;
-                        return file;
-                    } else if (dir_iter.value.inode.is_directory()) {
-                        if (it.done()) {
-                            return fs.Error.NotAFile;
-                        }
-                        dir_inode = dir_iter.value.inode;
-                        not_found = false;
-                    } else {
-                        // Don't know how to handle this is yet
-                        return if (it.done()) fs.Error.NotAFile else fs.Error.NotADirectory;
-                    }
-                }
+        var dir_iter = try DirectoryIterator.new(self, dir_inode);
+        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
+        while (try dir_iter.next()) {
+            if (utils.memory_compare(name, dir_iter.value.name)) {
+                inode.* = dir_iter.value.inode;
+                return dir_iter.value.inode_number;
             }
         }
 
         return fs.Error.FileNotFound;
+    }
+
+    const Resolved = struct {
+        inode_number: u32 = undefined,
+        path: ?*[]u8 = null,
+        inode: ?*Inode = null,
+    };
+
+    fn resolve_path(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
+        // See man page path_resolution(7) for reference
+        // TODO: Assert path with trailing slash is a directory
+
+        // Get unresolved full path
+        var path = fs.Path{.alloc = self.alloc};
+        try path.init(path_str);
+        defer (path.done() catch @panic("path.done()"));
+        if (!path.absolute) {
+            var cwd = kernel.threading_mgr.get_cwd_heap() catch return fs.Error.Internal;
+            try path.prepend(cwd);
+            try kernel.alloc.free_array(cwd);
+        }
+
+        // Get root node
+        var inode: *Inode = resolved.inode orelse try self.alloc.alloc(Inode);
+        defer {
+            if (resolved.inode == null) {
+                self.alloc.free(inode) catch @panic("self.alloc.free(inode)");
+            }
+        }
+        resolved.inode_number = Ext2.root_inode_number;
+        self.get_inode(resolved.inode_number, inode) catch return fs.Error.Internal;
+
+        // Find inode and build resolved path
+        var resolved_path = fs.Path{.alloc = self.alloc, .absolute = true};
+        try resolved_path.init(null);
+        defer (resolved_path.done() catch @panic("resolved_path.done()"));
+        var it = path.list.const_iterator();
+        while (it.next()) |component| {
+            resolved.inode_number = try self.find_in_directory(inode, component, inode);
+            if (utils.memory_compare(component, "..")) {
+                try resolved_path.pop_component();
+            } else {
+                try resolved_path.push_component(component);
+            }
+        }
+
+        if (resolved.path) |rp| {
+            rp.* = try resolved_path.get();
+        }
+    }
+
+    fn resolve_kind(self: *Ext2, path_str: []const u8, resolved: *Resolved,
+            valid_fn: fn(inode: *const Inode) bool, invalid_error: Error) Error!void {
+        const alloc_inode = resolved.inode == null;
+        if (alloc_inode) {
+            resolved.inode = try self.alloc.alloc(Inode);
+        }
+        defer {
+            if (alloc_inode) {
+                self.alloc.free(resolved.inode.?) catch @panic("self.alloc.free(inode)");
+                resolved.inode = null;
+            }
+        }
+        try self.resolve_path(path_str, resolved);
+        if (!valid_fn(resolved.inode.?)) {
+            return invalid_error;
+        }
+    }
+
+    fn resolve_directory(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
+        try self.resolve_kind(path_str, resolved, Inode.is_directory, fs.Error.NotADirectory);
+    }
+
+    pub fn resolve_directory_path(self: *Ext2, path: []const u8) Error![]const u8 {
+        var resolved_path: []u8 = undefined;
+        var resolved = Resolved{.path = &resolved_path};
+        try self.resolve_directory(path, &resolved);
+        return resolved_path;
+    }
+
+    fn resolve_file(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
+        try self.resolve_kind(path_str, resolved, Inode.is_file, fs.Error.NotAFile);
+    }
+
+    pub fn open(self: *Ext2, path: []const u8) fs.Error!*File {
+        if (!self.initialized) return fs.Error.InvalidFilesystem;
+        // print.format("open({})\n", .{path});
+
+        var resolved = Resolved{};
+        try self.resolve_file(path, &resolved);
+
+        const file = try self.alloc.alloc(File);
+        file.init(self, resolved.inode_number) catch return fs.Error.Internal;
+
+        return file;
     }
 
     pub fn close(self: *Ext2, file: *File) io.FileError!void {
@@ -555,44 +630,22 @@ pub const Ext2 = struct {
         try self.alloc.free(file);
     }
 
-    pub fn open_dir(self: *Ext2, path: []const u8) Error!DirectoryIterator.Value {
-        if (!self.initialized) return Error.InvalidFilesystem;
-        var dir_inode: Inode = undefined;
-        try self.get_inode(Ext2.root_inode_number, &dir_inode);
+    fn open_dir(self: *Ext2, path: []const u8) fs.Error!DirectoryIterator.Value {
+        var inode = try self.alloc.alloc(Inode);
+        defer self.alloc.free(inode) catch @panic("self.alloc.free(inode)");
+        var resolved = Resolved{.inode = inode};
+        try self.resolve_directory(path, &resolved);
 
-        if (path.len == 1 and path[0] == '.' or path[0] == '/') {
-            return DirectoryIterator.Value{
-                .inode_number = Ext2.root_inode_number,
-                .name = "/",
-                .inode = dir_inode,
-            };
-        }
-
-        var it = fs.PathIterator.new(path);
-        while (it.next()) |component| {
-            // See if That Component is in the Current Directory
-            var dir_iter = try DirectoryIterator.new(self, &dir_inode);
-            defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
-            var not_found = true;
-            while (not_found and try dir_iter.next()) {
-                if (utils.memory_compare(component, dir_iter.value.name)) {
-                    if (dir_iter.value.inode.is_directory()) {
-                        if (it.done()) {
-                            return dir_iter.value;
-                        }
-                        dir_inode = dir_iter.value.inode;
-                        not_found = false;
-                    } else {
-                        return Error.NotADirectory;
-                    }
-                }
-            }
-        }
-
-        return Error.FileNotFound;
+        return DirectoryIterator.Value{
+            .inode_number = resolved.inode_number,
+            .name = "",
+            .inode = resolved.inode.?.*,
+        };
     }
 
     pub fn next_dir_entry(self: *Ext2, dir_entry: *georgios.DirEntry) Error!void {
+        if (!self.initialized) return fs.Error.InvalidFilesystem;
+
         var in_dir: DirectoryIterator.Value = undefined;
         if (dir_entry.dir_inode) |dir_inode| {
             try self.get_inode(dir_inode, &in_dir.inode);

@@ -117,6 +117,7 @@ pub const Process = struct {
     }
 
     pub fn set_cwd(self: *Process, dir: []const u8) Error!void {
+        // Reuse existing memory?
         const new_cwd = try kernel.memory_mgr.alloc.alloc_array(u8, dir.len);
         _ = utils.memory_copy_truncate(new_cwd, dir);
         if (self.cwd) |cwd| {
@@ -462,13 +463,22 @@ pub const Manager = struct {
         if (self.current_process) |proc| {
             return buffer[0..try utils.memory_copy_error(buffer, proc.cwd.?)];
         } else {
-            return Error.NoCurrentProcess;
+            return "/";
         }
+    }
+
+    pub fn get_cwd_heap(self: *Manager) Error![]const u8 {
+        const cwd = if (self.current_process) |proc| proc.cwd.? else "/";
+        const rv = try kernel.memory_mgr.alloc.alloc_array(u8, cwd.len);
+        _ = utils.memory_copy_truncate(rv, cwd);
+        return rv;
     }
 
     pub fn set_cwd(self: *Manager, dir: []const u8) georgios.ThreadingOrFsError!void {
         if (self.current_process) |proc| {
-            try proc.set_cwd(dir);
+            const resolved = try kernel.filesystem.resolve_directory_path(dir);
+            try proc.set_cwd(resolved);
+            try kernel.memory_mgr.alloc.free_array(resolved);
         } else {
             return Error.NoCurrentProcess;
         }

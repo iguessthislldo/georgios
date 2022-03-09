@@ -125,7 +125,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             const failure_ptr = @intToPtr(*bool, arg2);
             failure_ptr.* = false;
             kernel.filesystem.impl.next_dir_entry(entry) catch |e| {
-                print.format("next_dir_iter failed in dir {}: {}\n", .{entry.dir, @errorName(e)});
+                print.format("next_dir_entry failed in dir {}: {}\n", .{entry.dir, @errorName(e)});
                 failure_ptr.* = true;
                 return;
             };
