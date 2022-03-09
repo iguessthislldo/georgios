@@ -96,6 +96,8 @@ pub const ThreadImpl = struct {
             try kernel.memory_mgr.impl.make_guard_page(null, self.kernelmode_stack.start, true);
             self.kernelmode_stack.start += guard_size;
             self.kernelmode_stack.size -= guard_size;
+            // print.format("3/4 point on stack: .{:a}\n",
+            //     .{self.kernelmode_stack.start + stack_size / 4});
         }
         self.v8086 = if (thread.process) |process| process.impl.v8086 else false;
     }
