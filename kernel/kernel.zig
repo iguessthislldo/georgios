@@ -64,8 +64,10 @@ pub fn init() !void {
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_mgr.new_process(info);
     // print.format("exec: {}\n", .{info.path});
-    var ext2_file = try filesystem.open(info.path);
-    var elf_object = try elf.Object.from_file(alloc, &ext2_file.io_file);
+    var file = try filesystem.open(info.path);
+    // TODO: better way to close the file!!
+    defer filesystem.file_id_close(file.io_file.id.?) catch @panic("file_id_close");
+    var elf_object = try elf.Object.from_file(alloc, &file.io_file);
     var segments = elf_object.segments.iterator();
     while (segments.next()) |segment| {
         switch (segment.what) {
@@ -83,7 +85,15 @@ pub fn run() !void {
     try init();
     print.string("\x1bc"); // Reset Console
     // try @import("sync.zig").system_tests();
-    threading_mgr.wait_for_process(try exec(&georgios.ProcessInfo{.path = "/bin/shell.elf"}));
+
+    // Read and execute the path in the rc file
+    var rc_file = try filesystem.open("/etc/rc");
+    // TODO: better way to close the file!!
+    defer filesystem.file_id_close(rc_file.io_file.id.?) catch @panic("file_id_close");
+    var rc_buffer: [128]u8 = undefined;
+    var rc_path: []const u8 = rc_buffer[0..try rc_file.io_file.read(rc_buffer[0..])];
+    rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
+    threading_mgr.wait_for_process(try exec(&georgios.ProcessInfo{.path = rc_path}));
 }
 
 pub fn kernel_main() void {
