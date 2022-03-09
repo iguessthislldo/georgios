@@ -117,6 +117,23 @@ pub fn List(comptime Type: type) type {
             self.push_back_node(node);
         }
 
+        pub fn push_back_list(self: *Self, other: *Self) void {
+            if (other.head) |other_head| {
+                other_head.prev = self.tail;
+                if (self.tail) |tail| {
+                    tail.next = other_head;
+                }
+                self.tail = other.tail;
+                if (self.len == 0) {
+                    self.head = other_head;
+                }
+                self.len += other.len;
+                other.head = null;
+                other.tail = null;
+                other.len = 0;
+            }
+        }
+
         pub fn clear(self: *Self) memory.MemoryError!void {
             while (self.pop_back_node()) |node| {
                 try self.alloc.free(node);
@@ -133,10 +150,35 @@ pub fn List(comptime Type: type) type {
                 }
                 return null;
             }
+
+            pub fn done(self: *const Iterator) bool {
+                return self.node == null;
+            }
         };
 
         pub fn iterator(self: *Self) Iterator {
             return Iterator{.node = self.head};
+        }
+
+        // TODO: Make generic with Iterator?
+        pub const ConstIterator = struct {
+            node: ?*const Node,
+
+            pub fn next(self: *ConstIterator) ?Type {
+                if (self.node) |n| {
+                    self.node = n.next;
+                    return n.value;
+                }
+                return null;
+            }
+
+            pub fn done(self: *const ConstIterator) bool {
+                return self.node == null;
+            }
+        };
+
+        pub fn const_iterator(self: *const Self) ConstIterator {
+            return ConstIterator{.node = self.head};
         }
     };
 }
@@ -224,4 +266,39 @@ test "List" {
     equal(nilv, try list.pop_front());
     equal(niln, list.head);
     equal(niln, list.tail);
+
+    // Test push_back_list by adding empty list to empty list
+    var other_list = UsizeList{.alloc = &alloc.allocator};
+    list.push_back_list(&other_list);
+    equal(@as(usize, 0), list.len);
+    equal(nilv, try list.pop_back());
+    equal(nilv, try list.pop_front());
+    equal(niln, list.head);
+    equal(niln, list.tail);
+
+    // Test push_back_list by adding non empty list to empty list
+    try other_list.push_back(1);
+    try other_list.push_back(3);
+    list.push_back_list(&other_list);
+    equal(@as(usize, 0), other_list.len);
+    equal(nilv, try other_list.pop_back());
+    equal(nilv, try other_list.pop_front());
+    equal(niln, other_list.head);
+    equal(niln, other_list.tail);
+    equal(@as(usize, 2), list.len);
+
+    // Test push_back_list by adding non empty list to non empty list
+    try other_list.push_back(5);
+    try other_list.push_back(7);
+    list.push_back_list(&other_list);
+    equal(@as(usize, 0), other_list.len);
+    equal(nilv, try other_list.pop_back());
+    equal(nilv, try other_list.pop_front());
+    equal(niln, other_list.head);
+    equal(niln, other_list.tail);
+    equal(@as(usize, 4), list.len);
+    equal(@as(usize, 1), (try list.pop_front()).?);
+    equal(@as(usize, 3), (try list.pop_front()).?);
+    equal(@as(usize, 5), (try list.pop_front()).?);
+    equal(@as(usize, 7), (try list.pop_front()).?);
 }
