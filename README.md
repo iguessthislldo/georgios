@@ -6,9 +6,6 @@ Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
 making for fun which currently targets i386/IA-32. The purpose of this project
 is to serve as a learning experience.
 
-This OS is not anywhere near usable and currently will just run whatever I'm
-working on.
-
 ## Building
 
 Building Georgios requires a Unix-like environment with:
@@ -16,11 +13,15 @@ Building Georgios requires a Unix-like environment with:
 - Python 3
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
+- xorriso (`xorriso` package on Ubuntu)
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
-`make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make
-bochs` respectively.  For the moment it assumes the existence of an IDE disk
-with certain files on it.
+`make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make bochs`
+respectively. On Ubuntu Bochs requires `apt-get install bochs bochsbios
+bochs-sdl bochs-x vgabios`.
+
+For the moment it assumes the existence of an IDE disk with certain files on
+it.
 
 ## Resources Used
 
