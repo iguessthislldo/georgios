@@ -192,8 +192,9 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 unique_id(new_level, buddy_index), BlockStatus.Free);
         }
 
-        pub fn alloc(allocator: *Allocator, size: usize) AllocError![]u8 {
+        pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
             const self = @fieldParentPtr(Self, "allocator", allocator);
+            // TODO: Do we have to do something with align_to?
 
             if (size > max_size) {
                 return AllocError.OutOfMemory;
@@ -268,8 +269,9 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             try self.block_statuses.set(new_unique_id, .Free);
         }
 
-        fn free(allocator: *Allocator, value: []const u8) FreeError!void {
+        fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
             const self = @fieldParentPtr(Self, "allocator", allocator);
+            // TODO: Check aligned_to makes sense?
 
             if (value.len > max_size) return FreeError.InvalidFree;
 

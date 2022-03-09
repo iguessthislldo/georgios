@@ -355,14 +355,14 @@ pub const ManagerImpl = struct {
         }
     }
 
-    fn page_alloc(allocator: *memory.Allocator, size: usize) AllocError![]u8 {
+    fn page_alloc(allocator: *memory.Allocator, size: usize, align_to: usize) AllocError![]u8 {
         const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         const range = try self.get_unused_kernel_space(size);
         try self.mark_virtual_memory_present(active_page_directory[0..], range, false);
         return range.to_slice(u8);
     }
 
-    fn page_free(allocator: *memory.Allocator, value: []const u8) FreeError!void {
+    fn page_free(allocator: *memory.Allocator, value: []const u8, aligned_to: usize) FreeError!void {
         const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         // TODO
     }

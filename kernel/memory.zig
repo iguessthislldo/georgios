@@ -77,24 +77,25 @@ pub const RealMemoryMap = struct {
 
 var alloc_debug = false;
 pub const Allocator = struct {
-    alloc_impl: fn(self: *Allocator, size: usize) AllocError![]u8,
-    free_impl: fn(self: *Allocator, value: []const u8) FreeError!void,
+    alloc_impl: fn(self: *Allocator, size: usize, align_to: usize) AllocError![]u8,
+    free_impl: fn(self: *Allocator, value: []const u8, aligned_to: usize) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
         if (alloc_debug) print.string(
             "Allocator.alloc: " ++ @typeName(Type) ++ "\n");
         const rv = @ptrCast(*Type, @alignCast(
-            @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type))).ptr));
+            @alignOf(Type), (try self.alloc_impl(self, @sizeOf(Type), @alignOf(Type))).ptr));
         if (alloc_debug) print.format(
             "Allocator.alloc: " ++ @typeName(Type) ++ ": {:a}\n", .{@ptrToInt(rv)});
         return rv;
     }
 
     pub fn free(self: *Allocator, value: anytype) FreeError!void {
+        const traits = @typeInfo(@TypeOf(value)).Pointer;
         const bytes = utils.to_bytes(value);
         if (alloc_debug) print.format("Allocator.free: " ++ @typeName(@TypeOf(value)) ++
             ": {:a}\n", .{@ptrToInt(bytes.ptr)});
-        try self.free_impl(self, bytes);
+        try self.free_impl(self, bytes, traits.alignment);
     }
 
     pub fn alloc_array(
@@ -105,7 +106,7 @@ pub const Allocator = struct {
             return AllocError.ZeroSizedAlloc;
         }
         const rv = @ptrCast([*]Type, @alignCast(@alignOf(Type),
-            (try self.alloc_impl(self, @sizeOf(Type) * count)).ptr))[0..count];
+            (try self.alloc_impl(self, @sizeOf(Type) * count, @alignOf(Type))).ptr))[0..count];
         if (alloc_debug) print.format("Allocator.alloc_array: [{}]" ++ @typeName(Type) ++
             ": {:a}\n", .{count, @ptrToInt(rv.ptr)});
         return rv;
@@ -116,7 +117,7 @@ pub const Allocator = struct {
         if (alloc_debug) print.format(
             "Allocator.free_array: [{}]" ++ @typeName(traits.child) ++ ": {:a}\n",
             .{array.len, @ptrToInt(array.ptr)});
-        try self.free_impl(self, utils.to_const_bytes(array));
+        try self.free_impl(self, utils.to_const_bytes(array), traits.alignment);
     }
 
     pub fn alloc_range(self: *Allocator, size: usize) AllocError!Range {
@@ -125,7 +126,7 @@ pub const Allocator = struct {
             return AllocError.ZeroSizedAlloc;
         }
         const rv = Range{
-            .start = @ptrToInt((try self.alloc_impl(self, size)).ptr), .size = size};
+            .start = @ptrToInt((try self.alloc_impl(self, size, 1)).ptr), .size = size};
         if (alloc_debug) print.format("Allocator.alloc_range: {}: {:a}\n", .{size, rv.start});
         return rv;
     }
@@ -133,7 +134,7 @@ pub const Allocator = struct {
     pub fn free_range(self: *Allocator, range: Range) FreeError!void {
         if (alloc_debug) print.format(
             "Allocator.free_range: {}: {:a}\n", .{range.size, range.start});
-        try self.free_impl(self, range.to_slice(u8));
+        try self.free_impl(self, range.to_slice(u8), 1);
     }
 };
 
@@ -158,17 +159,24 @@ pub const UnitTestAllocator = struct {
         self.impl.deinit();
     }
 
-    pub fn alloc(allocator: *Allocator, size: usize) AllocError![]u8 {
+    pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
         const self = @fieldParentPtr(Self, "allocator", allocator);
         self.allocated += size;
-        return self.impl.allocator.alloc(u8, size) catch return AllocError.OutOfMemory;
+
+        const align_u29 = @truncate(u29, align_to);
+        const rv = self.impl.allocator.allocFn(
+            &self.impl.allocator, size,
+            align_u29, align_u29, @returnAddress()) catch return AllocError.OutOfMemory;
+        return rv;
     }
 
-    pub fn free(allocator: *Allocator, value: []const u8) FreeError!void {
+    pub fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
         const self = @fieldParentPtr(Self, "allocator", allocator);
         std.testing.expectEqual(true, self.allocated >= value.len);
         self.allocated -= value.len;
-        self.impl.allocator.free(value);
+        _ = self.impl.allocator.shrinkBytes(
+            @intToPtr([*]u8, @ptrToInt(value.ptr))[0..value.len],
+            @truncate(u29, aligned_to), 0, 0, @returnAddress());
     }
 };
 
