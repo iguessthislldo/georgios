@@ -44,9 +44,13 @@ pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var filesystem: fs.Filesystem = .{};
 
-pub fn init() !void {
+pub fn platform_init() !void {
     print.init(&console, build_options.debug_log);
     try platform.init();
+}
+
+pub fn init() !void {
+    try platform_init();
 
     // Filesystem
     if (raw_block_store) |raw| {
@@ -59,6 +63,7 @@ pub fn init() !void {
 
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_mgr.new_process(info);
+    // print.format("exec: {}\n", .{info.path});
     var ext2_file = try filesystem.open(info.path);
     var elf_object = try elf.Object.from_file(alloc, &ext2_file.io_file);
     var segments = elf_object.segments.iterator();
