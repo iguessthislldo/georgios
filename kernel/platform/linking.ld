@@ -33,6 +33,9 @@ SECTIONS {
     /*
      * Start of the "low" kernel, which is mapped to < _VIRTUAL_OFFSET.
      * This memory will be recycled after it is no longer needed.
+     * TODO: Check if physical memory is being reused
+     * The virtual memory will be used to bootstrap and maintain memory
+     * management.
      */
     . = _REAL_START;
     _REAL_LOW_START = .;
@@ -47,6 +50,15 @@ SECTIONS {
     {
         *(.low_bss)
     }
+
+    /*
+     * Force extra space for frame access slots
+     */
+    .low_force_space_begin_align ALIGN(_FRAME_SIZE) :
+    {
+        BYTE(0)
+    }
+    .low_force_space_end_align ALIGN(_FRAME_SIZE) : {}
 
     _REAL_LOW_END = .;
 

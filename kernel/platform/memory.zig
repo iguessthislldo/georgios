@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
 const utils = @import("utils");
@@ -12,7 +13,6 @@ const Range = memory.Range;
 const print = kernel.print;
 
 const platform = @import("platform.zig");
-const to_virtual = platform.kernel_to_virtual;
 
 pub const frame_size = utils.Ki(4);
 pub const page_size = frame_size;
@@ -26,6 +26,7 @@ export var active_page_directory: [tables_per_directory]u32
 export var kernel_page_tables: []u32 = undefined;
 pub export var kernel_range_start_available: u32 = undefined;
 export var kernel_page_table_count: u32 = 0;
+extern var _VIRTUAL_LOW_START: u32;
 
 pub fn get_address(dir_index: usize, table_index: usize) callconv(.Inline) usize {
     return dir_index * table_pages_size + table_index * page_size;
@@ -47,10 +48,6 @@ pub fn table_is_present(entry: u32) callconv(.Inline) bool {
 
 pub fn get_table_address(entry: u32) callconv(.Inline) u32 {
     return entry & 0xfffff000;
-}
-
-pub fn get_table(dir_entry: u32) callconv(.Inline) [*]allowzero u32 {
-    return @intToPtr([*]allowzero u32, to_virtual(get_table_address(dir_entry)));
 }
 // (End of Page Directory Operations)
 
@@ -112,6 +109,83 @@ pub fn load_page_directory(new: []const u32, old: ?[]u32) utils.Error!void {
     reload_active_page_directory();
 }
 
+const FrameAccessSlot = struct {
+    i: u16,
+    current_frame_address: ?u32 = null,
+    page_address: u32 = undefined,
+    page_table_entry: *u32 = undefined,
+
+    pub fn init(self: *FrameAccessSlot) void {
+        self.page_address = @ptrToInt(&_VIRTUAL_LOW_START) + page_size * self.i;
+        self.page_table_entry = &kernel_page_tables[get_table_index(self.page_address)];
+    }
+};
+
+/// Before we can allocate memory properly we need to be able to manually
+/// change physical memory to setup frame allocation and create new page
+/// tables. We can bootstrap this process by using a bit of real and virtual
+/// memory we know is safe to use and map it to the frame want to change.
+///
+/// This involves reserving a FrameAccessSlot using a FrameAccess object for
+/// the type to map. There can only be one FrameAccess using a slot at a time
+/// or else there will be a panic.  See below for the slot objects.
+fn FrameAccess(comptime Type: type) type {
+    comptime const Traits = @typeInfo(Type);
+    var slice_len: ?comptime_int = null;
+    var PtrType: type = undefined;
+    const GetType = switch (Traits) {
+        std.builtin.TypeId.Array => |array_type| blk: {
+            slice_len = array_type.len;
+            PtrType = [*]array_type.child;
+            break :blk []array_type.child;
+        },
+        else => else_blk: {
+            PtrType = *Type;
+            break :else_blk *Type;
+        }
+    };
+
+    return struct {
+        const Self = @This();
+
+        slot: *FrameAccessSlot,
+        ptr: PtrType,
+
+        pub fn new(slot: *FrameAccessSlot, frame_address: u32) Self {
+            if (slot.current_frame_address != null) {
+                @panic("The FrameAccess slot is already active!");
+            }
+            slot.current_frame_address = frame_address;
+
+            const needed_entry = (frame_address & 0xfffff000) | 1;
+            if (slot.page_table_entry.* != needed_entry) {
+                slot.page_table_entry.* = needed_entry;
+                invalidate_page(slot.page_address);
+            }
+
+            return Self{.slot = slot, .ptr = @intToPtr(PtrType, slot.page_address)};
+        }
+
+        pub fn get(self: *const Self) GetType {
+            return if (slice_len) |l| self.ptr[0..l] else self.ptr;
+        }
+
+        pub fn done(self: *const Self) void {
+            if (self.slot.current_frame_address == null) {
+                @panic("Done called, but slot is already inactive");
+            }
+            self.slot.current_frame_address = null;
+        }
+    };
+}
+
+var pmem_frame_access_slot: FrameAccessSlot = .{.i = 0};
+var page_table_frame_access_slot: FrameAccessSlot = .{.i = 2};
+var page_frame_access_slot: FrameAccessSlot = .{.i = 1};
+// NOTE: More cannot be added unless room is made in the linking script by
+// adjusting .low_force_space_begin_align to make _REAL_LOW_END increase.
+
+
 /// Add Frame Groups to Our Memory Map from Multiboot Memory Map
 pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
     const entry_size = @intToPtr(*u32, tag.start + 8).*;
@@ -145,14 +219,24 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
 /// When a physical frame isn't being used it is part of a linked list.
 pub const ManagerImpl = struct {
     const FreeFramePtr = ?usize;
+    const FreeFramePtrAccess = FrameAccess(FreeFramePtr);
+    fn access_free_frame(frame: u32) FreeFramePtrAccess {
+        return FreeFramePtrAccess.new(&pmem_frame_access_slot, frame);
+    }
 
-    extern var _VIRTUAL_LOW_START: u32;
+    const TableAccess = FrameAccess([pages_per_table]u32);
+    fn access_page_table(frame: u32) TableAccess {
+        return TableAccess.new(&page_table_frame_access_slot, frame);
+    }
+
+    const PageAccess = FrameAccess([page_size]u8);
+    fn access_page(frame: u32) PageAccess {
+        return PageAccess.new(&page_frame_access_slot, frame);
+    }
 
     parent: *memory.Manager = undefined,
     next_free_frame: FreeFramePtr = null,
     kernel_tables_index_start: usize = 0,
-    virtual_page_address: usize = 0,
-    virtual_page_index: usize = 0,
     start_of_virtual_space: usize = 0,
     page_allocator: memory.Allocator = undefined,
 
@@ -161,8 +245,9 @@ pub const ManagerImpl = struct {
         self.page_allocator.alloc_impl = ManagerImpl.page_alloc;
         self.page_allocator.free_impl = ManagerImpl.page_free;
         parent.big_alloc = &self.page_allocator;
-        self.virtual_page_address = @ptrToInt(&_VIRTUAL_LOW_START);
-        self.virtual_page_index = get_table_index(self.virtual_page_address);
+        pmem_frame_access_slot.init();
+        page_table_frame_access_slot.init();
+        page_frame_access_slot.init();
 
         // var total_count: usize = 0;
         for (memory_map.frame_groups[0..memory_map.frame_group_count]) |*i| {
@@ -186,20 +271,11 @@ pub const ManagerImpl = struct {
             table_pages_size);
     }
 
-    pub fn map_virtual_page(self: *ManagerImpl, address: usize) void {
-        // print.format("map_virtual_page: {:a}\n", address);
-        if (kernel_page_tables[self.virtual_page_index] != present_entry(address)) {
-            set_entry(&kernel_page_tables[self.virtual_page_index], address, false);
-            invalidate_page(self.virtual_page_address);
-        }
-    }
-
     pub fn push_frame(self: *ManagerImpl, frame: usize) void {
-        // Map fixed virtual address to frame.
-        self.map_virtual_page(frame);
         // Put the current next_free_frame into the frame.
-        @intToPtr(*FreeFramePtr, self.virtual_page_address).* =
-            self.next_free_frame;
+        const access = access_free_frame(frame);
+        access.get().* = self.next_free_frame;
+        access.done();
         // Point to that frame.
         self.next_free_frame = frame;
     }
@@ -207,12 +283,11 @@ pub const ManagerImpl = struct {
     pub fn pop_frame(self: *ManagerImpl) AllocError!usize {
         if (self.next_free_frame) |frame| {
             const prev = frame;
-            // Map fixed virtual address to next_free_frame.
-            self.map_virtual_page(frame);
             // Get the "next" next_free_frame from the contents of the current
             // one.
-            self.next_free_frame =
-                @intToPtr(*FreeFramePtr, self.virtual_page_address).*;
+            const access = access_free_frame(frame);
+            self.next_free_frame = access.get().*;
+            access.done();
             // Return the previous next_free_frame
             return prev;
         }
@@ -243,8 +318,9 @@ pub const ManagerImpl = struct {
                 dir_index += 1;
                 continue;
             }
-            self.map_virtual_page(get_table_address(active_page_directory[dir_index]));
-            const table = @intToPtr([*]allowzero u32, self.virtual_page_address);
+            const access = access_page_table(get_table_address(active_page_directory[dir_index]));
+            defer access.done();
+            const table = access.get();
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (table_index < pages_per_table) {
@@ -278,13 +354,14 @@ pub const ManagerImpl = struct {
         const table_address = try self.pop_frame();
         // TODO set_entry for page_directory
         set_entry(&page_directory[dir_index], table_address, user);
-        self.map_virtual_page(table_address);
-        const table = @intToPtr([*]u32, self.virtual_page_address);
+        const access = access_page_table(table_address);
+        const table = access.get();
         var i: usize = 0;
         while (i < pages_per_table) {
             table[i] = 0;
             i += 1;
         }
+        access.done();
     }
 
     // TODO: Read/Write and Any Other Options
@@ -300,12 +377,13 @@ pub const ManagerImpl = struct {
             if (!table_is_present(page_directory[dir_index])) {
                 try self.new_page_table(page_directory, dir_index, user);
             }
-            self.map_virtual_page(get_table_address(page_directory[dir_index]));
+            const access = access_page_table(get_table_address(page_directory[dir_index]));
+            defer access.done();
+            const table = access.get();
             if (user) {
                 // TODO: Seperate User and Write
                 page_directory[dir_index] |= (0b11 << 1);
             }
-            const table = @intToPtr([*]u32, self.virtual_page_address);
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (table_index < pages_per_table) {
@@ -317,7 +395,6 @@ pub const ManagerImpl = struct {
                 }
                 // TODO: Go through memory.Memory for pop_frame
                 const frame = try self.pop_frame();
-                self.map_virtual_page(get_table_address(page_directory[dir_index]));
                 set_entry(&table[table_index], frame, user);
                 if (&page_directory[0] == &active_page_directory[0]) {
                     invalidate_page(get_address(dir_index, table_index));
@@ -341,8 +418,9 @@ pub const ManagerImpl = struct {
         if (!table_is_present(page_dir[dir_index])) {
             try self.new_page_table(page_dir, dir_index, user);
         }
-        self.map_virtual_page(get_table_address(page_dir[dir_index]));
-        const table = @intToPtr([*]u32, self.virtual_page_address);
+        const access = access_page_table(get_table_address(page_dir[dir_index]));
+        defer access.done();
+        const table = access.get();
         const table_index = get_table_index(address);
         const free_frame: ?u32 = if (page_is_present(table[table_index]))
             get_page_address(table[table_index]) else null;
@@ -390,20 +468,20 @@ pub const ManagerImpl = struct {
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (data_left.len > 0 and table_index < pages_per_table) {
-                self.map_virtual_page(get_table_address(page_directory[dir_index]));
-                const table = @intToPtr([*]u32, self.virtual_page_address);
+                const table_access = access_page_table(get_table_address(page_directory[dir_index]));
+                defer table_access.done();
+                const table = table_access.get();
                 if (!page_is_present(table[table_index])) {
                     // TODO: Go through memory.Memory for pop_frame
                     const frame = try self.pop_frame();
-                    self.map_virtual_page(get_table_address(page_directory[dir_index]));
                     set_entry(&table[table_index], frame, true);
                     if (&page_directory[0] == &active_page_directory[0]) {
                         invalidate_page(get_address(dir_index, table_index));
                     }
                 }
-                self.map_virtual_page(get_page_address(table[table_index]));
-                const page = @intToPtr([*]u8, self.virtual_page_address)
-                    [page_offset..page_size];
+                const page_access = access_page(get_page_address(table[table_index]));
+                defer page_access.done();
+                const page = page_access.get()[page_offset..];
                 page_offset = 0;
                 const copied = utils.memory_copy_truncate(page, data_left);
                 data_left = data_left[copied..];
@@ -431,20 +509,20 @@ pub const ManagerImpl = struct {
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (left > 0 and table_index < pages_per_table) {
-                self.map_virtual_page(get_table_address(page_directory[dir_index]));
-                const table = @intToPtr([*]u32, self.virtual_page_address);
+                const table_access = access_page_table(get_table_address(page_directory[dir_index]));
+                defer table_access.done();
+                const table = table_access.get();
                 if (!page_is_present(table[table_index])) {
                     // TODO: Go through memory.Memory for pop_frame
                     const frame = try self.pop_frame();
-                    self.map_virtual_page(get_table_address(page_directory[dir_index]));
                     set_entry(&table[table_index], frame, true);
                     if (&page_directory[0] == &active_page_directory[0]) {
                         invalidate_page(get_address(dir_index, table_index));
                     }
                 }
-                self.map_virtual_page(get_page_address(table[table_index]));
-                var page = @intToPtr([*]u8, self.virtual_page_address)
-                    [page_offset..page_size];
+                const page_access = access_page(get_page_address(table[table_index]));
+                defer page_access.done();
+                var page = page_access.get()[page_offset..];
                 if (page.len > left) {
                     page.len = left;
                 }
@@ -473,8 +551,9 @@ pub const ManagerImpl = struct {
             if (!table_is_present(page_directory[dir_index])) {
                 try self.new_page_table(page_directory, dir_index, user);
             }
-            self.map_virtual_page(get_table_address(page_directory[dir_index]));
-            const table = @intToPtr([*]u32, self.virtual_page_address);
+            const table_access = access_page_table(get_table_address(page_directory[dir_index]));
+            defer table_access.done();
+            const table = table_access.get();
             var table_index: usize =
                 if (dir_index == dir_index_start) table_index_start else 0;
             while (left > 0 and table_index < pages_per_table) {
