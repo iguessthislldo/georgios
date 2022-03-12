@@ -29,6 +29,11 @@ ported.
     invoke the BIOS code required to access VBE.
 - USB 2.0 stack
 - Porting real applications written in Zig and C
+  - The applications currently written in Zig are "real", but are using the
+    freestanding target and are using system calls directly. To be able to use
+    a Zig or C hello work program without any modification, the standard
+    libraries would have to be ported and toolchains would have to be modified
+    to target Georgios properly.
 - Freeing the OS from the need of a boot CD
 
 ## Building
