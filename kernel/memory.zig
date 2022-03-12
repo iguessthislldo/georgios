@@ -244,7 +244,7 @@ pub const Manager = struct {
             total_memory >> 30});
 
         self.alloc_impl = try self.big_alloc.alloc(AllocImplType);
-        self.alloc_impl.init(@ptrToInt(try self.big_alloc.alloc([alloc_size]u8)));
+        try self.alloc_impl.init(try self.big_alloc.alloc([alloc_size]u8));
         self.alloc = &self.alloc_impl.allocator;
         kernel.alloc = self.alloc;
     }

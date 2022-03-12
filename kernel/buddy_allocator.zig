@@ -116,13 +116,16 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         block_statuses: util.PackedArray(
             BlockStatus, unique_block_count) = undefined,
 
-        pub fn init(self: *Self, start: usize) void {
+        pub fn init(self: *Self, area: []u8) Error!void {
             self.allocator = Allocator{
                 .alloc_impl = alloc,
                 .free_impl = free,
             };
-            self.start = start;
-            self.free_blocks.init(start);
+            if (area.len < max_size) {
+                return Error.NotEnoughDestination;
+            }
+            self.start = @ptrToInt(area.ptr);
+            self.free_blocks.init(self.start);
             self.block_statuses.reset();
             self.block_statuses.set(0, .Free) catch unreachable;
         }
@@ -369,7 +372,7 @@ test "BuddyAllocator" {
 
     var b = ABuddyAllocator{};
     var m: [size]u8 = undefined;
-    b.init(@ptrToInt(&m));
+    try b.init(m[0..]);
     const a = &b.allocator;
 
     var al_alloc = memory.UnitTestAllocator{};
