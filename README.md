@@ -12,6 +12,25 @@ Georgios is so simplistic right now the most impressive application is a snake
 clone. This is probably going to be case forever until applications can be
 ported.
 
+## Features
+
+### Working on at least some minimal level
+
+- Kernel console that supports UTF-8 and ANSI escape codes
+- Ext2 filesystem accessed using an ATA Driver (All read only for now)
+- Basic preemptive multitasking between processes that can be loaded from ELF
+  files
+- ACPI shutdown (thanks in part to [ACPICA](https://www.acpica.org/))
+
+### Started on, but not really working yet
+
+- A graphics mode using VESA BIOS Extensions (VBE)
+  - This makes use of [libx86emu](https://github.com/wfeldt/libx86emu) to
+    invoke the BIOS code required to access VBE.
+- USB 2.0 stack
+- Porting real applications written in Zig and C
+- Freeing the OS from the need of a boot CD
+
 ## Building
 
 Building Georgios requires a Unix-like environment with:
