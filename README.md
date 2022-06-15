@@ -8,15 +8,17 @@ is to serve as a learning experience.
 
 ![It's a snake clone in IBM PC 80x25 text mode!](misc/screenshot2.png)
 
-Georgios is so simplistic right now the most impressive application is a snake
-clone. This is probably going to be case forever until applications can be
+Georgios is so simplistic right that now the most impressive application is a
+snake clone. This is probably going to be the case until applications can be
 ported.
 
 ## Features
 
 ### Working on at least some minimal level
 
-- Kernel console that supports UTF-8 and ANSI escape codes
+- Kernel console that supports UTF-8 (specifically the subset needed for
+  [Code page 437](https://en.wikipedia.org/wiki/Code_page_437) subset) and some
+  basic ANSI escape codes
 - Ext2 filesystem accessed using an ATA Driver (All read only for now)
 - Basic preemptive multitasking between processes that can be loaded from ELF
   files
@@ -31,7 +33,7 @@ ported.
 - Porting real applications written in Zig and C
   - The applications currently written in Zig are "real", but are using the
     freestanding target and are using system calls directly. To be able to use
-    a Zig or C hello work program without any modification, the standard
+    a Zig or C hello world program without any modification, the standard
     libraries would have to be ported and toolchains would have to be modified
     to target Georgios properly.
 - Freeing the OS from the need of a boot CD
@@ -47,7 +49,7 @@ Building Georgios requires a Unix-like environment with:
 
 Georgios can be built as a bootable ISO (called `georgios.iso`) by running
 `make`. If installed, QEMU and Bochs can be run by running `make qemu` or `make bochs`
-respectively. On Ubuntu Bochs requires `apt-get install bochs bochsbios
+respectively. On Ubuntu, Bochs requires `apt-get install bochs bochsbios
 bochs-sdl bochs-x vgabios`.
 
 For the moment it assumes the existence of an IDE disk with certain files on
