@@ -65,6 +65,7 @@ const Superblock = packed struct {
             print.string("Inconsistent Ext2 Block Group Count");
             return Error.InvalidFilesystem;
         }
+        // TODO: Verify things related to inode_size
     }
 
     pub fn block_size(self: *const Superblock) usize {
@@ -474,7 +475,7 @@ pub const Ext2 = struct {
         try self.get_block_group_descriptor(
             nm1 / self.superblock.inodes_per_group, &block_group);
         const address = @as(u64, block_group.inode_table) * self.block_size +
-            (nm1 % self.superblock.inodes_per_group) * @sizeOf(Inode);
+            (nm1 % self.superblock.inodes_per_group) * self.superblock.inode_size;
         try self.block_store.read(self.offset + address, utils.to_bytes(inode));
         // print.format("inode {}\n{}\n", n, inode.*);
     }
