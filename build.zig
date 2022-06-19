@@ -11,11 +11,11 @@ const bin_path = root_path ++ "bin/";
 
 const utils_pkg = std.build.Pkg{
     .name = "utils",
-    .path = .{.path = "libs/utils/utils.zig"},
+    .source = .{.path = "libs/utils/utils.zig"},
 };
 const georgios_pkg = std.build.Pkg{
     .name = "georgios",
-    .path = .{.path = "libs/georgios/georgios.zig"},
+    .source = .{.path = "libs/georgios/georgios.zig"},
     .dependencies = &[_]std.build.Pkg {
         utils_pkg,
     },
@@ -87,7 +87,7 @@ pub fn build(builder: *std.build.Builder) void {
     const root_file = format("{s}kernel_start_{s}.zig", .{k_path, platform});
     kernel = b.addExecutable("kernel.elf", root_file);
     kernel.override_dest_dir = std.build.InstallDir{.custom = "boot"};
-    kernel.setLinkerScriptPath(std.build.FileSource.relative(p_path ++ "linking.ld"));
+    kernel.setLinkerScriptPath(FileSource.relative(p_path ++ "linking.ld"));
     kernel.setTarget(target);
     const kernel_options = b.addOptions();
     kernel_options.addOption(bool, "multiboot_vbe", multiboot_vbe);
