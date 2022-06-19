@@ -1,4 +1,4 @@
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 pub const impl = switch(builtin.cpu.arch) {
     // x86_32

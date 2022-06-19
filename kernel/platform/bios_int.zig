@@ -39,7 +39,7 @@ const debug_mem_access = false;
 const exec_trace = false;
 
 export fn georgios_bios_int_to_string(
-        buffer: [*]u8, buffer_size: usize, got: *usize, kind: u8, value: *c_void) bool {
+        buffer: [*]u8, buffer_size: usize, got: *usize, kind: u8, value: *anyopaque) bool {
     var ts = utils.ToString{.buffer = buffer[0..buffer_size]};
     switch (kind) {
         's' => {
@@ -75,18 +75,18 @@ export fn georgios_bios_int_wait() void {
     timing.wait_microseconds(500);
 }
 
-export fn georgios_bios_int_malloc(size: usize) ?*c_void {
+export fn georgios_bios_int_malloc(size: usize) ?*anyopaque {
     const a = kernel.alloc.alloc_array(u8, size) catch return null;
-    return @ptrCast(*c_void, a.ptr);
+    return @ptrCast(*anyopaque, a.ptr);
 }
 
-export fn georgios_bios_int_calloc(num: usize, size: usize) ?*c_void {
+export fn georgios_bios_int_calloc(num: usize, size: usize) ?*anyopaque {
     const a = kernel.alloc.alloc_array(u8, size * num) catch return null;
     utils.memory_set(a, 0);
-    return @ptrCast(*c_void, a.ptr);
+    return @ptrCast(*anyopaque, a.ptr);
 }
 
-export fn georgios_bios_int_free(ptr: ?*c_void) void {
+export fn georgios_bios_int_free(ptr: ?*anyopaque) void {
     if (ptr != null) {
         kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
     }

@@ -20,7 +20,7 @@ pub fn get(self: *ToString) []u8 {
 
 pub fn upgrade_buffer(self: *ToString, new: []u8) Error![]u8 {
     const old = self.buffer;
-    _ = try memory_copy_error(new, old);
+    _ = try utils.memory_copy_error(new, old);
     self.buffer = new;
     return old;
 }

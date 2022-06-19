@@ -520,7 +520,7 @@ const Controller = struct {
 
         // self.primary.init();
         // self.secondary.init();
-        self.primary.master.init(temp_sector, alloc) catch |e| {
+        self.primary.master.init(temp_sector, alloc) catch {
             print.string("Drive Initialize Failed\n");
             return;
         };
@@ -533,6 +533,7 @@ const Controller = struct {
 };
 
 pub fn init(dev: *const pci.Dev) void {
+    _ = dev;
     var controller = kernel.alloc.alloc(Controller) catch {
         @panic("Failure");
     };

@@ -59,12 +59,8 @@ malformed_sequences: usize = 0,
 fn process_parameter(self: *Self) bool {
     var parameter: ?u16 = null;
     if (self.parameter_start) |start| {
-        const parameter_str = self.saved[self.parameter_start.?..self.saved_so_far];
-        if (std.fmt.parseUnsigned(u16, parameter_str, 10)) |p| {
-            parameter = p;
-        } else |e| {
-            return true;
-        }
+        const parameter_str = self.saved[start..self.saved_so_far];
+        parameter = std.fmt.parseUnsigned(u16, parameter_str, 10) catch null;
         self.parameter_start = null;
     } else { // empty parameter
         parameter = 0;
@@ -78,7 +74,7 @@ fn process_parameter(self: *Self) bool {
             return true;
         }
     }
-    return false;
+    return parameter == null;
 }
 
 fn select_graphic_rendition(self: *Self) void {

@@ -1,4 +1,5 @@
-const builtin = @import("std").builtin;
+const std = @import("std");
+const builtin = @import("builtin");
 
 pub const utils = @import("utils");
 
@@ -21,7 +22,8 @@ comptime {
 
 pub var proc_info: if (is_program) *const ProcessInfo else void = undefined;
 
-pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+    _ = trace;
     var buffer: [128]u8 = undefined;
     var ts = utils.ToString{.buffer = buffer[0..]};
     ts.string("\x1bc") catch unreachable;

@@ -51,24 +51,24 @@ const Header = packed struct {
     const Magic = [4]u8;
     const expected_magic: Magic = [_]u8 {0x7f, 'E', 'L', 'F'};
 
-    pub const Class = packed enum(u8) {
+    pub const Class = enum(u8) {
         Invalid = 0, // ELFCLASSNONE
         Is32 = 1, // ELFCLASS32
         Is64 = 2, // ELFCLASS64
     };
 
-    pub const Data = packed enum(u8) {
+    pub const Data = enum(u8) {
         Invalid = 0, // ELFDATANONE
         Little = 1, // ELFDATA2LSB
         Big = 2, // ELFDATA2MSB
     };
 
-    pub const HeaderVersion = packed enum(u8) {
+    pub const HeaderVersion = enum(u8) {
         Invalid = 0, // EV_NONE
         Current = 1, // EV_CURRENT
     };
 
-    pub const ObjectType = packed enum(u16) {
+    pub const ObjectType = enum(u16) {
         None = 0, // ET_NONE
         Relocatable = 1, // ET_REL
         Executable = 2, // ET_EXEC
@@ -76,7 +76,7 @@ const Header = packed struct {
         CoreDump = 4, // ET_CORE
     };
 
-    pub const Machine = packed enum(u16) {
+    pub const Machine = enum(u16) {
         None = 0x00, // ET_NONE
         X86_32 = 0x03, // ET_386
         X86_64 = 0x3e,
@@ -86,7 +86,7 @@ const Header = packed struct {
         // There are others, but I'm not going to put them in.
     };
 
-    pub const ObjectVersion = packed enum(u32) {
+    pub const ObjectVersion = enum(u32) {
         Invalid = 0, // EV_NONE
         Current = 1, // EV_CURRENT
     };
@@ -204,7 +204,7 @@ pub const Object = struct {
             const size = @intCast(usize, object.header.section_header_entry_size);
             const skip = @intCast(isize, size - @sizeOf(SectionHeader));
             object.section_headers = try alloc.alloc_array(SectionHeader, count);
-            for (object.section_headers) |*section_header, i| {
+            for (object.section_headers) |*section_header| {
                 _ = try file.read(utils.to_bytes(section_header));
                 _ = try file.seek(skip, .FromHere);
             }
@@ -225,7 +225,7 @@ pub const Object = struct {
             const size = @intCast(usize, object.header.program_header_entry_size);
             const skip = @intCast(isize, size - @sizeOf(ProgramHeader));
             object.program_headers = try alloc.alloc_array(ProgramHeader, count);
-            for (object.program_headers) |*program_header, i| {
+            for (object.program_headers) |*program_header| {
                 _ = try file.read(utils.to_bytes(program_header));
                 _ = try file.seek(skip, .FromHere);
             }

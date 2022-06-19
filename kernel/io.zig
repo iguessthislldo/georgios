@@ -5,7 +5,10 @@ const MemoryError = memory.MemoryError;
 const MappedList = @import("mapped_list.zig").MappedList;
 const print = @import("print.zig");
 
-usingnamespace @import("georgios").io;
+const io = @import("georgios").io;
+pub const File = io.File;
+pub const FileError = io.FileError;
+pub const BufferFile = io.BufferFile;
 
 pub const BlockError = error {
     // TODO: This is unused, but causes compile issues with fs, completely
@@ -37,11 +40,15 @@ pub const BlockStore = struct {
     free_block_impl: fn(*BlockStore, *Block) BlockError!void = default.free_block_impl,
 
     pub const default = struct {
-        pub fn read_block_impl(*BlockStore, *Block) BlockError!void {
+        pub fn read_block_impl(self: *BlockStore, block: *Block) BlockError!void {
+            _ = self;
+            _ = block;
             return BlockError.Unsupported;
         }
 
-        pub fn free_block_impl(*BlockStore, *Block) BlockError!void {
+        pub fn free_block_impl(self: *BlockStore, block: *Block) BlockError!void {
+            _ = self;
+            _ = block;
             // Nop
         }
     };

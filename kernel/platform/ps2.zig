@@ -47,6 +47,8 @@ var pattern: Pattern = undefined;
 
 pub fn keyboard_event_occured(
         interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
+    _ = interrupt_number;
+    _ = interrupt_stack;
     var event: ?Event = null;
     const byte = intel8042.get_kb_byte();
     // print.format("[{:x}]", .{byte});

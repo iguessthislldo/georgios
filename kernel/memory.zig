@@ -9,7 +9,9 @@ const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
 
-usingnamespace georgios.memory;
+pub const AllocError = georgios.memory.AllocError;
+pub const FreeError = georgios.memory.FreeError;
+pub const MemoryError = georgios.memory.MemoryError;
 
 pub const Range = struct {
     start: usize = 0,
@@ -77,8 +79,8 @@ pub const RealMemoryMap = struct {
 
 var alloc_debug = false;
 pub const Allocator = struct {
-    alloc_impl: fn(self: *Allocator, size: usize, align_to: usize) AllocError![]u8,
-    free_impl: fn(self: *Allocator, value: []const u8, aligned_to: usize) FreeError!void,
+    alloc_impl: fn(*Allocator, usize, usize) AllocError![]u8,
+    free_impl: fn(*Allocator, []const u8, usize) FreeError!void,
 
     pub fn alloc(self: *Allocator, comptime Type: type) AllocError!*Type {
         if (alloc_debug) print.string(
@@ -165,9 +167,8 @@ pub const UnitTestAllocator = struct {
         self.allocated += size;
 
         const align_u29 = @truncate(u29, align_to);
-        const rv = self.impl.allocator.allocFn(
-            &self.impl.allocator, size,
-            align_u29, align_u29, @returnAddress()) catch return AllocError.OutOfMemory;
+        const rv = self.impl.allocator().allocBytes(align_u29, size,
+            align_u29, @returnAddress()) catch return AllocError.OutOfMemory;
         return rv;
     }
 
@@ -176,9 +177,9 @@ pub const UnitTestAllocator = struct {
         std.testing.expectEqual(true, self.allocated >= value.len)
             catch @panic("free arg is bigger than allocated sum");
         self.allocated -= value.len;
-        _ = self.impl.allocator.shrinkBytes(
+        _ = self.impl.allocator().rawFree(
             @intToPtr([*]u8, @ptrToInt(value.ptr))[0..value.len],
-            @truncate(u29, aligned_to), 0, 0, @returnAddress());
+            @truncate(u29, aligned_to), @returnAddress());
     }
 };
 

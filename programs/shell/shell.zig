@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 const georgios = @import("georgios");
 comptime {_ = georgios;}
@@ -120,7 +119,9 @@ fn run_command(command: []const u8) bool {
             if (std.fmt.parseUnsigned(usize, command_parts[1], 10)) |n| {
                 system_calls.sleep_seconds(n);
             } else |e| {
-                print_string("invalid argument\n");
+                print_string("invalid argument: ");
+                print_string(@errorName(e));
+                print_string("\n");
             }
         }
     } else if (utils.memory_compare(command_parts[0], "koverflow")) {
@@ -163,7 +164,9 @@ pub fn main() void {
                 system_calls.print_string(dir);
             }
         } else |e| {
-            print_string("???");
+            print_string("get_cwd failed: ");
+            print_string(@errorName(e));
+            print_string("\n");
         }
         print_string("%\x1b[7m");
         var getline = true;

@@ -1,4 +1,5 @@
-const builtin = @import("std").builtin;
+const std = @import("std");
+const builtin = @import("builtin");
 const build_options = @import("build_options");
 
 const utils = @import("utils");
@@ -18,7 +19,7 @@ pub const keys = @import("keys.zig");
 
 pub var panic_message: []const u8 = "";
 
-pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     print.format("panic: {}\n", .{msg});
     platform.impl.ps2.anykey();
     panic_message = msg;

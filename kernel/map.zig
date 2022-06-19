@@ -45,6 +45,7 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
         };
 
         fn find_parent(self: *Self, key: KeyType, start_node: *Node) FindParentResult {
+            _ = self;
             var i = start_node;
             while (true) {
                 if (cmp(key, i.key)) {

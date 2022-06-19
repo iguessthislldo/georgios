@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
 const utils = @import("utils");
@@ -130,9 +129,9 @@ const FrameAccessSlot = struct {
 /// the type to map. There can only be one FrameAccess using a slot at a time
 /// or else there will be a panic.  See below for the slot objects.
 fn FrameAccess(comptime Type: type) type {
-    comptime const Traits = @typeInfo(Type);
-    var slice_len: ?comptime_int = null;
-    var PtrType: type = undefined;
+    const Traits = @typeInfo(Type);
+    comptime var slice_len: ?comptime_int = null;
+    comptime var PtrType: type = undefined;
     const GetType = switch (Traits) {
         std.builtin.TypeId.Array => |array_type| blk: {
             slice_len = array_type.len;
@@ -195,7 +194,6 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
         if (@intToPtr(*u32, entry_ptr + 16).* == 1) {
             var range_start = @intCast(usize, @intToPtr(*u64, entry_ptr).*);
             var range_size = @intCast(usize, @intToPtr(*u64, entry_ptr + 8).*);
-            var contains_frame_stack = false;
             const range_end = range_start + range_size;
             if (range_start >= platform.kernel_real_start() and
                     platform.kernel_real_end() <= range_end) {
@@ -409,6 +407,8 @@ pub const ManagerImpl = struct {
 
     // TODO
     fn mark_virtual_memory_absent(self: *ManagerImpl, range: Range) void {
+        _ = self;
+        _ = range;
     }
 
     pub fn make_guard_page(self: *ManagerImpl, page_directory: ?[]u32,
@@ -434,6 +434,7 @@ pub const ManagerImpl = struct {
     }
 
     fn page_alloc(allocator: *memory.Allocator, size: usize, align_to: usize) AllocError![]u8 {
+        _ = align_to;
         const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         const range = try self.get_unused_kernel_space(size);
         try self.mark_virtual_memory_present(active_page_directory[0..], range, false);
@@ -443,10 +444,13 @@ pub const ManagerImpl = struct {
     fn page_free(allocator: *memory.Allocator, value: []const u8, aligned_to: usize) FreeError!void {
         const self = @fieldParentPtr(ManagerImpl, "page_allocator", allocator);
         // TODO
+        _ = self;
+        _ = value;
+        _ = aligned_to;
     }
 
     pub fn new_page_directory(self: *ManagerImpl) AllocError![]u32 {
-        const end = get_kernel_space_start_directory_index();
+        _ = self;
         const page_directory =
             try self.parent.big_alloc.alloc_array(u32, tables_per_directory);
         _ = utils.memory_set(sliceAsBytes(page_directory[0..]), 0);

@@ -1,8 +1,7 @@
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 const utils = @import("utils");
 
-const paging = @import("paging.zig");
 const platform = @import("platform.zig");
 const vbe = @import("vbe.zig");
 

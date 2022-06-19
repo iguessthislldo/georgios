@@ -1,3 +1,3 @@
 test "georgios test root" {
-    const io = @import("io.zig");
+    _ = @import("io.zig");
 }

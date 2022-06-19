@@ -164,7 +164,7 @@ fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
     var x_offset = x;
     var y_offset = y;
     var max_x = x;
-    for (s) |c, i| {
+    for (s) |c| {
         if (c >= ' ' and c <= '~') {
             draw_glyph(x_offset, y_offset, c, color);
             x_offset += font.width;
@@ -183,7 +183,7 @@ fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
 fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
     var x_offset = start.x;
     var y_offset = start.y;
-    for (s) |c, i| {
+    for (s) |c| {
         if (c >= ' ' and c <= '~') {
             draw_glyph(x_offset, y_offset, c, color);
             const next_offset = x_offset + font.width;

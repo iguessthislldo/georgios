@@ -18,7 +18,9 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
     const arg2 = interrupt_stack.ecx;
     const arg3 = interrupt_stack.edx;
     const arg4 = interrupt_stack.edi;
+    _ = arg4;
     const arg5 = interrupt_stack.esi;
+    _ = arg5;
 
     // TODO: Using pointers for args can cause Zig's alignment checks to fail.
     // Find a way around this without turning off safety?

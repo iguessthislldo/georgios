@@ -49,7 +49,7 @@ pub const TableHeader = packed struct {
 };
 
 pub const Address = packed struct {
-    pub const Kind = packed enum(u8) {
+    pub const Kind = enum(u8) {
         Memory = 0,
         Io = 1,
         _,
@@ -62,8 +62,11 @@ pub const Address = packed struct {
     address: u64,
 };
 
-fn device_callback(obj: acpica.ACPI_HANDLE, level: acpica.Uint32, context: ?*c_void,
-        return_value: [*c]?*c_void) callconv(.C) acpica.Status {
+fn device_callback(obj: acpica.ACPI_HANDLE, level: acpica.Uint32, context: ?*anyopaque,
+        return_value: [*c]?*anyopaque) callconv(.C) acpica.Status {
+    _ = level;
+    _ = context;
+    _ = return_value;
     var devinfo: [*c]acpica.ACPI_DEVICE_INFO = undefined;
     check_status("acpi.device_callback: AcpiGetObjectInfo",
         acpica.AcpiGetObjectInfo(obj, &devinfo));
@@ -82,8 +85,6 @@ pub fn init() !void {
     _ = utils.memory_set(utils.to_bytes(page_directory[0..]), 0);
     try pmemory.load_page_directory(&page_directory, &prev_page_directory);
 
-    var status: acpica.Status = undefined;
-
     check_status("acpi.init: AcpiInitializeSubsystem", acpica.AcpiInitializeSubsystem());
     check_status("acpi.init: AcpiInitializeTables", acpica.AcpiInitializeTables(null, 16, 0));
     check_status("acpi.init: AcpiLoadTables", acpica.AcpiLoadTables());
@@ -92,7 +93,7 @@ pub fn init() !void {
     // check_status("acpi.init: AcpiInitializeObjects",
     //     acpica.AcpiInitializeObjects(acpica.ACPI_FULL_INITIALIZATION));
 
-    // var devcb_rv: ?*c_void = null;
+    // var devcb_rv: ?*anyopaque = null;
     // check_status("acpi.init: AcpiGetDevices", acpica.AcpiGetDevices(
     //     null, device_callback, null, &devcb_rv));
 
@@ -136,12 +137,12 @@ export fn AcpiOsGetRootPointer() acpica.PhysicalAddress {
     return p;
 }
 
-export fn AcpiOsAllocate(size: acpica.Size) ?*c_void {
+export fn AcpiOsAllocate(size: acpica.Size) ?*anyopaque {
     const a = kernel.alloc.alloc_array(u8, size) catch return null;
-    return @ptrCast(*c_void, a.ptr);
+    return @ptrCast(*anyopaque, a.ptr);
 }
 
-export fn AcpiOsFree(ptr: ?*c_void) void {
+export fn AcpiOsFree(ptr: ?*anyopaque) void {
     if (ptr != null) {
         kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
     }
@@ -152,6 +153,7 @@ const Sem = kernel.sync.Semaphore(acpica.Uint32);
 export fn AcpiOsCreateSemaphore(
         max_units: acpica.Uint32, initial_units: acpica.Uint32,
         semaphore: **Sem) acpica.Status {
+    _ = max_units;
     const sem = kernel.alloc.alloc(Sem) catch return acpica.NoMemory;
     sem.* = .{.value = initial_units};
     sem.init();
@@ -162,6 +164,7 @@ export fn AcpiOsCreateSemaphore(
 export fn AcpiOsWaitSemaphore(
         semaphore: *Sem, units: acpica.Uint32, timeout: acpica.Uint16) acpica.Status {
     // TODO: Timeout in milliseconds
+    _ = timeout;
     var got: acpica.Uint32 = 0;
     while (got < units) {
         semaphore.wait() catch continue;
@@ -199,6 +202,7 @@ export fn AcpiOsAcquireLock(lock: *Lock) acpica.ACPI_CPU_FLAGS {
 }
 
 export fn AcpiOsReleaseLock(lock: *Lock, flags: acpica.ACPI_CPU_FLAGS) void {
+    _ = flags;
     lock.unlock();
 }
 
@@ -213,25 +217,29 @@ export fn AcpiOsGetThreadId() acpica.Uint64 {
 }
 
 export fn AcpiOsPredefinedOverride(predefined_object: *const acpica.ACPI_PREDEFINED_NAMES,
-        new_value: **allowzero c_void) acpica.Status {
-    new_value.* = @intToPtr(*allowzero c_void, 0);
+        new_value: **allowzero anyopaque) acpica.Status {
+    _ = predefined_object;
+    new_value.* = @intToPtr(*allowzero anyopaque, 0);
     return acpica.Ok;
 }
 
 export fn AcpiOsTableOverride(existing: [*c]acpica.ACPI_TABLE_HEADER,
         new: [*c][*c]acpica.ACPI_TABLE_HEADER) acpica.Status {
+    _ = existing;
     new.* = null;
     return acpica.Ok;
 }
 
 export fn AcpiOsPhysicalTableOverride(existing: [*c]acpica.ACPI_TABLE_HEADER,
         new_addr: [*c]acpica.ACPI_PHYSICAL_ADDRESS, new_len: [*c]acpica.Uint32) acpica.Status {
+    _ = existing;
+    _ = new_len;
     new_addr.* = 0;
     return acpica.Ok;
 }
 
 export fn AcpiOsMapMemory(
-        address: acpica.PhysicalAddress, size: acpica.Size) *allowzero c_void {
+        address: acpica.PhysicalAddress, size: acpica.Size) *allowzero anyopaque {
     const page = pmemory.page_size;
     const pmem = &kernel.memory_mgr.impl;
     const addr = @intCast(usize, address);
@@ -239,17 +247,19 @@ export fn AcpiOsMapMemory(
     const offset = addr % page;
     const range = pmem.get_unused_kernel_space(size + offset) catch {
         print.string("AcpiOsMapMemory: get_unused_kernel_space failed\n");
-        return @intToPtr(*allowzero c_void, 0);
+        return @intToPtr(*allowzero anyopaque, 0);
     };
     pmem.map(range, start_page, false) catch {
         print.string("AcpiOsMapMemory: map failed\n");
-        return @intToPtr(*allowzero c_void, 0);
+        return @intToPtr(*allowzero anyopaque, 0);
     };
-    return @intToPtr(*allowzero c_void, range.start + offset);
+    return @intToPtr(*allowzero anyopaque, range.start + offset);
 }
 
-export fn AcpiOsUnmapMemory(address: *allowzero c_void, size: acpica.Size) void {
+export fn AcpiOsUnmapMemory(address: *allowzero anyopaque, size: acpica.Size) void {
     // TODO
+    _ = address;
+    _ = size;
 }
 
 export fn AcpiOsReadPort(address: acpica.ACPI_IO_ADDRESS,
@@ -340,15 +350,17 @@ export fn AcpiOsWritePciConfiguration(pci_loc: [*c]acpica.ACPI_PCI_ID, offset: a
 }
 
 var interrupt_handler: acpica.ACPI_OSD_HANDLER = null;
-var interrupt_context: ?*c_void = null;
+var interrupt_context: ?*anyopaque = null;
 pub fn interrupt(interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
+    _ = interrupt_number;
+    _ = interrupt_stack;
     if (interrupt_handler) |handler| {
         _ = handler(interrupt_context);
     }
 }
 
 export fn AcpiOsInstallInterruptHandler(number: acpica.Uint32,
-        handler: acpica.ACPI_OSD_HANDLER, context: ?*c_void) acpica.Status {
+        handler: acpica.ACPI_OSD_HANDLER, context: ?*anyopaque) acpica.Status {
     const fixed: u32 = 9;
     if (number != fixed) {
         print.format("AcpiOsInstallInterruptHandler: unexpected IRQ {}\n", .{number});
@@ -371,12 +383,19 @@ export fn AcpiOsInstallInterruptHandler(number: acpica.Uint32,
 
 export fn AcpiOsRemoveInterruptHandler(number: acpica.Uint32,
         routine: acpica.ACPI_OSD_HANDLER) acpica.Status {
+    // TODO
     print.format("AcpiOsRemoveInterruptHandler: TODO {}\n", .{number});
+    _ = number;
+    _ = routine;
     return acpica.Ok;
 }
 
 export fn AcpiOsEnterSleep(
         sleep_state: acpica.Uint8, reg_a: acpica.Uint32, reg_b: acpica.Uint32) acpica.Status {
+    // TODO?
+    _ = sleep_state;
+    _ = reg_a;
+    _ = reg_b;
     return acpica.Ok;
 }
 
@@ -385,7 +404,9 @@ export fn AcpiOsGetTimer() acpica.Uint64 {
     // @panic("AcpiOsGetTimer called");
 }
 
-export fn AcpiOsSignal(function: acpica.Uint32, info: *c_void) acpica.Status {
+export fn AcpiOsSignal(function: acpica.Uint32, info: *anyopaque) acpica.Status {
+    _ = function;
+    _ = info;
     @panic("AcpiOsSignal called");
 }
 

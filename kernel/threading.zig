@@ -162,6 +162,7 @@ const TimeQueue = struct {
         element.when = when;
 
         if (self.head) |head| {
+            _ = head;
             var compare = self.head;
             while (compare) |cmp| {
                 if (when < cmp.when) {
@@ -258,6 +259,7 @@ pub const Manager = struct {
     }
 
     pub fn new_process_i(self: *Manager) Error!*Process {
+        _ = self;
         const p = try kernel.alloc.alloc(Process);
         p.* = .{.info = undefined};
         return p;

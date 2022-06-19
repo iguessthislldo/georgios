@@ -1,5 +1,6 @@
 const std = @import("std");
-const builtin = std.builtin;
+const FileSource = std.build.FileSource;
+const builtin = @import("builtin");
 
 const t_path = "tmp/";
 const k_path = "kernel/";
@@ -10,11 +11,11 @@ const bin_path = root_path ++ "bin/";
 
 const utils_pkg = std.build.Pkg{
     .name = "utils",
-    .path = "libs/utils/utils.zig",
+    .path = .{.path = "libs/utils/utils.zig"},
 };
 const georgios_pkg = std.build.Pkg{
     .name = "georgios",
-    .path = "libs/georgios/georgios.zig",
+    .path = .{.path = "libs/georgios/georgios.zig"},
     .dependencies = &[_]std.build.Pkg {
         utils_pkg,
     },
@@ -22,10 +23,10 @@ const georgios_pkg = std.build.Pkg{
 
 var b: *std.build.Builder = undefined;
 var target: std.zig.CrossTarget = undefined;
-var alloc: *std.mem.Allocator = undefined;
+var alloc: std.mem.Allocator = undefined;
 var kernel: *std.build.LibExeObjStep = undefined;
-var build_mode: builtin.Mode = undefined;
 var test_step: *std.build.Step = undefined;
+const program_link_script = FileSource{.path = "programs/linking.ld"};
 
 fn format(comptime fmt: []const u8, args: anytype) []u8 {
     return std.fmt.allocPrint(alloc, fmt, args) catch unreachable;
@@ -33,7 +34,6 @@ fn format(comptime fmt: []const u8, args: anytype) []u8 {
 
 fn add_tests(source: []const u8) void {
     const tests = b.addTest(source);
-    tests.setBuildMode(build_mode);
     tests.addPackage(utils_pkg);
     tests.addPackage(georgios_pkg);
     test_step.dependOn(&tests.step);
@@ -42,9 +42,8 @@ fn add_tests(source: []const u8) void {
 pub fn build(builder: *std.build.Builder) void {
     b = builder;
     var arena_alloc = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    alloc = &arena_alloc.allocator;
+    alloc = arena_alloc.allocator();
 
-    build_mode = b.standardReleaseOptions();
     const multiboot_vbe = b.option(bool, "multiboot_vbe",
         \\Ask the bootloader to switch to a graphics mode for us.
         ) orelse false;
@@ -69,14 +68,14 @@ pub fn build(builder: *std.build.Builder) void {
     const platform = switch (target.cpu_arch.?) {
         .i386 => "x86_32",
         else => {
-            std.debug.warn("Unsupported Platform: {s}\n", .{@tagName(target.cpu_arch.?)});
+            std.debug.print("Unsupported Platform: {s}\n", .{@tagName(target.cpu_arch.?)});
             @panic("Unsupported Platform");
         },
     };
 
     // Set install prefix to root
     // TODO: Might break in the future?
-    b.resolveInstallPrefix(root_path);
+    b.resolveInstallPrefix(root_path, .{});
 
     // Tests
     test_step = b.step("test", "Run Tests");
@@ -87,15 +86,16 @@ pub fn build(builder: *std.build.Builder) void {
     // Kernel
     const root_file = format("{s}kernel_start_{s}.zig", .{k_path, platform});
     kernel = b.addExecutable("kernel.elf", root_file);
-    kernel.override_dest_dir = std.build.InstallDir{.Custom = "boot"};
-    kernel.setLinkerScriptPath(p_path ++ "linking.ld");
+    kernel.override_dest_dir = std.build.InstallDir{.custom = "boot"};
+    kernel.setLinkerScriptPath(std.build.FileSource.relative(p_path ++ "linking.ld"));
     kernel.setTarget(target);
-    kernel.setBuildMode(build_mode);
-    kernel.addBuildOption(bool, "multiboot_vbe", multiboot_vbe);
-    kernel.addBuildOption(bool, "vbe", vbe);
-    kernel.addBuildOption(bool, "debug_log", debug_log);
-    kernel.addBuildOption(bool, "wait_for_anykey", wait_for_anykey);
-    kernel.addBuildOption(bool, "is_kernel", true);
+    const kernel_options = b.addOptions();
+    kernel_options.addOption(bool, "multiboot_vbe", multiboot_vbe);
+    kernel_options.addOption(bool, "vbe", vbe);
+    kernel_options.addOption(bool, "debug_log", debug_log);
+    kernel_options.addOption(bool, "wait_for_anykey", wait_for_anykey);
+    kernel_options.addOption(bool, "is_kernel", true);
+    kernel.addOptions("build_options", kernel_options);
     // Packages
     kernel.addPackage(utils_pkg);
     kernel.addPackage(georgios_pkg);
@@ -180,13 +180,18 @@ fn build_acpica() void {
     for (components) |component| {
         const component_path = std.fs.path.join(alloc,
             &[_][]const u8{source_path, "components", component}) catch unreachable;
-        var walker = std.fs.walkPath(alloc, component_path) catch unreachable;
+        var component_dir =
+            std.fs.cwd().openDir(component_path, .{.iterate = true}) catch unreachable;
+        defer component_dir.close();
+        var walker = component_dir.walk(alloc) catch unreachable;
         while (walker.next() catch unreachable) |i| {
             const path = i.path;
             if (std.mem.endsWith(u8, path, ".c") and
                     !std.mem.endsWith(u8, path, "dump.c")) {
-                // std.debug.warn("acpica source: {s}\n", .{path});
-                acpica.addCSourceFile(b.dupe(path), &[_][]const u8{disable_ubsan});
+                const full_path = std.fs.path.join(alloc,
+                    &[_][]const u8{component_path, path}) catch unreachable;
+                // std.debug.print("acpica source: {s}\n", .{full_path});
+                acpica.addCSourceFile(b.dupe(full_path), &[_][]const u8{disable_ubsan});
             }
         }
     }
@@ -196,7 +201,6 @@ fn build_acpica() void {
     // crt0.addBuildOption(bool, "is_crt", true);
     // crt0.override_dest_dir = std.build.InstallDir{.Custom = "lib"};
     // crt0.setTarget(target);
-    // crt0.setBuildMode(build_mode);
     // crt0.addPackage(utils_pkg);
     // crt0.install();
 }
@@ -205,7 +209,7 @@ fn build_program(name: []const u8) void {
     const elf = format("{s}.elf", .{name});
     const zig = format("programs/{s}/{s}.zig", .{name, name});
     const prog = b.addExecutable(elf, zig);
-    prog.setLinkerScriptPath("programs/linking.ld");
+    prog.setLinkerScriptPath(program_link_script);
     prog.setTarget(target);
     prog.addPackage(georgios_pkg);
     prog.install();
@@ -215,7 +219,7 @@ fn build_zig_program(name: []const u8) void {
     const elf = format("{s}.elf", .{name});
     const zig = format("programs/{s}/{s}.zig", .{name, name});
     const prog = b.addExecutable(elf, zig);
-    prog.setLinkerScriptPath("programs/linking.ld");
+    prog.setLinkerScriptPath(program_link_script);
     prog.setTarget(
         std.zig.CrossTarget.parse(.{
             .arch_os_abi = "i386-georgios-gnu",
@@ -236,7 +240,7 @@ fn build_c_program(name: []const u8) void {
     const prog = b.addExecutable(elf, null);
     prog.addCSourceFile(c, &[_][]const u8{"--libc /data/development/os/georgios/newlib"});
     // add_libc(prog);
-    prog.setLinkerScriptPath("programs/linking.ld");
+    prog.setLinkerScriptPath(program_link_script);
     prog.setTarget(
         std.zig.CrossTarget.parse(.{
             .arch_os_abi = "i386-georgios-gnu",

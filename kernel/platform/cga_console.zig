@@ -8,7 +8,7 @@
 //   https://en.wikipedia.org/wiki/Code_page_437
 //   https://wiki.osdev.org/Printing_to_Screen
 
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 const utils = @import("utils");
 
@@ -18,7 +18,7 @@ const in8 = util.in8;
 const platform = @import("platform.zig");
 const code_point_437 = @import("code_point_437.zig");
 
-pub const Color = enum {
+pub const Color = enum(u8) {
     Black = 0,
     Blue = 1,
     Green = 2,

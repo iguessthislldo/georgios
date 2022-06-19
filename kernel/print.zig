@@ -1,7 +1,7 @@
 // These are wrappers of what is in fprint.zig for convenience. See there for
 // the implementations.
 
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 const fprint = @import("fprint.zig");
 const io = @import("io.zig");
@@ -66,7 +66,7 @@ pub fn int(value: isize) void {
     }
 }
 
-pub fn int_sign(value: usize, show_positive: bool) void {
+pub fn int_sign(value: usize) void {
     if (console_file) |o| {
         fprint.int_sign(o, value) catch unreachable;
     }
@@ -188,7 +188,7 @@ pub fn debug_cstring(str: [*]const u8) void {
     }
 }
 
-pub fn debug_stripped_string(str: [*]const u8, size: usize) void {
+pub fn debug_stripped_string(str: [*]const u8) void {
     if (debug_print) {
         stripped_string(str);
     }

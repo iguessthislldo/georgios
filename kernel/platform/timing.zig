@@ -28,7 +28,7 @@ const pc_speaker_port: u16 = 0x61;
 //     print("Access:", (c >> 4) & 3)
 //     print("Channel:", (c >> 6) & 3)
 
-const Mode = packed enum(u3) {
+const Mode = enum(u3) {
     Terminal,
     OneShot,
     Rate,
@@ -39,7 +39,7 @@ const Mode = packed enum(u3) {
     SquareAgain,
 };
 
-const Channel = packed enum(u2) {
+const Channel = enum(u2) {
     Irq0, // (Channel 0)
     Channel1, // Assume to be Unusable
     Speaker, // (Channel 2)
@@ -53,7 +53,7 @@ const Channel = packed enum(u2) {
 const Command = packed struct {
     bcd: bool = false,
     mode: Mode,
-    access: packed enum(u2) {
+    access: enum(u2) {
         Latch,
         LowByte,
         HighByte,
@@ -171,7 +171,7 @@ pub fn wait_nanoseconds(ns : u64) void {
 // High Precision Event Timer (HPET) ==========================================
 
 pub const HpetTable = packed struct {
-    pub const PageProtection = packed enum(u4) {
+    pub const PageProtection = enum(u4) {
         None = 0,
         For4KibPages,
         For64KibPages,

@@ -19,7 +19,7 @@ const FreeError = memory.FreeError;
 const util = @import("utils");
 const print = @import("print.zig");
 
-const BlockStatus = packed enum(u2) {
+const BlockStatus = enum(u2) {
     Invalid = 0,
     Split,
     Free,
@@ -196,6 +196,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
+            _ = align_to;
             const self = @fieldParentPtr(Self, "allocator", allocator);
             // TODO: Do we have to do something with align_to?
 
@@ -273,6 +274,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
+            _ = aligned_to;
             const self = @fieldParentPtr(Self, "allocator", allocator);
             // TODO: Check aligned_to makes sense?
 

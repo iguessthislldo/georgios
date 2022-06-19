@@ -1,7 +1,7 @@
 // PCI Interface
 // Based on https://wiki.osdev.org/PCI
 
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 const utils = @import("utils");
 
@@ -90,7 +90,7 @@ pub fn write_config(comptime Type: type,
 }
 
 pub const Header = packed struct {
-    pub const Kind = packed enum (u8) {
+    pub const Kind = enum (u8) {
         Normal = 0x00,
         MultiFunctionNormal = 0x80,
         PciToPciBridge = 0x01,
@@ -125,7 +125,7 @@ pub const Header = packed struct {
         }
     };
 
-    pub const SuperClass = packed enum (u8) {
+    pub const SuperClass = enum (u8) {
         UnclassifiedDevice = 0x00,
         MassStorageController = 0x01,
         NetworkController = 0x02,

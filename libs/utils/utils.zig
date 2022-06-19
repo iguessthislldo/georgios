@@ -1,5 +1,5 @@
 const std = @import("std");
-const builtin = std.builtin;
+const builtin = @import("builtin");
 
 const unicode = @import("unicode.zig");
 pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
@@ -72,17 +72,17 @@ pub fn stripped_string_size(str: []const u8) callconv(.Inline) usize {
 }
 
 pub fn zero_init(comptime Type: type) Type {
-    comptime const Traits = @typeInfo(Type);
+    const Traits = @typeInfo(Type);
     comptime var CastThrough = Type;
     switch (Traits) {
-        builtin.TypeId.Int => |int_type| {
+        std.builtin.TypeId.Int => {
             CastThrough = Type;
         },
-        builtin.TypeId.Bool => {
+        std.builtin.TypeId.Bool => {
             return false;
         },
-        builtin.TypeId.Struct => |struct_type| {
-            if (struct_type.layout != builtin.TypeInfo.ContainerLayout.Packed) {
+        std.builtin.TypeId.Struct => |struct_type| {
+            if (struct_type.layout != std.builtin.TypeInfo.ContainerLayout.Packed) {
                 @compileError("Struct must be packed!");
             }
             var struct_var: Type = undefined;
@@ -97,19 +97,19 @@ pub fn zero_init(comptime Type: type) Type {
 }
 
 pub fn packed_bit_size(comptime Type: type) comptime_int {
-    comptime const Traits = @typeInfo(Type);
+    const Traits = @typeInfo(Type);
     switch (Traits) {
-        builtin.TypeId.Int => |int_type| {
+        std.builtin.TypeId.Int => |int_type| {
             return int_type.bits;
         },
-        builtin.TypeId.Bool => {
+        std.builtin.TypeId.Bool => {
             return 1;
         },
-        builtin.TypeId.Array => |array_type| {
+        std.builtin.TypeId.Array => |array_type| {
             return packed_bit_size(array_type.child) * array_type.len;
         },
-        builtin.TypeId.Struct => |struct_type| {
-            if (struct_type.layout != builtin.TypeInfo.ContainerLayout.Packed) {
+        std.builtin.TypeId.Struct => |struct_type| {
+            if (struct_type.layout != std.builtin.TypeInfo.ContainerLayout.Packed) {
                 @compileError("Struct must be packed!");
             }
             comptime var total_size: comptime_int = 0;
@@ -239,7 +239,7 @@ pub fn memory_set(destination: []u8, value: u8) callconv(.Inline) void {
 }
 
 pub fn max_of_int(comptime T: type) T {
-    comptime const Traits = @typeInfo(T);
+    const Traits = @typeInfo(T);
     return if (Traits.Int.signedness == .signed)
         (1 << (Traits.Int.bits - 1)) - 1
     else
@@ -349,7 +349,7 @@ pub fn int_bit_size(comptime Type: type) usize {
 }
 
 pub fn IntLog2Type(comptime Type: type) type {
-    return @Type(builtin.TypeInfo{.Int = builtin.TypeInfo.Int{
+    return @Type(std.builtin.TypeInfo{.Int = std.builtin.TypeInfo.Int{
         .signedness = .unsigned,
         .bits = int_log2(usize, int_bit_size(Type)),
     }});
@@ -387,15 +387,15 @@ test "select_nibble" {
 }
 
 pub fn PackedArray(comptime T: type, count: usize) type {
-    comptime const Traits = @typeInfo(T);
-    comptime const T2 = switch (Traits) {
-        builtin.TypeId.Int => T,
-        builtin.TypeId.Bool => u1,
-        builtin.TypeId.Enum => |enum_type| enum_type.tag_type,
+    const Traits = @typeInfo(T);
+    const T2 = switch (Traits) {
+        std.builtin.TypeId.Int => T,
+        std.builtin.TypeId.Bool => u1,
+        std.builtin.TypeId.Enum => |enum_type| enum_type.tag_type,
         else => @compileError("Invalid Type"),
     };
-    comptime const is_enum = switch (Traits) {
-        builtin.TypeId.Enum => true,
+    const is_enum = switch (Traits) {
+        std.builtin.TypeId.Enum => true,
         else => false,
     };
 
@@ -555,10 +555,10 @@ pub fn make_slice(comptime Type: type, ptr: [*]Type, len: usize) callconv(.Inlin
 }
 
 pub fn to_bytes(value: anytype) callconv(.Inline) []u8 {
-    comptime const Type = @TypeOf(value);
-    comptime const Traits = @typeInfo(Type);
+    const Type = @TypeOf(value);
+    const Traits = @typeInfo(Type);
     switch (Traits) {
-        builtin.TypeId.Pointer => |pointer_type| {
+        std.builtin.TypeId.Pointer => |pointer_type| {
             const count = switch (pointer_type.size) {
                 .One => 1,
                 .Slice => value.len,
@@ -586,10 +586,10 @@ pub fn make_const_slice(
 }
 
 pub fn to_const_bytes(value: anytype) callconv(.Inline) []const u8 {
-    comptime const Type = @TypeOf(value);
-    comptime const Traits = @typeInfo(Type);
+    const Type = @TypeOf(value);
+    const Traits = @typeInfo(Type);
     switch (Traits) {
-        builtin.TypeId.Pointer => |pointer_type| {
+        std.builtin.TypeId.Pointer => |pointer_type| {
             const count = switch (pointer_type.size) {
                 .One => 1,
                 .Slice => value.len,

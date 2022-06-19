@@ -103,7 +103,7 @@ const CapRegs = packed struct {
 const Command = packed struct {
     // Lunt Table 7-10
     // TODO: Zig Compiler crashes: "TODO buf_read_value_bytes enum packed"
-    // const FrameListSize = packed enum(u2) {
+    // const FrameListSize = enum(u2) {
     //     e1024 = 0b00,
     //     e512 = 0b01,
     //     e256 = 0b10,
@@ -205,6 +205,8 @@ const OpRegs = packed struct {
 };
 
 pub fn interrupt(interrupt_number: u32, interrupt_stack: *const interrupts.Stack) void {
+    _ = interrupt_number;
+    _ = interrupt_stack;
     print.string("USB INT\n");
 }
 
@@ -254,7 +256,6 @@ pub fn init(dev: *pci.Dev) void {
     }
 
     // Reset the Controller
-    var invalid = true;
     var reset_timeout: u8 = 30; // Lunt says 20ms, but do 30ms to be safe.
     {
         var copy = op_regs.command;

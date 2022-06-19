@@ -1,6 +1,7 @@
 // Platform Initialization and Public Interface
 
-const builtin = @import("std").builtin;
+const std = @import("std");
+const builtin = @import("builtin");
 
 const kernel = @import("root").kernel;
 const io = kernel.io;
@@ -33,7 +34,9 @@ pub const time = timing.rdtsc;
 pub const seconds_to_time = timing.seconds_to_ticks;
 pub const milliseconds_to_time = timing.milliseconds_to_ticks;
 
-pub fn panic(msg: []const u8, trace: ?*builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+    _ = msg;
+    _ = trace;
     asm volatile ("int $50");
     unreachable;
 }
@@ -85,6 +88,7 @@ pub fn kernel_range_virtual_start_available() usize {
 
 // Console Implementation =====================================================
 fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
+    _ = file;
     for (from) |value| {
         serial_log.print_char(value);
         cga_console.print_char(value);
@@ -93,6 +97,8 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
 }
 
 fn console_read(file: *io.File, to: []u8) io.FileError!usize {
+    _ = file;
+    _ = to;
     return 0;
 }
 

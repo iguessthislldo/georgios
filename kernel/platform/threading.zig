@@ -289,7 +289,7 @@ pub const ProcessImpl = struct {
                 @sizeOf([]const u8) * info.args.len, @sizeOf([]const u8));
             const args_array = thread.usermode_stack_ptr;
             var arg_slice_ptr = args_array;
-            for (info.args) |arg, i| {
+            for (info.args) |arg| {
                 const arg_slice = self.copy_string_to_user_stack(thread, arg);
                 pmem.page_directory_memory_copy(
                     self.page_directory, arg_slice_ptr,
@@ -301,7 +301,6 @@ pub const ProcessImpl = struct {
             // ProcessInfo
             thread.usermode_stack_ptr -= utils.align_up(
                 @sizeOf(georgios.ProcessInfo), @alignOf(georgios.ProcessInfo));
-            const info_ptr = thread.usermode_stack_ptr;
             pmem.page_directory_memory_copy(
                 self.page_directory, thread.usermode_stack_ptr,
                 utils.to_const_bytes(&info)) catch unreachable;

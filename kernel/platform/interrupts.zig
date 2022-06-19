@@ -2,7 +2,7 @@
 //
 // TODO: More Info
 
-const builtin = @import("std").builtin;
+const builtin = @import("builtin");
 
 const kernel = @import("root").kernel;
 const kutil = kernel.util;
@@ -375,6 +375,7 @@ pub const pic = struct {
     }
 
     pub fn allow_irq(irq: u8, enabled: bool) void {
+        _ = enabled; // TODO
         var port = irq_0_7_data_port;
         if (irq >= 8) {
             port = irq_8_15_data_port;
@@ -422,6 +423,8 @@ pub const pic = struct {
 pub var in_tick = false;
 
 fn tick(irq_number: u32, interrupt_stack: *const Stack) void {
+    _ = irq_number;
+    _ = interrupt_stack;
     in_tick = true;
     if (kthreading.debug) print.char('!');
     kernel.threading_mgr.yield();
@@ -470,16 +473,6 @@ pub fn init() void {
     load();
 
     pic.init();
-}
-
-pub fn set_kernel_handler(index: u8, handler: fn() void) void {
-    set(index, handler, @import("segments.zig").kernel_code_selector, kernel_flags);
-    load();
-}
-
-pub fn set_user_handler(index: u8, handler: fn() void) void {
-    set(index, handler, @import("segments.zig").user_code_selector, user_flags);
-    load();
 }
 
 pub fn get_name(index: u32) []const u8 {

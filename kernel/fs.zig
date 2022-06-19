@@ -125,8 +125,10 @@ pub const Filesystem = struct {
     }
 
     pub fn file_id_write(self: *Filesystem, id: FileId, from: []const u8) io.FileError!usize {
+        _ = from;
         if (self.open_files.find(id)) |file| {
             // TODO
+            _ = file;
             @panic("Filesystem.file_id_write called");
         } else {
             return io.FileError.InvalidFileId;

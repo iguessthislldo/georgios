@@ -28,37 +28,52 @@ pub const File = struct {
 
     pub const nop = struct {
         pub fn read_impl(file: *File, to: []u8) FileError!usize {
+            _ = file;
+            _ = to;
             return 0;
         }
 
         pub fn write_impl(file: *File, from: []const u8) FileError!usize {
+            _ = file;
             return from.len;
         }
 
         pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
+            _ = file;
+            _ = offset;
+            _ = seek_type;
             return 0;
         }
 
         pub fn close_impl(file: *File) FileError!void {
+            _ = file;
         }
     };
 
     pub const unsupported = struct {
         pub fn read_impl(file: *File, to: []u8) FileError!usize {
+            _ = file;
+            _ = to;
             return FileError.Unsupported;
         }
 
         pub fn write_impl(file: *File, from: []const u8) FileError!usize {
+            _ = file;
+            _ = from;
             return FileError.Unsupported;
         }
 
         pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
+            _ = file;
+            _ = offset;
+            _ = seek_type;
             return FileError.Unsupported;
         }
 
         pub fn close_impl(file: *File) FileError!void {
+            _ = file;
             return FileError.Unsupported;
         }
     };
@@ -76,6 +91,9 @@ pub const File = struct {
                 offset: isize, seek_type: SeekType) FileError!usize {
             // TODO: Causes Zig to crash:
             // return georgios.system_calls.file_seek(file.id.?, offset, seek_type);
+            _ = file;
+            _ = offset;
+            _ = seek_type;
             return FileError.Unsupported;
         }
 
@@ -149,7 +167,7 @@ pub const File = struct {
     /// was passed or `FileError.OutOfBounds` if trying to write to a file
     /// that's already reached the end.
     pub fn write_or_error(file: *File, from: []const u8) callconv(.Inline) FileError!usize {
-        const result = file.write_impl(file, to);
+        const result = file.write_impl(file, from);
         if (result == 0 and from.len > 0) {
             return FileError.OutOfBounds;
         }

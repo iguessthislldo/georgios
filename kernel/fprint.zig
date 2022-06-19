@@ -155,7 +155,6 @@ pub fn boolean(file: *File, value: bool) FileError!void {
 pub fn any(file: *File, value: anytype) FileError!void {
     const Type = @TypeOf(value);
     const Traits = @typeInfo(Type);
-    var invalid: bool = false;
     switch (Traits) {
         builtin.TypeId.Int => |int_type| {
             if (int_type.signedness == .signed) {
@@ -347,7 +346,6 @@ pub fn dump_memory(file: *File, ptr: usize, size: usize) FileError!void {
         group_byte_count * 2 + // Bytes
         ((group_byte_count * byte_sep.len) - 1); // byte_sep Between Bytes
     const group_count = 2;
-    const buffer_byte_count = group_byte_count * group_count;
     const group_sep = "  ";
     const buffer_size =
         group_size * group_count + // Groups
