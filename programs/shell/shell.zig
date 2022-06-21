@@ -192,6 +192,8 @@ pub fn main() void {
                     } else {
                         print = false;
                     }
+                } else if ((got + 1) == buffer.len) {
+                    print = false;
                 } else {
                     buffer[got] = c;
                     got += 1;
