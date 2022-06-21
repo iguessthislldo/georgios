@@ -13,24 +13,28 @@ const std = @import("std");
 
 const Self = @This();
 
-// TODO
-pub const HexColor = enum {
-    White,
-    LightGray,
-    DarkGray,
-    Black,
-    Red,
-    Green,
-    Yellow,
-    Blue,
-    Magenta,
-    Cyan,
-    LightRed,
-    LightGreen,
-    LightYellow,
-    LightBlue,
-    LightMagenta,
-    LightCyan,
+pub const HexColor = enum(u4) {
+    White = 15, // Spec name is bright white
+    LightGray = 7, // Spec name is white
+    DarkGray = 8, // Spec name is bright black
+    Black = 0,
+    Red = 1,
+    Green = 2,
+    Yellow = 3,
+    Blue = 4,
+    Magenta = 5,
+    Cyan = 6,
+    LightRed = 9,
+    LightGreen = 10,
+    LightYellow = 11,
+    LightBlue = 12,
+    LightMagenta = 13,
+    LightCyan = 14,
+};
+
+pub const Layer = enum {
+    Foreground,
+    Background,
 };
 
 const State = enum {
@@ -39,14 +43,15 @@ const State = enum {
     Csi,
 };
 
-print_char: ?fn(u8) void = null,
-invert_colors: ?fn() void = null,
-backspace: ?fn() void = null,
-newline: ?fn() void = null,
-reset_attributes: ?fn () void = null,
-reset_terminal: ?fn () void = null,
-move_cursor: ?fn (r: usize, c: usize) void = null,
-show_cursor: ?fn (show: bool) void = null,
+print_char: ?fn(self: *Self, char: u8) void = null,
+hex_color: ?fn(self: *Self, color: HexColor, layer: Layer) void = null,
+invert_colors: ?fn(self: *Self) void = null,
+backspace: ?fn(self: *Self) void = null,
+newline: ?fn(self: *Self) void = null,
+reset_attributes: ?fn(self: *Self) void = null,
+reset_terminal: ?fn(self: *Self) void = null,
+move_cursor: ?fn(self: *Self, r: usize, c: usize) void = null,
+show_cursor: ?fn(self: *Self, show: bool) void = null,
 
 state: State = .Unescaped,
 saved: [64]u8 = undefined,
@@ -83,8 +88,16 @@ fn select_graphic_rendition(self: *Self) void {
         const p = self.parameters[i];
         // std.debug.warn("SGR: {}\n", .{p});
         switch (p) {
-            0 => if (self.reset_attributes) |reset_attributes| reset_attributes(),
-            7 => if (self.invert_colors) |invert_colors| invert_colors(),
+            0 => if (self.reset_attributes) |reset_attributes| reset_attributes(self),
+            7 => if (self.invert_colors) |invert_colors| invert_colors(self),
+            30...37 => if (self.hex_color) |hex_color|
+                hex_color(self, @intToEnum(HexColor, p - 30), .Foreground),
+            40...47 => if (self.hex_color) |hex_color|
+                hex_color(self, @intToEnum(HexColor, p - 40), .Background),
+            90...97 => if (self.hex_color) |hex_color|
+                hex_color(self, @intToEnum(HexColor, p - 82), .Foreground),
+            100...107 => if (self.hex_color) |hex_color|
+                hex_color(self, @intToEnum(HexColor, p - 92), .Background),
             else => {},
         }
         i += 1;
@@ -101,7 +114,7 @@ fn process_move_cursor(self: *Self) void {
         row = self.parameters[0];
     }
     if (self.move_cursor) |move_cursor| {
-        move_cursor(row, column);
+        move_cursor(self, row, column);
     }
 }
 
@@ -115,13 +128,13 @@ pub fn feed_char(self: *Self, char: u8) void {
         .Unescaped => {
             reset = true;
             switch (char) {
-                0x08 => if (self.backspace) |backspace| backspace(),
+                0x08 => if (self.backspace) |backspace| backspace(self),
 
                 '\n' => {
                     if (self.newline) |newline| {
-                        newline();
+                        newline(self);
                     } else if (self.print_char) |print_char| {
-                        print_char(char);
+                        print_char(self, char);
                     }
                 },
 
@@ -132,7 +145,7 @@ pub fn feed_char(self: *Self, char: u8) void {
 
                 else => {
                     if (self.print_char) |print_char| {
-                        print_char(char);
+                        print_char(self, char);
                     }
                 },
             }
@@ -144,7 +157,7 @@ pub fn feed_char(self: *Self, char: u8) void {
 
                 'c' => {
                     if (self.reset_terminal) |reset_terminal| {
-                        reset_terminal();
+                        reset_terminal(self);
                     }
                     reset = true;
                 },
@@ -189,7 +202,7 @@ pub fn feed_char(self: *Self, char: u8) void {
                 'l' => {
                     // if (self.parameter_count == 1 and self.parameters[0] == 25) {
                         if (self.show_cursor) |show_cursor| {
-                            show_cursor(false);
+                            show_cursor(self, false);
                         }
                         reset = true;
                     // } else {
@@ -217,7 +230,7 @@ pub fn feed_char(self: *Self, char: u8) void {
         if (self.print_char) |print_char| {
             // Dump the malformed sequence. Seems to be what Gnome's terminal does.
             for (self.saved[0..self.saved_so_far]) |c| {
-                print_char(c);
+                print_char(self, c);
             }
         }
         self.malformed_sequences += 1;
@@ -243,17 +256,32 @@ pub fn feed_str(self: *Self, str: []const u8) void {
 
 var test_print_char_buffer: [128]u8 = undefined;
 var test_print_char_got: usize = 0;
-fn test_print_char(char: u8) void {
+fn test_print_char(self: *Self, char: u8) void {
+    _ = self;
     test_print_char_buffer[test_print_char_got] = char;
     test_print_char_got += 1;
 }
 
-fn test_reset() void {
-    test_print_char('R');
+fn test_reset(self: *Self) void {
+    _ = self;
+    test_print_char(self, 'R');
 }
 
-fn test_invert_colors() void {
-    test_print_char('I');
+fn test_invert_colors(self: *Self) void {
+    _ = self;
+    test_print_char(self, 'I');
+}
+
+fn test_hex_color(self: *Self, color: HexColor, layer: Layer) void {
+    test_print_char(self, if (layer == .Background) 'B' else 'F');
+    test_print_char(self, 'C');
+    test_print_char(self, '(');
+    test_print_char(self, switch (color) {
+        .LightRed => 'R',
+        .Green => 'g',
+        else => '?',
+    });
+    test_print_char(self, ')');
 }
 
 test "AnsiEscProcessor" {
@@ -261,9 +289,10 @@ test "AnsiEscProcessor" {
         .print_char = test_print_char,
         .reset_attributes = test_reset,
         .invert_colors = test_invert_colors,
+        .hex_color = test_hex_color,
     };
-    esc.feed_str("Hello \x1b[7mBob\x1b[0m Goodbye");
-    try std.testing.expectEqualSlices(u8, "Hello IBobR Goodbye",
+    esc.feed_str("Hello \x1b[7mBob\x1b[0m \x1b[91;42mGoodbye");
+    try std.testing.expectEqualStrings("Hello IBobR FC(R)BC(g)Goodbye",
         test_print_char_buffer[0..test_print_char_got]);
 
     // TODO: More Tests

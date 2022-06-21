@@ -16,6 +16,8 @@ pub const threading = @import("threading.zig");
 pub const fs = @import("fs.zig");
 pub const sync = @import("sync.zig");
 pub const keys = @import("keys.zig");
+pub const font = @import("font.zig");
+pub const Console = @import("Console.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -40,13 +42,14 @@ pub var device_mgr = devices.Manager{};
 pub var threading_mgr = threading.Manager{};
 
 pub var alloc: *memory.Allocator = undefined;
-pub var console = io.File{};
+pub var console: *Console = undefined;
+pub var console_file = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var filesystem: fs.Filesystem = .{};
 
 pub fn platform_init() !void {
-    print.init(&console, build_options.debug_log);
+    print.init(&console_file, build_options.debug_log);
     try platform.init();
 }
 
