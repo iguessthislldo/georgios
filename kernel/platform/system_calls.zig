@@ -263,6 +263,18 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             overflow_kernel_stack();
         },
 
+        // SYSCALL: console_width() u32
+        21 => {
+            const r = @intToPtr(*u32, arg1);
+            r.* = kernel.console.width;
+        },
+
+        // SYSCALL: console_height() u32
+        22 => {
+            const r = @intToPtr(*u32, arg1);
+            r.* = kernel.console.height;
+        },
+
         else => @panic("Invalid System Call"),
     }
 }

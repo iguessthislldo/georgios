@@ -1,3 +1,6 @@
+// TODO: Fix bug where the player can kill themselves with 2 segments when
+// trashing around wildly.
+
 const builtin = @import("builtin");
 
 const georgios = @import("georgios");
@@ -25,9 +28,7 @@ const Game = struct {
         }
     };
 
-    const max: Point = .{.x = 78, .y = 23};
-    const start: Point = .{.x = max.x / 2, .y = max.y / 2};
-
+    max: Point = undefined,
     running: bool = true,
     head: Point = undefined,
     // NOTE: After 128, the snake will stop growing, but also will leave behind
@@ -110,8 +111,8 @@ const Game = struct {
 
     fn random_point(self: *Game) Point {
         return .{
-            .x = self.rng.get() % max.x,
-            .y = self.rng.get() % max.y,
+            .x = self.rng.get() % self.max.x,
+            .y = self.rng.get() % self.max.y,
         };
     }
 
@@ -124,8 +125,8 @@ const Game = struct {
     }
 
     fn show_score(self: *Game) void {
-        var p: Point = .{.x = 0, .y = max.y + 1};
-        while (p.x < max.x + 1) {
+        var p: Point = .{.x = 0, .y = self.max.y + 1};
+        while (p.x < self.max.x + 1) {
             draw("▓", p);
             p.x += 1;
         }
@@ -138,9 +139,13 @@ const Game = struct {
     }
 
     pub fn reset(self: *Game) void {
+        self.max = .{
+            .x = system_calls.console_width() - 2,
+            .y = system_calls.console_height() - 2,
+        };
         self.rng = .{.seed = system_calls.time()};
         system_calls.print_string("\x1bc\x1b[25l");
-        self.head = start;
+        self.head = .{.x = self.max.x / 2, .y = self.max.y / 2};
         self.draw_head(true);
         self.gen_food();
         self.score = 0;
@@ -158,8 +163,8 @@ const Game = struct {
     pub fn tick(self: *Game) usize {
         self.get_input();
         if ((self.dir == .Up and self.head.y == 0) or
-                (self.dir == .Down and self.head.y == max.y) or
-                (self.dir == .Right and self.head.x == max.x) or
+                (self.dir == .Down and self.head.y == self.max.y) or
+                (self.dir == .Right and self.head.x == self.max.x) or
                 (self.dir == .Left and self.head.x == 0)) {
             return self.game_over();
         }

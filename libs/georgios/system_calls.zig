@@ -391,3 +391,21 @@ pub fn overflow_kernel_stack() callconv(.Inline) void {
         [syscall_number] "{eax}" (@as(u32, 20)),
         );
 }
+
+pub fn console_width() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 21)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub fn console_height() callconv(.Inline) u32 {
+    var rv: u32 = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 22)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
