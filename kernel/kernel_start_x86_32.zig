@@ -60,9 +60,9 @@ const Multiboot2Header = packed struct {
             kind: u16 = tag_kind_framebuffer,
             flags: u16 = tag_flag_must_understand,
             size: u32 = @sizeOf(@This()),
-            width: u32 = 1024,
-            height: u32 = 768,
-            depth: u32 = 32,
+            width: u32 = 800,
+            height: u32 = 600,
+            depth: u32 = 24,
         };
 
         info_request_tag: InfoRequestTag = InfoRequestTag{},
