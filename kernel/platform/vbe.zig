@@ -12,17 +12,18 @@ const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
 const putil = @import("util.zig");
 const bios_int = @import("bios_int.zig");
+const vbe_console = @import("vbe_console.zig");
 
 const kernel = @import("root").kernel;
 const print = kernel.print;
 const kmemory = kernel.memory;
 const Range = kmemory.Range;
-const font = kernel.font;
+pub const font = kernel.font;
 
 // TODO Make these not fixed
 const find_width = 800;
 const find_height = 600;
-const find_bpp = 32;
+const find_bpp = 24;
 
 const RealModePtr = packed struct {
     offset: u16,
@@ -138,7 +139,7 @@ fn draw_pixel_bgr(x: u32, y: u32, color: u32) callconv(.Inline) void {
     }
 }
 
-fn draw_glyph(x: u32, y: u32, c: u8, color: u32) void {
+pub fn draw_glyph(x: u32, y: u32, c: u8, fg_color: u32, bg_color: ?u32) void {
     var xi: usize = 0;
     var yi: usize = 0;
     const glyph = font.bitmaps[c - ' '];
@@ -146,7 +147,9 @@ fn draw_glyph(x: u32, y: u32, c: u8, color: u32) void {
         while (xi < font.width) {
             const o = (glyph[yi][xi / 8] << @intCast(u3, xi % 8)) & 0x80 != 0;
             if (o) {
-                draw_pixel(x + xi, y + yi, color);
+                draw_pixel(x + xi, y + yi, fg_color);
+            } else if (bg_color) |bgc| {
+                draw_pixel(x + xi, y + yi, bgc);
             }
             xi += 1;
         }
@@ -155,18 +158,18 @@ fn draw_glyph(x: u32, y: u32, c: u8, color: u32) void {
     }
 }
 
-const Point = struct {
+pub const Point = struct {
     x: u32,
     y: u32,
 };
 
-fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
+pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
     var x_offset = x;
     var y_offset = y;
     var max_x = x;
     for (s) |c| {
         if (c >= ' ' and c <= '~') {
-            draw_glyph(x_offset, y_offset, c, color);
+            draw_glyph(x_offset, y_offset, c, color, null);
             x_offset += font.width;
             if (x_offset > max_x) {
                 max_x = x_offset;
@@ -180,12 +183,12 @@ fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
     return Point{.x = max_x, .y = y_offset + font.height};
 }
 
-fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
+pub fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
     var x_offset = start.x;
     var y_offset = start.y;
     for (s) |c| {
         if (c >= ' ' and c <= '~') {
-            draw_glyph(x_offset, y_offset, c, color);
+            draw_glyph(x_offset, y_offset, c, color, null);
             const next_offset = x_offset + font.width;
             if (next_offset >= mode.width) {
                 y_offset += font.height;
@@ -201,7 +204,7 @@ fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
     return Point{.x = x_offset, .y = y_offset};
 }
 
-fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
+pub fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
     const dx = x2 - x1;
     const dy = y2 - y1;
     if (dx > 0) {
@@ -219,7 +222,7 @@ fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
     }
 }
 
-fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
+pub fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
     const x2 = x + w;
     const y2 = y + h;
     draw_line(x, y, x2, y, color);
@@ -228,7 +231,7 @@ fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
     draw_line(x, y2, x2, y2, color);
 }
 
-fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
+pub fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
     var xi: u32 = 0;
     var yi: u32 = 0;
     const pixels = std.mem.bytesAsSlice(u32, data);
@@ -247,11 +250,17 @@ var buffer_clean: bool = false;
 var video_memory: []u8 = undefined;
 var bytes_per_pixel: u32 = undefined;
 
-fn fill_buffer(color: u32) void {
-    const color64 = (@as(u64, color) << 32) + color;
-    const b = Range.from_bytes(buffer).to_slice(u64);
-    for (b) |*p| {
-        p.* = color64;
+pub fn fill_buffer(color: u32) void {
+    if (bytes_per_pixel == 32) {
+        const color64 = (@as(u64, color) << 32) + color;
+        const b = Range.from_bytes(buffer).to_slice(u64);
+        for (b) |*p| {
+            p.* = color64;
+        }
+    } else {
+        for (buffer) |*byte, i| {
+            byte.* = @truncate(u8, color >> ((@truncate(u5, i) % 3)));
+        }
     }
     buffer_clean = false;
 }
@@ -383,13 +392,13 @@ pub fn init() void {
         print.format("{}\n", .{info});
         print.format("{}\n", .{mode});
 
-        if (mode.bpp != 32) {
-            @panic("bpp is not 32bit");
-        }
+        // TODO
+        // if (mode.bpp != 32 and mode.bpp != 16) {
+        //     @panic("bpp is not 32 bits or 16 bits");
+        // }
         bytes_per_pixel = mode.bpp / 8;
 
-        const video_memory_size =
-            @intCast(usize, @as(u64, mode.width) * @as(u64, mode.height) * bytes_per_pixel);
+        const video_memory_size = @as(usize, mode.height) * @as(usize, mode.pitch);
 
         // TODO: Zig Bug? If catch is taken away Zig 0.5 fails to reject not
         // handling the error return. LLVM catches the mistake instead.
@@ -397,12 +406,12 @@ pub fn init() void {
         buffer = kernel.memory_mgr.big_alloc.alloc_array(u8, video_memory_size) catch {
             @panic("Couldn't alloc VBE Buffer");
         };
-        const video_memory_range = kernel.memory_mgr.platform_memory.get_unused_kernel_space(
+        const video_memory_range = kernel.memory_mgr.impl.get_unused_kernel_space(
                 video_memory_size) catch {
             @panic("Couldn't Reserve VBE Buffer");
         };
         video_memory = @intToPtr([*]u8, video_memory_range.start)[0..video_memory_size];
-        kernel.memory_mgr.platform_memory.map(
+        kernel.memory_mgr.impl.map(
                 video_memory_range, mode.framebuffer, false) catch {
             @panic("Couldn't map VBE Buffer");
         };
@@ -418,6 +427,9 @@ pub fn init() void {
             _ = draw_string(x, y, " Georgios ", 0x181a1b);
             flush_buffer();
         }
+
+        vbe_console.init(mode.width, mode.height);
+        kernel.console = &vbe_console.console;
     } else {
         print.string(" - Could not init VBE graphics\n");
     }
