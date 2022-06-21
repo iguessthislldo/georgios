@@ -91,7 +91,7 @@ fn console_write(file: *io.File, from: []const u8) io.FileError!usize {
     _ = file;
     for (from) |value| {
         serial_log.print_char(value);
-        cga_console.print_char(value);
+        kernel.console.print(value);
     }
     return from.len;
 }
@@ -114,8 +114,9 @@ pub fn init() !void {
     // Finish Setup of Console Logging
     serial_log.init();
     cga_console.init();
-    kernel.console.write_impl = console_write;
-    kernel.console.read_impl = console_read;
+    kernel.console = &cga_console.console;
+    kernel.console_file.write_impl = console_write;
+    kernel.console_file.read_impl = console_read;
 
     // Setup Basic CPU Utilities
     segments.init();

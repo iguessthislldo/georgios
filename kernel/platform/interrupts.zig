@@ -14,7 +14,6 @@ const putil = @import("util.zig");
 // const segments = @import("segments.zig");
 // const kernel_code_selector = segments.kernel_code_selector;
 // const user_code_selector = segments.user_code_selector;
-const cga_console = @import("cga_console.zig");
 const segments = @import("segments.zig");
 const ps2 = @import("ps2.zig");
 const system_calls = @import("system_calls.zig");
@@ -108,11 +107,10 @@ pub const user_flags: u8 = kernel_flags | (3 << 5);
 pub fn PanicMessage(comptime StackType: type) type {
     return struct {
         pub fn show(interrupt_number: u32, interrupt_stack: *const StackType) void {
-            const Color = cga_console.Color;
-            cga_console.reset();
-            cga_console.show_cursor(false);
-            cga_console.set_colors(Color.Black, Color.Red);
-            cga_console.fill_screen(' ');
+            kernel.console.reset_terminal();
+            kernel.console.show_cursor(false);
+            kernel.console.set_hex_colors(.Black, .Red);
+            kernel.console.clear_screen();
             const has_ec = StackType.has_error_code;
             const ec = interrupt_stack.error_code;
             print.format(
