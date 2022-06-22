@@ -9,6 +9,7 @@ const kthreading = kernel.threading;
 
 const ps2 = @import("ps2.zig");
 const interrupts = @import("interrupts.zig");
+const vbe = @import("vbe.zig");
 
 pub const interrupt_number: u8 = 100;
 
@@ -273,6 +274,26 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         22 => {
             const r = @intToPtr(*u32, arg1);
             r.* = kernel.console.height;
+        },
+
+        // SYSCALL: vbe_res() ?utils.Point
+        23 => {
+            const rv = @intToPtr(*?utils.Point, arg1);
+            rv.* = vbe.get_res();
+        },
+
+        // SYSCALL: vbe_draw_raw_image_chunk(&data: []const u8, w: u32, &pos: utils.Point, &last: utils.Point) void
+        24 => {
+            const data = @intToPtr(*[]const u8, arg1).*;
+            const width = arg2;
+            const pos = @intToPtr(*utils.Point, arg3);
+            const last = @intToPtr(*utils.Point, arg4);
+            vbe.draw_raw_image_chunk(data, width, pos, last);
+        },
+
+        // SYSCALL: vbe_flush_buffer() void
+        25 => {
+            vbe.flush_buffer();
         },
 
         else => @panic("Invalid System Call"),

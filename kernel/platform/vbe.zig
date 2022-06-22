@@ -7,6 +7,7 @@ const std = @import("std");
 const build_options = @import("build_options");
 
 const utils = @import("utils");
+const Point = utils.Point;
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
@@ -115,6 +116,10 @@ var info: Info = undefined;
 var mode: Mode = undefined;
 var mode_id: ?u16 = null;
 
+pub fn get_res() ?Point {
+    return if (vbe_setup) .{.x = mode.width, .y = mode.height} else null;
+}
+
 fn video_memory_offset(x: u32, y: u32) callconv(.Inline) u32 {
     return y * mode.pitch + x * bytes_per_pixel;
 }
@@ -157,11 +162,6 @@ pub fn draw_glyph(x: u32, y: u32, c: u8, fg_color: u32, bg_color: ?u32) void {
         yi += 1;
     }
 }
-
-pub const Point = struct {
-    x: u32,
-    y: u32,
-};
 
 pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
     var x_offset = x;
@@ -231,18 +231,21 @@ pub fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
     draw_line(x, y2, x2, y2, color);
 }
 
-pub fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
-    var xi: u32 = 0;
-    var yi: u32 = 0;
+pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const Point, last: *Point) void {
     const pixels = std.mem.bytesAsSlice(u32, data);
     for (pixels) |px| {
-        draw_pixel_bgr(x + xi, y + yi, px);
-        xi += 1;
-        if (xi >= w) {
-            yi += 1;
-            xi = 0;
+        draw_pixel_bgr(pos.x + last.x, pos.y + last.y, px);
+        last.x += 1;
+        if (last.x >= w) {
+            last.y += 1;
+            last.x = 0;
         }
     }
+}
+
+pub fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
+    var last = Point{};
+    draw_raw_image_chunk(data, w, .{.x = x, .y = y}, &last);
 }
 
 var buffer: []u8 = undefined;
@@ -251,15 +254,26 @@ var video_memory: []u8 = undefined;
 var bytes_per_pixel: u32 = undefined;
 
 pub fn fill_buffer(color: u32) void {
-    if (bytes_per_pixel == 32) {
+    if (bytes_per_pixel == 4) {
         const color64 = (@as(u64, color) << 32) + color;
         const b = Range.from_bytes(buffer).to_slice(u64);
         for (b) |*p| {
             p.* = color64;
         }
+
     } else {
-        for (buffer) |*byte, i| {
-            byte.* = @truncate(u8, color >> ((@truncate(u5, i) % 3)));
+        // TODO: Optimize?
+        var x: u32 = 0;
+        while (x < mode.width) {
+            var y: u32 = 0;
+            while (y < mode.height) {
+                const offset = video_memory_offset(x, y);
+                buffer[offset + 2] = @truncate(u8, color);
+                buffer[offset + 1] = @truncate(u8, color >> 8);
+                buffer[offset] = @truncate(u8, color >> 16);
+                y += 1;
+            }
+            x += 1;
         }
     }
     buffer_clean = false;
@@ -287,6 +301,7 @@ const VbeFuncArgs = struct {
     di: u16 = 0,
     slow: bool = false,
 };
+
 fn vbe_func(name: []const u8, func_num: u16, args: VbeFuncArgs) bool {
     var params = bios_int.Params{
         .interrupt = 0x10,
@@ -416,13 +431,13 @@ pub fn init() void {
             @panic("Couldn't map VBE Buffer");
         };
 
-        {
+        if (false) {
             fill_buffer(0xe8e6e3);
             const w = 301;
             const h = 170;
             const x = mode.width - w - 10;
             const y = mode.height - h - 10;
-            const image align(@alignOf(u64)) = @embedFile("../../misc/dragon.img");
+            const image align(@alignOf(u64)) = @embedFile("../../root/files/dragon.img");
             draw_raw_image(image, w, x, y);
             _ = draw_string(x, y, " Georgios ", 0x181a1b);
             flush_buffer();

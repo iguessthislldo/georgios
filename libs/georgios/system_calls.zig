@@ -409,3 +409,28 @@ pub fn console_height() callconv(.Inline) u32 {
         );
     return rv;
 }
+
+pub fn vbe_res() callconv(.Inline) ?utils.Point {
+    var rv: ?utils.Point = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 23)),
+        [arg1] "{ebx}" (@ptrToInt(&rv)),
+        );
+    return rv;
+}
+
+pub fn vbe_draw_raw_image_chunk(data: []const u8, w: u32, pos: utils.Point, last: utils.Point) callconv(.Inline) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 24)),
+        [arg1] "{ebx}" (@ptrToInt(&data)),
+        [arg2] "{ecx}" (w),
+        [arg3] "{edx}" (@ptrToInt(&pos)),
+        [arg4] "{edi}" (@ptrToInt(&last)),
+        );
+}
+
+pub fn vbe_flush_buffer() callconv(.Inline) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 25)),
+        );
+}

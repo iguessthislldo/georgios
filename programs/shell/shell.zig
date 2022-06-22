@@ -11,7 +11,45 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     georgios.panic(msg, trace);
 }
 
+var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
+
 fn read_motd() void {
+    if (system_calls.vbe_res()) |res| {
+        var img = georgios.fs.open("/files/dragon.img") catch |e| {
+            print_string("shell: open img error: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return;
+        };
+
+        const img_width: u32 = 301;
+        // const img_height: u32 = 170;
+        const pos = utils.Point{.x = res.x - img_width - 10, .y = 10};
+        var last = utils.Point{};
+        var got: usize = 1;
+        while (got > 0) {
+            if (img.read(img_buffer[0..])) |g| {
+                got = g;
+            } else |e| {
+                print_string("shell: img file.read error: ");
+                print_string(@errorName(e));
+                print_string("\n");
+                got = 0;
+            }
+            if (got > 0) {
+                system_calls.vbe_draw_raw_image_chunk(img_buffer[0..got], img_width, pos, last);
+            }
+        }
+        system_calls.vbe_flush_buffer();
+
+        img.close() catch |e| {
+            print_string("shell: img file.close error: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return;
+        };
+    }
+
     var file = georgios.fs.open("/etc/motd") catch |e| {
         print_string("motd open error: ");
         print_string(@errorName(e));

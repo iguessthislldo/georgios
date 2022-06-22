@@ -320,6 +320,8 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                 what = what.split(':')[0]
             if what.startswith('&'):
                 what = '@ptrToInt(' + what + ')'
+            if arg_num >= len(syscall_regs):
+                error('System call {} has too many arguments'.format(repr(sig)))
             print('        [arg{}] "{{{}}}" ({}),'.format(
                 arg_num, syscall_regs[arg_num], what), file=f)
             return arg_num + 1

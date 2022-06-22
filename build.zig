@@ -117,6 +117,7 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("cat");
     build_program("snake");
     build_program("cksum");
+    build_program("img");
     // build_zig_program("hello-zig");
     // build_c_program("hello-c");
 }

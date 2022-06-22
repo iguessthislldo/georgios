@@ -8,7 +8,7 @@ const font = vbe.font;
 
 pub fn color_value_from_hex_color(hex_color: HexColor) u32 {
     return switch (hex_color) {
-        HexColor.White => 0x00ffffff,
+        HexColor.White => 0x00e8e6e3,
         HexColor.LightGray => 0x00D0CFCC,
         HexColor.DarkGray => 0x005E5C64,
         HexColor.Black => 0x00171421,
@@ -27,9 +27,9 @@ pub fn color_value_from_hex_color(hex_color: HexColor) u32 {
     };
 }
 
-const default_fg_color = HexColor.White;
+const default_fg_color = HexColor.Black;
 const default_fg_color_value = color_value_from_hex_color(default_fg_color);
-const default_bg_color = HexColor.Black;
+const default_bg_color = HexColor.White;
 const default_bg_color_value = color_value_from_hex_color(default_bg_color);
 
 var fg_color: HexColor = undefined;

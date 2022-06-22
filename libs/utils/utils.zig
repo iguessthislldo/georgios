@@ -836,3 +836,8 @@ pub fn ends_with(what: []const u8, postfix: []const u8) bool {
     }
     return true;
 }
+
+pub const Point = struct {
+    x: u32 = 0,
+    y: u32 = 0,
+};
