@@ -4,4 +4,5 @@ test "utils test root" {
     _ = @import("guid.zig");
     _ = @import("AnsiEscProcessor.zig");
     _ = @import("ToString.zig");
+    _ = @import("Cksum.zig");
 }

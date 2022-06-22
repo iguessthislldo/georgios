@@ -11,6 +11,8 @@ pub const Guid = @import("guid.zig");
 
 pub const ToString = @import("ToString.zig");
 
+pub const Cksum = @import("Cksum.zig");
+
 pub const Error = error {
     Unknown,
     OutOfBounds,

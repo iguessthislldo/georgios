@@ -459,7 +459,7 @@ pub const Ext2 = struct {
     fourth_level_start: usize = 0,
 
     fn get_block_address(self: *const Ext2, index: usize) io.AddressType {
-        return self.offset + index * self.block_size;
+        return self.offset + @as(u64, index) * @as(u64, self.block_size);
     }
 
     pub fn get_block_group_descriptor(self: *Ext2,
