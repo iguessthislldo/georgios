@@ -42,6 +42,7 @@ pub var device_mgr = devices.Manager{};
 pub var threading_mgr = threading.Manager{};
 
 pub var alloc: *memory.Allocator = undefined;
+pub var big_alloc: *memory.Allocator = undefined;
 pub var console: *Console = undefined;
 pub var console_file = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
@@ -71,7 +72,7 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
     var file = try filesystem.open(info.path);
     // TODO: better way to close the file!!
     defer filesystem.file_id_close(file.io_file.id.?) catch @panic("file_id_close");
-    var elf_object = try elf.Object.from_file(alloc, &file.io_file);
+    var elf_object = try elf.Object.from_file(alloc, big_alloc, &file.io_file);
     var segments = elf_object.segments.iterator();
     while (segments.next()) |segment| {
         switch (segment.what) {

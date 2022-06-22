@@ -248,6 +248,7 @@ pub const Manager = struct {
         try self.alloc_impl.init(try self.big_alloc.alloc([alloc_size]u8));
         self.alloc = &self.alloc_impl.allocator;
         kernel.alloc = self.alloc;
+        kernel.big_alloc = self.big_alloc;
     }
 
     pub fn free_pmem(self: *Manager, frame: usize) void {

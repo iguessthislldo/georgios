@@ -17,6 +17,7 @@ const Allocator = @import("memory.zig").Allocator;
 const List = @import("list.zig").List;
 
 const debug = false;
+const dump_segments = false;
 
 pub const Error = georgios.elf.Error;
 
@@ -178,13 +179,14 @@ pub const Object = struct {
     pub const Segments = List(Segment);
 
     alloc: *Allocator,
+    data_alloc: *Allocator,
     header: Header = undefined,
     section_headers: []SectionHeader = undefined,
     program_headers: []ProgramHeader = undefined,
     segments: Segments = undefined,
 
-    pub fn from_file(alloc: *Allocator, file: *io.File) !Object {
-        var object = Object{.alloc = alloc};
+    pub fn from_file(alloc: *Allocator, data_alloc: *Allocator, file: *io.File) !Object {
+        var object = Object{.alloc = alloc, .data_alloc = data_alloc};
         object.segments = Segments{.alloc = alloc};
 
         // Read Header
@@ -249,10 +251,10 @@ pub const Object = struct {
                 const nonzero = program_header.size_in_memory > 0;
                 if (nonzero and program_header.size_in_memory == program_header.size_in_file) {
                     segment.what = Segment.What{
-                        .Data = try alloc.alloc_array(u8, program_header.size_in_file)};
+                        .Data = try data_alloc.alloc_array(u8, program_header.size_in_file)};
                     _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
                     _ = try file.read_or_error(segment.what.Data);
-                    if (debug) print.dump_bytes(segment.what.Data);
+                    if (dump_segments) print.dump_bytes(segment.what.Data);
                 } else if (nonzero and program_header.size_in_file == 0) {
                     segment.what = Segment.What{
                         .UndefinedMemory = program_header.size_in_memory};
@@ -272,7 +274,7 @@ pub const Object = struct {
         try self.alloc.free_array(self.program_headers);
         var iter = self.segments.iterator();
         while (iter.next()) |*segment| {
-            try segment.teardown(self.alloc);
+            try segment.teardown(self.data_alloc);
         }
         try self.segments.clear();
     }
