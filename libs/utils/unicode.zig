@@ -84,6 +84,10 @@ pub const Utf8ToUtf32 = struct {
     allow_errors: ?u32 = '?',
     state: State = .{},
 
+    pub fn reset(self: *Utf8ToUtf32) void {
+        self.state = .{};
+    }
+
     pub fn next(self: *Utf8ToUtf32) Error![]u32 {
         var it = Utf8Iterator{.input = self.input, .state = self.state};
         var i: usize = 0;

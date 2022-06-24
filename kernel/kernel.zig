@@ -22,6 +22,7 @@ pub const Console = @import("Console.zig");
 pub var panic_message: []const u8 = "";
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+    quick_debug_ready = false; // Probably won't be able to run this anymore
     print.format("panic: {}\n", .{msg});
     platform.impl.ps2.anykey();
     panic_message = msg;
@@ -52,6 +53,7 @@ pub var filesystem: fs.Filesystem = .{};
 pub fn platform_init() !void {
     print.init(&console_file, build_options.debug_log);
     try platform.init();
+    quick_debug_ready = true;
 }
 
 pub fn init() !void {
@@ -100,6 +102,18 @@ pub fn run() !void {
     var rc_path: []const u8 = rc_buffer[0..try rc_file.io_file.read(rc_buffer[0..])];
     rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
     threading_mgr.wait_for_process(try exec(&georgios.ProcessInfo{.path = rc_path}));
+}
+
+var quick_debug_ready = false;
+
+// Run at anytime after platform init with Ctrl-Alt-Shift-D
+pub fn quick_debug() void {
+    if (!quick_debug_ready) return;
+    print.string("\nSTART QUICK DEBUG =============================================================\n");
+    print.format("{} processes {} threads\n",
+        .{threading_mgr.process_list.len(), threading_mgr.thread_list.len()});
+    // TODO: More info like memory usage
+    print.string("END QUICK DEBUG ===============================================================\n");
 }
 
 pub fn kernel_main() void {

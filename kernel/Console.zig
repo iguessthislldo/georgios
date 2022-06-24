@@ -48,7 +48,8 @@ pub fn print(self: *Self, byte: u8) void {
 
 pub fn print_utf8(self: *Self, utf8_value: u8) void {
     self.utf8_to_utf32.input = @ptrCast([*]const u8, &utf8_value)[0..1];
-    for (self.utf8_to_utf32.next() catch @panic("UTF-8 Console Failure")) |utf32_value| {
+    // TODO: Shouldn't crash the kernel just because we got an invalid UTF8 byte.
+    for (self.utf8_to_utf32.next() catch @panic("Console UTF-8 Failure")) |utf32_value| {
         self.print_utf32(utf32_value);
     }
 }

@@ -165,6 +165,10 @@ pub fn keyboard_event_occured(
         if (e.kind == .Pressed) {
             if (key_to_char(e.key)) |c| {
                 e.char = c;
+                if (modifiers.alt_is_pressed() and modifiers.control_is_pressed() and c == 'D') {
+                    kernel.quick_debug();
+                    return;
+                }
             }
         }
         buffer.push(e.*);
