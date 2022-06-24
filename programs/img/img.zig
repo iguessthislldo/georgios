@@ -12,6 +12,11 @@ const print_hex = system_calls.print_hex;
 var buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
 pub fn main() void {
+    if (system_calls.vbe_res() == null) {
+        print_string("img requires VBE graphics mode\n");
+        return;
+    }
+
     if (georgios.proc_info.args.len != 2) {
         print_string("img: requires image path and image width\n");
         return;
@@ -31,10 +36,12 @@ pub fn main() void {
 
     // Reset Console
     system_calls.print_string("\x1bc");
+    system_calls.print_string("Loading Image...");
 
-    const pos = utils.Point{.x = 10, .y = 10};
+    const pos = utils.Point{.x = 10, .y = 20};
     var last = utils.Point{};
     var got: usize = 1;
+    var success = true;
     while (got > 0) {
         if (file.read(buffer[0..])) |g| {
             got = g;
@@ -43,6 +50,7 @@ pub fn main() void {
             print_string(@errorName(e));
             print_string("\n");
             got = 0;
+            success = false;
         }
         if (got > 0) {
             system_calls.vbe_draw_raw_image_chunk(buffer[0..got], width, pos, last);
@@ -50,17 +58,22 @@ pub fn main() void {
     }
     system_calls.vbe_flush_buffer();
 
-    // Wait for ESC key to be pressed.
-    while (true) {
-        if (system_calls.get_key(.Blocking)) |key_event| {
-            if (key_event.kind == .Pressed and key_event.unshifted_key == .Key_Escape) {
-                break;
+    if (success) {
+        system_calls.print_string("\x1b[0;0HPress the ESC key to exit...");
+
+        // Wait for ESC key to be pressed.
+        while (true) {
+            if (system_calls.get_key(.Blocking)) |key_event| {
+                if (key_event.kind == .Pressed and key_event.unshifted_key == .Key_Escape) {
+                    break;
+                }
             }
         }
+
+        // Reset Console
+        system_calls.print_string("\x1bc");
     }
 
-    // Reset Console
-    system_calls.print_string("\x1bc");
 
     file.close() catch |e| {
         print_string("img: file.close error: ");
