@@ -1,4 +1,5 @@
 const memory = @import("memory.zig");
+const print = @import("print.zig");
 
 /// Map implemented using a simple binary tree.
 ///
@@ -133,18 +134,18 @@ pub fn Map(comptime KeyType: type, comptime ValueType: type,
 
         pub fn dump_node(self: *Self, node: ?*Node) void {
             if (node == null) {
-                @import("std").debug.warn("null");
+                print.string("null");
             } else {
-                @import("std").debug.warn("({} (", node.?.key);
+                print.format("({} (", .{node.?.key});
                 if (node.?.parent == null) {
-                    @import("std").debug.warn("null): ");
+                    print.string("null): ");
                 } else {
-                    @import("std").debug.warn("{}): ", node.?.parent.?.key);
+                    print.format("{}): ", .{node.?.parent.?.key});
                 }
                 self.dump_node(node.?.left);
-                @import("std").debug.warn(", ");
+                print.string(", ");
                 self.dump_node(node.?.right);
-                @import("std").debug.warn(")");
+                print.string(")");
             }
         }
 

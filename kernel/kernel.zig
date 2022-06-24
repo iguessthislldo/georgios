@@ -59,8 +59,9 @@ pub fn init() !void {
 
     // Filesystem
     if (raw_block_store) |raw| {
+        block_store.use_direct = build_options.direct_disk;
         block_store.init(alloc, raw, 128);
-        try filesystem.init(alloc, &block_store.block_store);
+        try filesystem.init(alloc, block_store.block_store);
     } else {
         print.string(" - No Disk Found\n");
     }

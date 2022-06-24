@@ -56,6 +56,9 @@ pub fn build(builder: *std.build.Builder) void {
     const wait_for_anykey = b.option(bool, "wait_for_anykey",
         \\Wait for key press at important events
         ) orelse false;
+    const direct_disk = b.option(bool, "direct_disk",
+        \\Do not cache disk operations, use disk directly.
+        ) orelse false;
 
     target = b.standardTargetOptions(.{
         .default_target = std.zig.CrossTarget.parse(.{
@@ -94,6 +97,7 @@ pub fn build(builder: *std.build.Builder) void {
     kernel_options.addOption(bool, "vbe", vbe);
     kernel_options.addOption(bool, "debug_log", debug_log);
     kernel_options.addOption(bool, "wait_for_anykey", wait_for_anykey);
+    kernel_options.addOption(bool, "direct_disk", direct_disk);
     kernel_options.addOption(bool, "is_kernel", true);
     kernel.addOptions("build_options", kernel_options);
     // Packages
@@ -118,6 +122,7 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("snake");
     build_program("cksum");
     build_program("img");
+    build_program("check-test-file");
     // build_zig_program("hello-zig");
     // build_c_program("hello-c");
 }

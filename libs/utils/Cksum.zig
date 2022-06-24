@@ -1,7 +1,18 @@
+// Implementation of the POSIX cksum program, which uses a CRC-32 derived
+// algorithm.
+//
+// For more info see:
+//   https://en.wikipedia.org/wiki/Cyclic_redundancy_check
+//   https://rosettacode.org/wiki/CRC-32#C
+//   https://pubs.opengroup.org/onlinepubs/9699919799/utilities/cksum.html
+//      The source of lookup_table and the basis of the cksum-specific parts of
+//      the algorithm.
+
 const Self = @This();
 
 const std = @import("std");
 
+// TODO: Generate this at compile-time or maybe runtime?
 const lookup_table = [256]u32{
     0x00000000,
     0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc, 0x17c56b6b,
@@ -86,8 +97,8 @@ pub fn check(data: []const u8) u32 {
     return cksum.get_result();
 }
 
-const test_sum: u32 = 2382472371;
 const test_string = "The quick brown fox jumps over the lazy dog\n";
+const test_sum: u32 = 2382472371; // From running GNU cksum on Linux
 
 test "Cksum.sum_data" {
     var cksum = Self{};

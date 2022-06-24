@@ -1,10 +1,12 @@
+// Implementation of POSIX cksum. See Cksum module for details.
+
 const georgios = @import("georgios");
 comptime {_ = georgios;}
 const Cksum = georgios.utils.Cksum;
 const system_calls = georgios.system_calls;
 const print_string = system_calls.print_string;
 
-var buffer: [128]u8 = undefined;
+var buffer: [2048]u8 = undefined;
 
 fn print_result(filename: []const u8, cksum: *Cksum) !void {
     var ts = georgios.utils.ToString{.buffer = buffer[0..]};

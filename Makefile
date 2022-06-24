@@ -27,6 +27,9 @@ endif
 ifdef wait_for_anykey
 	zig_build_args+="-Dwait_for_anykey=$(wait_for_anykey)"
 endif
+ifdef direct_disk
+	zig_build_args+="-Ddirect_disk=$(direct_disk)"
+endif
 
 all: $(ISO) $(DISK) $(USBDRIVE)
 

@@ -202,6 +202,7 @@ const Controller = struct {
         selected: bool = false,
         alloc: *memory.Allocator = undefined,
         block_store_interface: io.BlockStore = undefined,
+        sector_count: u64 = 0,
 
         fn get_channel(self: *Device) *Channel {
             return if (self.id == .Master) @fieldParentPtr(Channel, "master", self)
@@ -326,9 +327,15 @@ const Controller = struct {
             self.block_store_interface.block_size = Sector.size;
             self.block_store_interface.read_block_impl = Device.read_block;
             self.block_store_interface.free_block_impl = Device.free_block;
+            self.sector_count = identity.sector_count;
         }
 
         pub fn read_impl(self: *Device, address: u64, data: []u8) Error!void {
+            if (address >= self.sector_count) {
+                print.format("ATA: read address {} is too large for {} sector device\n",
+                    .{address, self.sector_count});
+                return Error.OperationError;
+            }
             try self.select();
             const channel = self.get_channel();
             try self.wait_for_drive();
