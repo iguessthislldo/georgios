@@ -134,8 +134,13 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             };
         },
 
-        // SYSCALL: print_hex(value: u32) void
-        7 => print.hex(arg1),
+        // SYSCALL: print_uint(value: u32, base: u8) void
+        7 => {
+            switch (arg2) {
+                16 => print.hex(arg1),
+                else => print.uint(arg1),
+            }
+        },
 
         // SYSCALL: file_open(&path: []const u8) georgios.fs.Error!georgios.io.File.Id
         8 => {

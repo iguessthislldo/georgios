@@ -7,7 +7,6 @@ comptime {_ = georgios;}
 const utils = georgios.utils;
 const system_calls = georgios.system_calls;
 const print_string = system_calls.print_string;
-const print_hex = system_calls.print_hex;
 
 var buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 

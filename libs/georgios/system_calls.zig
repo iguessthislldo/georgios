@@ -264,10 +264,11 @@ pub fn next_dir_entry(iter: *georgios.DirEntry) callconv(.Inline) bool {
     return rv;
 }
 
-pub fn print_hex(value: u32) callconv(.Inline) void {
+pub fn print_uint(value: u32, base: u8) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 7)),
         [arg1] "{ebx}" (value),
+        [arg2] "{ecx}" (base),
         );
 }
 

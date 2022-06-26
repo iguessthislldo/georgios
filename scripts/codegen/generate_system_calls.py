@@ -68,18 +68,21 @@ if not need_to_generate:
 
 # Parse the System Call Implementations =======================================
 
-int_num_re = re.compile(r'\s*pub const interrupt_number: u8 = (\d+);$')
-syscall_sig_re = re.compile(r'\s*// SYSCALL: (.*)')
-syscall_num_re = re.compile(r'\s*(\d+) => ')
-syscall_arg_re = re.compile(r'\s*const arg(\d+) = interrupt_stack.(\w+);')
-import_re = re.compile(r'\s*// IMPORT: ([^ ]+) "([^" ]+)"')
+int_num_re = re.compile(r'pub const interrupt_number: u8 = (\d+);')
+indent = ' ' * 4
+syscall_arg_re = re.compile(indent + r'const arg(\d+) = interrupt_stack.(\w+);.*')
+indent += ' ' * 4
+syscall_sig_re = re.compile(indent + r'// SYSCALL: (.*)')
+import_re = re.compile(indent + r'// IMPORT: ([^ ]+) "([^" ]+)"')
+syscall_num_re = re.compile(indent + r'(\d+) => .*')
 
 with impl_file.open() as f:
     for i, line in enumerate(f):
+        line = line.rstrip()
         lineno = i + 1
 
         # System Call Interrupt Number
-        m = int_num_re.match(line)
+        m = int_num_re.fullmatch(line)
         if m:
             if syscall:
                 error("Interrupt Number in syscall on line", lineno)
@@ -90,7 +93,7 @@ with impl_file.open() as f:
             continue
 
         # Registers Available for Return and Arguments
-        m = syscall_arg_re.match(line)
+        m = syscall_arg_re.fullmatch(line)
         if m:
             if syscall:
                 error("Syscall register in syscall on line", lineno)
@@ -98,7 +101,7 @@ with impl_file.open() as f:
             continue
 
         # System Call Pseudo-Signature (see implementation file for details)
-        m = syscall_sig_re.match(line)
+        m = syscall_sig_re.fullmatch(line)
         if m:
             if syscall:
                 error("Syscall signature", repr(syscall),
@@ -107,7 +110,7 @@ with impl_file.open() as f:
             continue
 
         # Import Needed for the System Call
-        m = import_re.match(line)
+        m = import_re.fullmatch(line)
         if m:
             if syscall is None:
                 error("Import without a syscall signature on line", lineno)
@@ -115,7 +118,7 @@ with impl_file.open() as f:
             continue
 
         # System Call Number, Concludes System Call Info
-        m = syscall_num_re.match(line)
+        m = syscall_num_re.fullmatch(line)
         if m:
             if syscall is None:
                 error("Syscall number without a syscall signature on line", lineno)
