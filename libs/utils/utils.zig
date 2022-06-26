@@ -4,14 +4,11 @@ const builtin = @import("builtin");
 const unicode = @import("unicode.zig");
 pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
 pub const UnicodeError = unicode.Error;
-
 pub const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
-
 pub const Guid = @import("guid.zig");
-
 pub const ToString = @import("ToString.zig");
-
 pub const Cksum = @import("Cksum.zig");
+pub const WordIterator = @import("WordIterator.zig");
 
 pub const Error = error {
     Unknown,
@@ -206,7 +203,7 @@ pub fn memory_compare(a: []const u8, b: []const u8) callconv(.Inline) bool {
 
 /// Copy contents from `source` to `destination`.
 ///
-/// If `source.len != destination.len` then the copy is truncated.
+/// If `source.len > destination.len` then the copy is truncated.
 pub fn memory_copy_truncate(destination: []u8, source: []const u8) callconv(.Inline) usize {
     const size = min(usize, destination.len, source.len);
     for (destination[0..size]) |*ptr, i| {

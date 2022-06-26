@@ -104,27 +104,30 @@ fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 
 }
 
 var cwd_buffer: [128]u8 = undefined;
+var command_parts: [32][]const u8 = undefined;
+const max_command_len = 128;
+var command_buffer: [max_command_len]u8 = undefined;
+var processed_command_buffer: [max_command_len]u8 = undefined;
 
 fn run_command(command: []const u8) bool {
-    var command_parts: [128][]const u8 = undefined;
+    // Turn command into command_parts
+    var it = georgios.utils.WordIterator{
+        .quote = '\'', .input = command,
+        .buffer = processed_command_buffer[0..],
+    };
+    var processed_command_buffer_offset: usize = 0;
     var command_part_count: usize = 0;
-    var command_part_len: usize = 0;
-    for (command) |c, i| {
-        if (c == ' ') {
-            command_parts[command_part_count] = command[i - command_part_len..i];
-            command_part_count += 1;
-            command_part_len = 0;
-        } else {
-            command_part_len += 1;
-        }
-    }
-    if (command_part_len > 0) {
-        command_parts[command_part_count] = command[command.len - command_part_len..];
+    while (it.next() catch @panic("command iter failure")) |part| {
+        command_parts[command_part_count] = part;
         command_part_count += 1;
-    } else {
+        processed_command_buffer_offset += part.len;
+        it.buffer = processed_command_buffer[processed_command_buffer_offset..];
+    }
+    if (command_part_count == 0) {
         return false;
     }
 
+    // Process command_parts
     if (utils.memory_compare(command_parts[0], "exit")) {
         return true;
     } else if (utils.memory_compare(command_parts[0], "reset")) {
@@ -192,7 +195,6 @@ pub fn main() void {
     if (system_calls.get_process_id() == 0) {
         read_motd();
     }
-    var buffer: [128]u8 = undefined;
     var got: usize = 0;
     var running = true;
     while (running) {
@@ -230,10 +232,10 @@ pub fn main() void {
                     } else {
                         print = false;
                     }
-                } else if ((got + 1) == buffer.len) {
+                } else if ((got + 1) == command_buffer.len) {
                     print = false;
                 } else {
-                    buffer[got] = c;
+                    command_buffer[got] = c;
                     got += 1;
                 }
                 if (print) {
@@ -242,7 +244,7 @@ pub fn main() void {
             }
         }
         if (got > 0) {
-            if (run_command(buffer[0..got])) {
+            if (run_command(command_buffer[0..got])) {
                 break; // exit was run
             }
 

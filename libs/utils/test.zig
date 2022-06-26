@@ -5,4 +5,5 @@ test "utils test root" {
     _ = @import("AnsiEscProcessor.zig");
     _ = @import("ToString.zig");
     _ = @import("Cksum.zig");
+    _ = @import("WordIterator.zig");
 }
