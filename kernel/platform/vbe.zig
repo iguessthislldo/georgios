@@ -7,7 +7,8 @@ const std = @import("std");
 const build_options = @import("build_options");
 
 const utils = @import("utils");
-const Point = utils.Point;
+const U32Point = utils.U32Point;
+const U32Box = utils.Box(u32, u32);
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
@@ -116,7 +117,7 @@ var info: Info = undefined;
 var mode: Mode = undefined;
 var mode_id: ?u16 = null;
 
-pub fn get_res() ?Point {
+pub fn get_res() ?U32Point {
     return if (vbe_setup) .{.x = mode.width, .y = mode.height} else null;
 }
 
@@ -163,7 +164,7 @@ pub fn draw_glyph(x: u32, y: u32, c: u8, fg_color: u32, bg_color: ?u32) void {
     }
 }
 
-pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
+pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) U32Point {
     var x_offset = x;
     var y_offset = y;
     var max_x = x;
@@ -180,10 +181,10 @@ pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) Point {
             x_offset = x;
         }
     }
-    return Point{.x = max_x, .y = y_offset + font.height};
+    return U32Point{.x = max_x, .y = y_offset + font.height};
 }
 
-pub fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
+pub fn draw_string_continue(start: U32Point, s: []const u8, color: u32) U32Point {
     var x_offset = start.x;
     var y_offset = start.y;
     for (s) |c| {
@@ -201,7 +202,7 @@ pub fn draw_string_continue(start: Point, s: []const u8, color: u32) Point {
             x_offset = 0;
         }
     }
-    return Point{.x = x_offset, .y = y_offset};
+    return U32Point{.x = x_offset, .y = y_offset};
 }
 
 pub fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
@@ -231,7 +232,7 @@ pub fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
     draw_line(x, y2, x2, y2, color);
 }
 
-pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const Point, last: *Point) void {
+pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const U32Point, last: *U32Point) void {
     const pixels = std.mem.bytesAsSlice(u32, data);
     for (pixels) |px| {
         draw_pixel_bgr(pos.x + last.x, pos.y + last.y, px);
@@ -244,7 +245,7 @@ pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const Point, last: *
 }
 
 pub fn draw_raw_image(data: []const u8, w: u32, x: u32, y: u32) void {
-    var last = Point{};
+    var last = U32Point{};
     draw_raw_image_chunk(data, w, .{.x = x, .y = y}, &last);
 }
 

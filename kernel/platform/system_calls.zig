@@ -281,18 +281,18 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             r.* = kernel.console.height;
         },
 
-        // SYSCALL: vbe_res() ?utils.Point
+        // SYSCALL: vbe_res() ?utils.U32Point
         23 => {
-            const rv = @intToPtr(*?utils.Point, arg1);
+            const rv = @intToPtr(*?utils.U32Point, arg1);
             rv.* = vbe.get_res();
         },
 
-        // SYSCALL: vbe_draw_raw_image_chunk(&data: []const u8, w: u32, &pos: utils.Point, &last: utils.Point) void
+        // SYSCALL: vbe_draw_raw_image_chunk(&data: []const u8, w: u32, &pos: utils.U32Point, &last: utils.U32Point) void
         24 => {
             const data = @intToPtr(*[]const u8, arg1).*;
             const width = arg2;
-            const pos = @intToPtr(*utils.Point, arg3);
-            const last = @intToPtr(*utils.Point, arg4);
+            const pos = @intToPtr(*utils.U32Point, arg3);
+            const last = @intToPtr(*utils.U32Point, arg4);
             vbe.draw_raw_image_chunk(data, width, pos, last);
         },
 

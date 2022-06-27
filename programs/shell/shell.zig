@@ -24,8 +24,8 @@ fn read_motd() void {
 
         const img_width: u32 = 301;
         // const img_height: u32 = 170;
-        const pos = utils.Point{.x = res.x - img_width - 10, .y = 10};
-        var last = utils.Point{};
+        const pos = utils.U32Point{.x = res.x - img_width - 10, .y = 10};
+        var last = utils.U32Point{};
         var got: usize = 1;
         while (got > 0) {
             if (img.read(img_buffer[0..])) |g| {

@@ -39,6 +39,10 @@ pub fn string(self: *ToString, src: []const u8) Error!void {
     self.got += try utils.memory_copy_error(self.buffer[self.got..], src);
 }
 
+pub fn string_truncate(self: *ToString, src: []const u8) void {
+    self.got += utils.memory_copy_truncate(self.buffer[self.got..], src);
+}
+
 pub fn cstring(self: *ToString, cstr: [*:0]const u8) Error!void {
     try self.string(utils.cstring_to_string(cstr));
 }

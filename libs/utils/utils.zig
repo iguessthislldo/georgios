@@ -834,7 +834,41 @@ pub fn ends_with(what: []const u8, postfix: []const u8) bool {
     return true;
 }
 
-pub const Point = struct {
-    x: u32 = 0,
-    y: u32 = 0,
-};
+pub fn Point(comptime TheNum: type) type {
+    return struct {
+        pub const Num = TheNum;
+
+        x: Num = 0,
+        y: Num = 0,
+    };
+}
+
+pub const U32Point = Point(u32);
+
+pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
+    return struct {
+        pub const Pos = Point(PosNum);
+        pub const Size = Point(SizeNum);
+
+        pos: Pos = .{},
+        size: Size = .{},
+    };
+}
+
+pub fn FixedString(comptime the_max_len: comptime_int) type {
+    return struct {
+        const Self = @This();
+
+        pub const max_len: usize = the_max_len;
+
+        _buffer: [the_max_len]u8 = undefined,
+        _ts: ?ToString = undefined,
+
+        pub fn ts(self: *Self) *ToString {
+            if (self._ts == null) {
+                self._ts = .{.buffer = self._buffer[0..]};
+            }
+            return &self._ts.?;
+        }
+    };
+}

@@ -37,8 +37,8 @@ pub fn main() void {
     system_calls.print_string("\x1bc");
     system_calls.print_string("Loading Image...");
 
-    const pos = utils.Point{.x = 10, .y = 20};
-    var last = utils.Point{};
+    const pos = utils.U32Point{.x = 10, .y = 20};
+    var last = utils.U32Point{};
     var got: usize = 1;
     var success = true;
     while (got > 0) {
