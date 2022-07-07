@@ -138,6 +138,32 @@ pub const Allocator = struct {
             "Allocator.free_range: {}: {:a}\n", .{range.size, range.start});
         try self.free_impl(self, range.to_slice(u8), 1);
     }
+
+    fn std_alloc(self: *Allocator, n: usize, ptr_align: u29, len_align: u29, ra: usize) ![]u8 {
+        _ = len_align;
+        _ = ra;
+        return self.alloc_impl(self, n, ptr_align) catch return std.mem.Allocator.Error.OutOfMemory;
+    }
+
+    fn std_resize(self: *Allocator, buf: []u8, buf_align: u29, new_len: usize, len_align: u29,
+            ret_addr: usize) ?usize {
+        _ = self;
+        _ = buf;
+        _ = buf_align;
+        _ = new_len;
+        _ = len_align;
+        _ = ret_addr;
+        @panic("Allocator.std_resize called!");
+    }
+
+    fn std_free(self: *Allocator, buf: []u8, buf_align: u29, ret_addr: usize) void {
+        _ = ret_addr;
+        self.free_impl(self, buf, buf_align) catch return;
+    }
+
+    pub fn std_allocator(self: *Allocator) std.mem.Allocator {
+        return std.mem.Allocator.init(self, std_alloc, std_resize, std_free);
+    }
 };
 
 pub const UnitTestAllocator = struct {
