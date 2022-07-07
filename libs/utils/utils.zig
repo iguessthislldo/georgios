@@ -9,6 +9,7 @@ pub const Guid = @import("guid.zig");
 pub const ToString = @import("ToString.zig");
 pub const Cksum = @import("Cksum.zig");
 pub const WordIterator = @import("WordIterator.zig");
+pub const Bdf = @import("Bdf.zig");
 
 pub const Error = error {
     Unknown,
@@ -862,7 +863,14 @@ pub fn FixedString(comptime the_max_len: comptime_int) type {
         pub const max_len: usize = the_max_len;
 
         _buffer: [the_max_len]u8 = undefined,
-        _ts: ?ToString = undefined,
+        _ts: ?ToString = null,
+
+        fn get(self: *const Self) []u8 {
+            if (self._ts) |to_string| {
+                return to_string.get();
+            }
+            return self.buffer[0..0];
+        }
 
         pub fn ts(self: *Self) *ToString {
             if (self._ts == null) {

@@ -1,7 +1,6 @@
-// Parser and renderer for Bitmap Distribution Format (BDF) monospace fonts.
-// It skips a good chunk of BDF spec details because they don't matter for
-// monospace fonts or at least didn't seem to matter for the monospace fonts
-// I've seen so far.
+// Parser for Bitmap Distribution Format (BDF) monospace fonts. It skips a good
+// chunk of BDF spec details because they don't matter for monospace fonts or
+// at least didn't seem to matter for the monospace fonts I've seen so far.
 //
 // For reference:
 //   https://en.wikipedia.org/wiki/Glyph_Bitmap_Distribution_Format
@@ -13,7 +12,6 @@ const std = @import("std");
 
 const utils = @import("utils.zig");
 const WordIterator = utils.WordIterator;
-const Point = utils.Point;
 const Box = utils.Box;
 const streq = utils.memory_compare;
 
@@ -30,64 +28,121 @@ pub const Error = error {
     BdfBufferTooSmall,
 } || utils.Error;
 
-pub const filled_pixel: u32 = 0xffffffff;
-pub const empty_pixel: u32 = 0x00000000;
+fn get_row_size(width: usize) usize {
+    return utils.align_up(width, 8) / 8;
+}
 
-pub const Font = struct {
-    name: utils.FixedString(64) = .{}, // FONT_NAME Property
-    bounds: Bounds = .{}, // FONTBOUNDINGBOX
-    glyph_count: u32 = 0, // CHARS
+pub fn get_glyph_size(size: Bounds.Size) usize {
+    return get_row_size(size.x) * size.y;
+}
 
-    pub fn glyph_size(self: *const Font) usize {
-        return @as(usize, self.bounds.size.x) * self.bounds.size.y;
+fn get_byte_shift(from_left: usize) u3 {
+    return @truncate(u3, 7 - from_left % 8);
+}
+
+fn set_bit(byte: *u8, from_left: usize, value: bool) void {
+    const bit = @as(u8, 1) << get_byte_shift(from_left);
+    if (value) {
+        byte.* = byte.* | bit;
+    } else {
+        byte.* = byte.* & ~bit;
     }
+}
 
-    pub fn required_buffer_size(self: *const Font) usize {
-        return @as(usize, self.glyph_count) * self.glyph_size();
-    }
-};
+fn get_bit(byte: u8, from_left: usize) bool {
+    return (byte >> get_byte_shift(from_left)) & 1 == 1;
+}
+
+name: utils.FixedString(128) = .{}, // FONT_NAME Property
+bounds: Bounds = .{}, // FONTBOUNDINGBOX
+glyph_count: u32 = 0, // CHARS
+
+pub fn glyph_size(self: *const Self) usize {
+    return get_glyph_size(self.bounds.size);
+}
+
+pub fn required_buffer_size(self: *const Self) usize {
+    return @as(usize, self.glyph_count) * self.glyph_size();
+}
+
+pub fn glyph_pixel_count(self: *const Self) usize {
+    return self.bounds.size.x * self.bounds.size.y;
+}
+
+pub fn total_pixel_count(self: *const Self) usize {
+    return self.glyph_pixel_count() * self.glyph_count;
+}
 
 pub const Glyph = struct {
-    bitmap: []u32, // BITMAP
+    offset: usize,
+    size: Bounds.Size,
+    bitmap_size: usize,
     name: ?[]const u8 = null, // STARTFONT
     codepoint: ?u32 = null, // ENCODING
     bounds: Bounds = .{}, // BBX
 
-    pub fn preview(self: *const Glyph, font: *const Font) void {
-        var offset: usize = 0;
-        var row: usize = 0;
-        while (row < font.bounds.size.y) {
-            var col: usize = 0;
-            while (col < font.bounds.size.x) {
-                var char: u8 = '?';
-                if (self.bitmap[offset] == filled_pixel) {
-                    char = '#';
-                } else if (self.bitmap[offset] == empty_pixel) {
-                    char = '.';
-                }
-                std.debug.print("{c}", .{char});
-                col += 1;
-                offset += 1;
+    fn get_bitmap(self: *const Glyph, buffer: []u8) []u8 {
+        return buffer[self.offset..self.offset + self.bitmap_size];
+    }
+
+    fn get_const_bitmap(self: *const Glyph, buffer: []const u8) []const u8 {
+        return buffer[self.offset..self.offset + self.bitmap_size];
+    }
+
+    pub fn get_byte_offset(self: *const Glyph, row: usize, col: usize) usize {
+        const row_size = get_row_size(self.size.x);
+        return row * row_size + col / 8;
+    }
+
+    pub const Iterator = struct {
+        glyph: *const Glyph,
+        buffer: []const u8,
+        row: usize = 0,
+        col: usize = 0,
+        new_row: bool = false,
+
+        pub fn next_pixel(self: *Iterator) ?bool {
+            if (self.row >= self.glyph.size.y) {
+                return null;
             }
-            std.debug.print("\n", .{});
-            row += 1;
+            const bitmap = self.glyph.get_const_bitmap(self.buffer);
+            const byte = bitmap[self.glyph.get_byte_offset(self.row, self.col)];
+            const filled = get_bit(byte, self.col);
+            self.col += 1;
+            self.new_row = self.col >= self.glyph.size.x;
+            if (self.new_row) {
+                self.col = 0;
+                self.row += 1;
+            }
+            return filled;
         }
+    };
+
+    pub fn iter_pixels(self: *const Glyph, buffer: []const u8) Iterator {
+        return .{.glyph = self, .buffer = buffer};
+    }
+
+    pub fn preview(self: *const Glyph, bitmap_buffer: []u8, output_buffer: []u8) Error![]u8 {
+        const size = (@as(usize, self.size.x) + 1) * @as(usize, self.size.y);
+        if (output_buffer.len < size) {
+            return Error.NotEnoughDestination;
+        }
+        const output = output_buffer[0..size];
+        var pixit = self.iter_pixels(bitmap_buffer);
+        var i: usize = 0;
+        while (pixit.next_pixel()) |filled| {
+            output[i] = if (filled) '#' else '.';
+            i += 1;
+            if (pixit.new_row) {
+                output[i] = '\n';
+                i += 1;
+            }
+        }
+        return output;
     }
 };
 
-pub const ResultKind = enum {
-    NeedMoreInput,
-    NeedBufferAndMoreInput,
-    Done,
-};
-
-pub const Result = union(ResultKind) {
-    NeedMoreInput: void,
-    NeedBufferAndMoreInput: usize,
-    Done: void,
-};
-
-// Thinking out rendering:
+// Thinking out how to convert the compact bitmap to a full bitmap.
 //
 // An example font is 6x9 pixels and can extend two pixels below the baseline.
 // In BDF, this means the "FONTBOUNDINGBOX" is "6 9 0 -2". All glyphs should be
@@ -95,11 +150,11 @@ pub const Result = union(ResultKind) {
 //
 // |..... "+" is origin and the horizontal line is the baseline.
 // |.....
-// |..... All fonts should be able to be prerendered into a bitmap image
+// |..... All the glyphs should be able to be converted into a bitmap image
 // |..... from the font bitmap data and then copied into video memory.
 // |.....
 // |..... BDF bitmap data doesn't have to fill out the entire font bounding
-// +----- box. Rendering will have to position the glyph correctly.
+// +----- box. We will have to position the glyph correctly.
 // |.....
 // |.....
 //
@@ -123,64 +178,77 @@ pub const Result = union(ResultKind) {
 //        BBX 5 6 0 0     Empty rows after bitmap = 0 - -2 = 2
 //                    Empty columns before bitmap = 0 - 0 = 0
 //        BITMAP       Empty columns after bitmap = 6 + 0 - 5 - 0 = 1
-// |.....     <= [  0,0,0,0,0, 0]
-// |.#... 20  <= [],0,0,1,0,0,[0]
-// |#.#.. 50  <= [],0,1,0,1,0,[0]
-// #...#. 88  <= [],1,0,0,0,1,[0]
-// #####. f8  <= [],1,1,1,1,1,[0]
-// #...#. 88  <= [],1,0,0,0,1,[0]
-// #---#- 88  <= [],1,0,0,0,1,[0]
-// |.....     <= [  0,0,0,0,0, 0]
-// |.....     <= [  0,0,0,0,0, 0]
-const Renderer = struct {
-    font: *Font,
+// |.....     <= [  0,0,0,0,0, 0] <= 00 (These are the complete rows as hex)
+// |.#... 20  <= [],0,0,1,0,0,[0] <= 08 (Any padding bits at the end must be ignored)
+// |#.#.. 50  <= [],0,1,0,1,0,[0] <= 14
+// #...#. 88  <= [],1,0,0,0,1,[0] <= 22
+// #####. f8  <= [],1,1,1,1,1,[0] <= 3e
+// #...#. 88  <= [],1,0,0,0,1,[0] <= 22
+// #---#- 88  <= [],1,0,0,0,1,[0] <= 22
+// |.....     <= [  0,0,0,0,0, 0] <= 00
+// |.....     <= [  0,0,0,0,0, 0] <= 00
+const Compiler = struct {
+    font: *Self,
     glyph: *Glyph,
-    offset: usize = 0,
+    bitmap: []u8,
     row: usize = 0, // From the top of the bitmap
+    col: usize = 0,
     rows_before: u32 = undefined,
     row_after_glyph: u32 = undefined,
     cols_before: u32 = undefined,
     cols_after: u32 = undefined,
 
-    pub fn new(font: *Font, glyph: *Glyph) Renderer {
+    pub fn new(font: *Self, glyph: *Glyph, buffer: []u8) Compiler {
         const row_after_glyph = @intCast(u32, @as(i32, font.bounds.size.y) + font.bounds.pos.y -
             glyph.bounds.pos.y);
-        return .{
+        const r = .{
             .font = font,
             .glyph = glyph,
+            .bitmap = glyph.get_bitmap(buffer),
             .rows_before = row_after_glyph - glyph.bounds.size.y,
             .row_after_glyph = row_after_glyph,
             .cols_before = @intCast(u32, @as(i32, glyph.bounds.pos.x) - font.bounds.pos.x),
             .cols_after = @intCast(u32, @as(i32, font.bounds.size.x) + font.bounds.pos.x -
                 glyph.bounds.size.x - glyph.bounds.pos.x),
         };
+        return r;
     }
 
-    fn render_pixel(self: *Renderer, value: bool) void {
-        const bitmap_value = @as(u32, if (value) filled_pixel else empty_pixel);
-        self.glyph.bitmap[self.offset] = bitmap_value;
-        self.offset += 1;
+    fn compile_pixel(self: *Compiler, value: bool) void {
+        const offset = self.glyph.get_byte_offset(self.row, self.col);
+        const byte = &self.bitmap[offset];
+        set_bit(byte, self.col, value);
+        // std.debug.print("{}: {b:0>8}\n", .{offset, byte.*});
+        self.col += 1;
     }
 
-    pub fn render_row(self: *Renderer, line: []const u8) Error!void {
+    pub fn compile_row(self: *Compiler, line: []const u8) Error!void {
         var col: u16 = undefined;
+
+        // std.debug.print("Above\n", .{});
 
         // Empty rows above glyph
         while (self.row < self.rows_before) {
             col = 0;
+            self.col = 0;
             while (col < self.font.bounds.size.x) {
-                self.render_pixel(false);
+                self.compile_pixel(false);
                 col += 1;
             }
             self.row += 1;
         }
 
+        // std.debug.print("Before\n", .{});
+
         // Empty columns before glyph row
         col = 0;
+        self.col = 0;
         while (col < self.cols_before) {
-            self.render_pixel(false);
+            self.compile_pixel(false);
             col += 1;
         }
+
+        // std.debug.print("Glyph\n", .{});
 
         col = 0;
         var left = line;
@@ -190,32 +258,51 @@ const Renderer = struct {
             // std.debug.print("{x}", .{byte});
             var n: u4 = 0;
             while (n < 8 and col < self.glyph.bounds.size.x) {
-                self.render_pixel((byte >> (7 - @intCast(u3, n))) & 1 == 1);
+                self.compile_pixel(get_bit(byte, n));
                 n += 1;
                 col += 1;
             }
             left = left[2..];
         }
 
+        // std.debug.print("After\n", .{});
+
         // Empty columns after glyph row
         col = 0;
         while (col < self.cols_after) {
-            self.render_pixel(false);
+            self.compile_pixel(false);
             col += 1;
         }
 
         self.row += 1;
 
+        // std.debug.print("Below\n", .{});
+
         // Empty rows under glyph
         if (self.row >= self.row_after_glyph) {
             while (self.row < self.font.bounds.size.y) {
                 col = 0;
+                self.col = 0;
                 while (col < self.font.bounds.size.x) {
-                    self.render_pixel(false);
+                    self.compile_pixel(false);
                     col += 1;
                 }
                 self.row += 1;
             }
+        }
+    }
+};
+
+pub const Result = struct {
+    need_more_input: bool = false,
+    need_buffer: ?usize = null,
+    glyph: ?Glyph = null,
+    done: bool = false,
+
+    pub fn verify(self: *const Result) void {
+        if (!(self.need_more_input or self.need_buffer != null or
+                self.glyph != null or self.done)) {
+            @panic("Bdf.Result is invalid");
         }
     }
 };
@@ -243,7 +330,7 @@ pub const Parser = struct {
         GlyphBitmap: struct {
             expected_lines: u16,
             expected_line_len: u16,
-            renderer: Renderer,
+            compiler: Compiler,
         },
         EndFont: void,
     };
@@ -289,7 +376,7 @@ pub const Parser = struct {
     };
 
     const max_line_len: usize = 256;
-    const more_input = Result{.NeedMoreInput = void{}};
+    const more_input = Result{.need_more_input = true};
 
     line_buffer: [max_line_len]u8 = [_]u8{0} ** max_line_len,
     word_it_buffer: [max_line_len]u8 = undefined,
@@ -297,10 +384,10 @@ pub const Parser = struct {
     line_no: usize = 0,
     last_result: Result = more_input,
     glyphs_got: u32 = 0,
-    font: Font = .{},
+    font: Self = .{},
     current_glyph: Glyph = undefined,
     state: State = State{.BeforeStartFont = void{}},
-    buffer: ?[]u32= null,
+    buffer: ?[]u8 = null,
 
     fn parse_int_value(it: *WordIterator, comptime Int: type, base: comptime_int) Error!Int {
         const str = (try it.next()) orelse return Error.BdfMissingValue;
@@ -332,6 +419,7 @@ pub const Parser = struct {
         switch (self.state) {
             StateKind.BeforeStartFont => {
                 const kw = (try it.next()) orelse return more_input;
+                // std.debug.print("BeforeStartFont keyword: {s}\n", .{kw});
                 if (Keyword.from_string(kw) == .StartFont) {
                     self.state = State{.AfterStartFont = void{}};
                 } else {
@@ -341,7 +429,7 @@ pub const Parser = struct {
 
             StateKind.AfterStartFont => {
                 const kw = (try it.next()) orelse return more_input;
-                std.debug.print("AfterStartFont keyword: {s}\n", .{kw});
+                // std.debug.print("AfterStartFont keyword: {s}\n", .{kw});
                 switch (Keyword.from_string(kw)) {
                     .Comment, .Unknown => {},
                     .FontBoundingBox => {
@@ -352,7 +440,7 @@ pub const Parser = struct {
                     .Chars => {
                         self.font.glyph_count = try parse_int_value(&it, u32, 10);
                         self.state = State{.Glyphs = .{}};
-                        return Result{.NeedBufferAndMoreInput = self.font.required_buffer_size()};
+                        return Result{.need_buffer = self.font.required_buffer_size()};
                     },
                     else => return Error.BdfBadKeyword,
                 }
@@ -381,16 +469,18 @@ pub const Parser = struct {
 
             StateKind.Glyphs => {
                 const kw = (try it.next()) orelse return more_input;
-                std.debug.print("Glyphs keyword: {s}\n", .{kw});
+                // std.debug.print("Glyphs keyword: {s}\n", .{kw});
                 switch (Keyword.from_string(kw)) {
                     .Comment => {},
                     .StartChar => {
                         if (self.glyphs_got == self.font.glyph_count) {
                             return Error.BdfBadGlyphCount;
                         }
-                        const start = self.glyphs_got * self.font.glyph_size();
-                        const end = start + self.font.glyph_size();
-                        self.current_glyph = .{.bitmap = self.buffer.?[start..end]};
+                        self.current_glyph = .{
+                            .offset = self.glyphs_got * self.font.glyph_size(),
+                            .size = self.font.bounds.size,
+                            .bitmap_size = self.font.glyph_size(),
+                        };
                         self.glyphs_got += 1;
                         // TODO Glyph name from arg
                         self.state = State{.Glyph = void{}};
@@ -400,7 +490,7 @@ pub const Parser = struct {
                             return Error.BdfBadGlyphCount;
                         }
                         self.state = State{.EndFont = void{}};
-                        return .Done;
+                        return Result{.done = true};
                     },
                     else => return Error.BdfBadKeyword,
                 }
@@ -408,7 +498,7 @@ pub const Parser = struct {
 
             StateKind.Glyph => {
                 const kw = (try it.next()) orelse return more_input;
-                std.debug.print("Glyph keyword: {s}\n", .{kw});
+                // std.debug.print("Glyph keyword: {s}\n", .{kw});
                 switch (Keyword.from_string(kw)) {
                     .Comment, .Unknown => {},
                     // TODO Test the following are being set
@@ -423,7 +513,7 @@ pub const Parser = struct {
                         self.state = State{.GlyphBitmap = .{
                             .expected_lines = 0,
                             .expected_line_len = 0,
-                            .renderer = Renderer.new(&self.font, &self.current_glyph),
+                            .compiler = Compiler.new(&self.font, &self.current_glyph, self.buffer.?),
                         }};
                     },
                     else => return Error.BdfBadKeyword,
@@ -433,55 +523,113 @@ pub const Parser = struct {
             StateKind.GlyphBitmap => |*state_info| {
                 _ = state_info; // TODO
                 if (line.len == 0) return more_input;
+                // std.debug.print("Bitmap Line: \"{s}\"\n", .{line});
                 if (streq(line, "ENDCHAR"))  {
-                    self.current_glyph.preview(&self.font);
                     // TODO: Check we got enough lines
                     self.state = State{.Glyphs = .{}};
+                    return Result{.glyph = self.current_glyph, .need_more_input = true};
                 } else {
                     // TODO: Check this isn't too many lines
                     // TODO: Check line length matches expected
-                    try state_info.renderer.render_row(line);
+                    try state_info.compiler.compile_row(line);
                 }
             },
 
-            StateKind.EndFont => return .Done,
+            StateKind.EndFont => return Result{.done = true},
         }
         return more_input;
     }
 
-    pub fn feed_input(self: *Parser, chunk: []const u8) Error!Result {
-        while (true) {
-            switch (self.last_result) {
-                .NeedMoreInput => {
-                    for (chunk) |c| {
-                        if (c == '\n') {
-                            self.last_result = try self.process_line(
-                                self.line_buffer[0..self.line_pos]);
-                            self.line_pos = 0;
-                        } else {
-                            self.line_buffer[self.line_pos] = c;
-                            self.line_pos += 1;
-                        }
-                    }
-                    return self.last_result;
-                },
-                .NeedBufferAndMoreInput => {
-                    if (self.buffer == null) {
-                        return Error.BdfMissingBuffer;
-                    }
-                    if (self.buffer.?.len < self.font.required_buffer_size()) {
-                        return Error.BdfBufferTooSmall;
-                    }
-                    self.last_result = more_input;
-                },
-                .Done => return self.last_result,
-            }
+    pub fn feed_input(self: *Parser, chunk: []const u8, chunk_pos: *usize) Error!Result {
+        if (self.last_result.glyph != null) {
+            self.last_result.glyph = null;
         }
+
+        if (self.last_result.need_buffer != null) {
+            if (self.buffer == null) {
+                return Error.BdfMissingBuffer;
+            }
+            if (self.buffer.?.len < self.font.required_buffer_size()) {
+                return Error.BdfBufferTooSmall;
+            }
+            for (self.buffer.?) |*byte| {
+                byte.* = 0;
+            }
+            self.last_result.need_buffer = null;
+        }
+
+        if (chunk_pos.* >= chunk.len) {
+            return more_input;
+        }
+
+        var process_chunk = true;
+        var chunk_done: bool = undefined;
+        while (process_chunk) {
+            const c = chunk[chunk_pos.*];
+            var newline = c == '\n';
+            if (newline) {
+                self.last_result = try self.process_line(self.line_buffer[0..self.line_pos]);
+                self.line_pos = 0;
+            } else {
+                self.line_buffer[self.line_pos] = c;
+                self.line_pos += 1;
+            }
+            chunk_pos.* += 1;
+            chunk_done = chunk_pos.* >= chunk.len;
+
+            // Done, nothing else to do, exit loop
+            if (self.last_result.done) {
+                process_chunk = false;
+            // Not done, chunk done, need more from user, may also ask for
+            // buffer or have glyph, so exit loop.
+            } else if (chunk_done) {
+                self.last_result.need_more_input = true;
+                process_chunk = false;
+            // Not done, chunk not empty, but needs buffer or has glyph, so
+            // exit loop
+            } else if (self.last_result.need_buffer != null or self.last_result.glyph != null) {
+                // Still working on current chunk
+                self.last_result.need_more_input = false;
+                process_chunk = false;
+            }
+            // Else it isn't done with the chunk yet or doesn't need the buffer
+        }
+
+        self.last_result.verify();
+
+        return self.last_result;
     }
 };
 
+fn test_parse_font(allocator: *const std.mem.Allocator, parser: *Parser,
+        bdf_text: []const u8, max_chunk_len: usize) !void {
+    const start_chunk_size = @minimum(bdf_text.len, max_chunk_len);
+    var chunk: []const u8 = bdf_text[0..start_chunk_size];
+    var chunk_pos: usize = 0;
+    var left: []const u8 = bdf_text[start_chunk_size..];
+    while (true) {
+        const result = try parser.feed_input(chunk, &chunk_pos);
+        if (result.done) break;
+
+        if (result.glyph) |glyph| {
+            _ = glyph;
+        }
+
+        if (result.need_more_input) {
+            const chunk_size = @minimum(left.len, max_chunk_len);
+            chunk = left[0..chunk_size];
+            left = left[chunk_size..];
+            chunk_pos = 0;
+        }
+
+        if (result.need_buffer) |buffer_size| {
+            parser.buffer = try allocator.alloc(u8, buffer_size);
+        }
+    }
+}
+
 test "Bdf" {
-    const test_font =
+    const bdf_text =
         \\STARTFONT
         \\COMMENT This is a test comment
         \\FONTBOUNDINGBOX 6 9 0 -2
@@ -505,22 +653,11 @@ test "Bdf" {
         ;
 
     var parser = Parser{};
-    var left: []const u8 = test_font[0..];
-    var buffer: [54]u32 = undefined;
-    while (true) {
-        const chunk_size = @minimum(left.len, 3);
-        // 3 because we need to be sure the input can be constrained
-        const chunk: []const u8 = left[0..chunk_size];
-        left = left[chunk_size..];
-        switch (try parser.feed_input(chunk)) {
-            .NeedMoreInput => {},
-            .NeedBufferAndMoreInput => |buffer_size| {
-                std.debug.print("NEED BUFFER: {}\n", .{buffer_size});
-                parser.buffer = buffer[0..];
-            },
-            .Done => break,
-        }
-    }
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // 3 because we need to be sure the input can be constrained
+    try test_parse_font(&allocator, &parser, bdf_text, 3);
 
     try std.testing.expectEqualStrings(parser.font.name.ts().get(), "The Font Name");
     try std.testing.expectEqual(parser.font.glyph_count, 1);
@@ -534,18 +671,45 @@ test "Bdf" {
     try std.testing.expectEqual(parser.current_glyph.bounds.pos.x, 0);
     try std.testing.expectEqual(parser.current_glyph.bounds.pos.y, 0);
 
-    const B = filled_pixel;
-    const j = empty_pixel;
-    const expected = [_]u32{
-        j, j, j, j, j, j,
-        j, j, B, j, j, j,
-        j, B, j, B, j, j,
-        B, j, j, j, B, j,
-        B, B, B, B, B, j,
-        B, j, j, j, B, j,
-        B, j, j, j, B, j,
-        j, j, j, j, j, j,
-        j, j, j, j, j, j,
-    };
-    try std.testing.expectEqualSlices(u32, parser.buffer.?, expected[0..]);
+    // Test that the Compiler is putting the right bytes in the buffer
+    {
+        const expected = [_]u8{
+            0x00,
+            0x20,
+            0x50,
+            0x88,
+            0xf8,
+            0x88,
+            0x88,
+            0x00,
+            0x00,
+        };
+        try std.testing.expectEqualSlices(u8, expected[0..], parser.buffer.?);
+    }
+
+    // Test Glyph.Iterator indirectly
+    {
+        const expected =
+            "......\n" ++
+            "..#...\n" ++
+            ".#.#..\n" ++
+            "#...#.\n" ++
+            "#####.\n" ++
+            "#...#.\n" ++
+            "#...#.\n" ++
+            "......\n" ++
+            "......\n";
+        var buffer = [_]u8{0} ** 63;
+        try std.testing.expectEqualStrings(expected[0..],
+            try parser.current_glyph.preview(parser.buffer.?, buffer[0..]));
+    }
+}
+
+test "Bdf parse builtin_font.bdf" {
+    const bdf_text = @embedFile("../../kernel/builtin_font.bdf");
+    var parser = Parser{};
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    try test_parse_font(&allocator, &parser, bdf_text, 128);
 }
