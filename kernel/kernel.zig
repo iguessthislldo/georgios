@@ -16,7 +16,8 @@ pub const threading = @import("threading.zig");
 pub const fs = @import("fs.zig");
 pub const sync = @import("sync.zig");
 pub const keys = @import("keys.zig");
-pub const font = @import("font.zig");
+pub const builtin_font_data = @import("builtin_font_data.zig");
+pub const BitmapFont = @import("BitmapFont.zig");
 pub const Console = @import("Console.zig");
 
 pub var panic_message: []const u8 = "";
@@ -49,6 +50,7 @@ pub var console_file = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var filesystem: fs.Filesystem = .{};
+pub var builtin_font: BitmapFont = undefined;
 
 pub fn platform_init() !void {
     print.init(&console_file, build_options.debug_log);

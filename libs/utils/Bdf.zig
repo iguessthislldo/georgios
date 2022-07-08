@@ -26,6 +26,7 @@ pub const Error = error {
     BdfBadBitmap,
     BdfMissingBuffer,
     BdfBufferTooSmall,
+    BdfMissingDefaultCodepoint,
 } || utils.Error;
 
 fn get_row_size(width: usize) usize {
@@ -56,6 +57,8 @@ fn get_bit(byte: u8, from_left: usize) bool {
 name: utils.FixedString(128) = .{}, // FONT_NAME Property
 bounds: Bounds = .{}, // FONTBOUNDINGBOX
 glyph_count: u32 = 0, // CHARS
+default_codepoint: u32 = '?', // DEFAULT_CHAR
+found_default_codepoint: bool = false,
 
 pub fn glyph_size(self: *const Self) usize {
     return get_glyph_size(self.bounds.size);
@@ -74,19 +77,29 @@ pub fn total_pixel_count(self: *const Self) usize {
 }
 
 pub const Glyph = struct {
-    offset: usize,
+    index: usize,
     size: Bounds.Size,
+    bitmap_offset: usize,
     bitmap_size: usize,
     name: ?[]const u8 = null, // STARTFONT
     codepoint: ?u32 = null, // ENCODING
     bounds: Bounds = .{}, // BBX
 
+    pub fn new(font: *const Self, index: usize) Glyph {
+        return .{
+            .index = index,
+            .bitmap_offset = index * font.glyph_size(),
+            .bitmap_size = font.glyph_size(),
+            .size = font.bounds.size,
+        };
+    }
+
     fn get_bitmap(self: *const Glyph, buffer: []u8) []u8 {
-        return buffer[self.offset..self.offset + self.bitmap_size];
+        return buffer[self.bitmap_offset..self.bitmap_offset + self.bitmap_size];
     }
 
     fn get_const_bitmap(self: *const Glyph, buffer: []const u8) []const u8 {
-        return buffer[self.offset..self.offset + self.bitmap_size];
+        return buffer[self.bitmap_offset..self.bitmap_offset + self.bitmap_size];
     }
 
     pub fn get_byte_offset(self: *const Glyph, row: usize, col: usize) usize {
@@ -122,7 +135,7 @@ pub const Glyph = struct {
         return .{.glyph = self, .buffer = buffer};
     }
 
-    pub fn preview(self: *const Glyph, bitmap_buffer: []u8, output_buffer: []u8) Error![]u8 {
+    pub fn preview(self: *const Glyph, bitmap_buffer: []const u8, output_buffer: []u8) Error![]u8 {
         const size = (@as(usize, self.size.x) + 1) * @as(usize, self.size.y);
         if (output_buffer.len < size) {
             return Error.NotEnoughDestination;
@@ -463,6 +476,8 @@ pub const Parser = struct {
                     if (streq(kw, "FONT_NAME")) {
                         const name = (try it.next()) orelse return Error.BdfMissingValue;
                         self.font.name.ts().string_truncate(name);
+                    } else if (streq(kw, "DEFAULT_CHAR")) {
+                        self.font.default_codepoint = try parse_int_value(&it, u32, 10);
                     }
                 }
             },
@@ -476,11 +491,7 @@ pub const Parser = struct {
                         if (self.glyphs_got == self.font.glyph_count) {
                             return Error.BdfBadGlyphCount;
                         }
-                        self.current_glyph = .{
-                            .offset = self.glyphs_got * self.font.glyph_size(),
-                            .size = self.font.bounds.size,
-                            .bitmap_size = self.font.glyph_size(),
-                        };
+                        self.current_glyph = Glyph.new(&self.font, self.glyphs_got);
                         self.glyphs_got += 1;
                         // TODO Glyph name from arg
                         self.state = State{.Glyph = void{}};
@@ -488,6 +499,9 @@ pub const Parser = struct {
                     .EndFont => {
                         if (self.glyphs_got < self.font.glyph_count) {
                             return Error.BdfBadGlyphCount;
+                        }
+                        if (!self.font.found_default_codepoint) {
+                            return Error.BdfMissingDefaultCodepoint;
                         }
                         self.state = State{.EndFont = void{}};
                         return Result{.done = true};
@@ -504,6 +518,9 @@ pub const Parser = struct {
                     // TODO Test the following are being set
                     .Encoding => {
                         self.current_glyph.codepoint = try parse_int_value(&it, u32, 10);
+                        if (self.current_glyph.codepoint == self.font.default_codepoint) {
+                            self.font.found_default_codepoint = true;
+                        }
                     },
                     .Bbx => {
                         try parse_bounds(&it, &self.current_glyph.bounds);
@@ -633,8 +650,9 @@ test "Bdf" {
         \\STARTFONT
         \\COMMENT This is a test comment
         \\FONTBOUNDINGBOX 6 9 0 -2
-        \\STARTPROPERTIES 1
+        \\STARTPROPERTIES 2
         \\FONT_NAME "The Font Name"
+        \\DEFAULT_CHAR 65
         \\ENDPROPERTIES
         \\CHARS 1
         \\STARTCHAR A
@@ -665,6 +683,7 @@ test "Bdf" {
     try std.testing.expectEqual(parser.font.bounds.size.y, 9);
     try std.testing.expectEqual(parser.font.bounds.pos.x, 0);
     try std.testing.expectEqual(parser.font.bounds.pos.y, -2);
+    try std.testing.expectEqual(parser.font.default_codepoint, 'A');
     try std.testing.expectEqual(parser.current_glyph.codepoint, 65);
     try std.testing.expectEqual(parser.current_glyph.bounds.size.x, 5);
     try std.testing.expectEqual(parser.current_glyph.bounds.size.y, 6);

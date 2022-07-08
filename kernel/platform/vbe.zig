@@ -8,7 +8,7 @@ const build_options = @import("build_options");
 
 const utils = @import("utils");
 const U32Point = utils.U32Point;
-const U32Box = utils.Box(u32, u32);
+pub const U32Box = utils.Box(u32, u32);
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
@@ -20,7 +20,7 @@ const kernel = @import("root").kernel;
 const print = kernel.print;
 const kmemory = kernel.memory;
 const Range = kmemory.Range;
-pub const font = kernel.font;
+const BitmapFont = kernel.BitmapFont;
 
 // TODO Make these not fixed
 const find_width = 800;
@@ -145,64 +145,21 @@ fn draw_pixel_bgr(x: u32, y: u32, color: u32) callconv(.Inline) void {
     }
 }
 
-pub fn draw_glyph(x: u32, y: u32, c: u8, fg_color: u32, bg_color: ?u32) void {
-    var xi: usize = 0;
-    var yi: usize = 0;
-    const glyph = font.bitmaps[c - ' '];
-    while (yi < font.height) {
-        while (xi < font.width) {
-            const o = (glyph[yi][xi / 8] << @intCast(u3, xi % 8)) & 0x80 != 0;
-            if (o) {
-                draw_pixel(x + xi, y + yi, fg_color);
-            } else if (bg_color) |bgc| {
-                draw_pixel(x + xi, y + yi, bgc);
-            }
-            xi += 1;
-        }
-        xi = 0;
-        yi += 1;
-    }
-}
-
-pub fn draw_string(x: u32, y: u32, s: []const u8, color: u32) U32Point {
-    var x_offset = x;
-    var y_offset = y;
-    var max_x = x;
-    for (s) |c| {
-        if (c >= ' ' and c <= '~') {
-            draw_glyph(x_offset, y_offset, c, color, null);
-            x_offset += font.width;
-            if (x_offset > max_x) {
-                max_x = x_offset;
-            }
-        }
-        if (c == '\n') {
-            y_offset += font.height;
-            x_offset = x;
+pub fn draw_glyph(font: *const BitmapFont, x: u32, y: u32, codepoint: u32,
+        fg_color: u32, bg_color: u32) void {
+    const glyph_holder = font.get(codepoint);
+    var xp = x;
+    var xe = x + font.bdf_font.bounds.size.x;
+    var yp = y;
+    var pixit = glyph_holder.iter_pixels();
+    while (pixit.next_pixel()) |is_filled| {
+        draw_pixel(xp, yp, if (is_filled) fg_color else bg_color);
+        xp += 1;
+        if (xp >= xe) {
+            xp = x;
+            yp += 1;
         }
     }
-    return U32Point{.x = max_x, .y = y_offset + font.height};
-}
-
-pub fn draw_string_continue(start: U32Point, s: []const u8, color: u32) U32Point {
-    var x_offset = start.x;
-    var y_offset = start.y;
-    for (s) |c| {
-        if (c >= ' ' and c <= '~') {
-            draw_glyph(x_offset, y_offset, c, color, null);
-            const next_offset = x_offset + font.width;
-            if (next_offset >= mode.width) {
-                y_offset += font.height;
-                x_offset = 0;
-            } else {
-                x_offset = next_offset;
-            }
-        } else if (c == '\n') {
-            y_offset += font.height;
-            x_offset = 0;
-        }
-    }
-    return U32Point{.x = x_offset, .y = y_offset};
 }
 
 pub fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
@@ -280,18 +237,68 @@ pub fn fill_buffer(color: u32) void {
     buffer_clean = false;
 }
 
+pub fn scroll_buffer(rows: u32, color: u32) void {
+    // Move everthing in the buffer up
+    buffer_clean = false;
+    var dst_offset: usize = 0;
+    var src_offset: usize = rows * mode.pitch;
+    const end_src_offset = @as(usize, mode.height) * mode.pitch;
+    const row_size = @as(usize, mode.width) * bytes_per_pixel;
+    while (src_offset < end_src_offset) {
+        const dst = buffer[dst_offset..dst_offset + row_size];
+        const src = buffer[src_offset..src_offset + row_size];
+        for (dst) |*p, i| {
+            p.* = src[i];
+        }
+        dst_offset += mode.pitch;
+        src_offset += mode.pitch;
+    }
+
+    // Fill in the "new" pixels
+    var y: u32 = mode.height - rows;
+    while (y < mode.height) {
+        var x: u32 = 0;
+        while (x < mode.width) {
+            draw_pixel(x, y, color);
+            x += 1;
+        }
+        y += 1;
+    }
+}
+
+fn buffer_sync() callconv(.Inline) void {
+    while ((putil.in8(0x03da) & 0x8) != 0) {}
+    while ((putil.in8(0x03da) & 0x8) == 0) {}
+}
+
 // TODO: This could certainly be done faster, maybe through unrolling the loop
 // some or CPU features like SSE.
 pub fn flush_buffer() void {
     if (buffer_clean) return;
     const b = Range.from_bytes(buffer).to_slice(u64);
     const vm  = Range.from_bytes(video_memory).to_slice(u64);
-    while ((putil.in8(0x03da) & 0x8) != 0) {}
-    while ((putil.in8(0x03da) & 0x8) == 0) {}
+    buffer_sync();
     for (vm) |*p, i| {
         p.* = b[i];
     }
     buffer_clean = true;
+}
+
+pub fn flush_buffer_area(area: U32Box) void {
+    buffer_sync();
+    var offset = video_memory_offset(area.pos.x, area.pos.y);
+    var row = area.pos.y;
+    const end = area.pos.y + area.size.y;
+    const row_size = area.size.x * bytes_per_pixel;
+    while (row < end) {
+        const row_end = offset + row_size;
+        const b = buffer[offset..row_end];
+        for (video_memory[offset..row_end]) |*p, i| {
+            p.* = b[i];
+        }
+        offset += mode.pitch;
+        row += 1;
+    }
 }
 
 const vbe_result_ptr: u16 = 0x8000;
@@ -432,19 +439,12 @@ pub fn init() void {
             @panic("Couldn't map VBE Buffer");
         };
 
-        if (false) {
-            fill_buffer(0xe8e6e3);
-            const w = 301;
-            const h = 170;
-            const x = mode.width - w - 10;
-            const y = mode.height - h - 10;
-            const image align(@alignOf(u64)) = @embedFile("../../root/files/dragon.img");
-            draw_raw_image(image, w, x, y);
-            _ = draw_string(x, y, " Georgios ", 0x181a1b);
-            flush_buffer();
-        }
-
-        vbe_console.init(mode.width, mode.height);
+        kernel.builtin_font.init(
+            &kernel.builtin_font_data.bdf,
+            kernel.builtin_font_data.glyph_indices[0..],
+            kernel.builtin_font_data.bitmaps[0..])
+                catch @panic("builtin_font.init failed");
+        vbe_console.init(mode.width, mode.height, &kernel.builtin_font);
         kernel.console = &vbe_console.console;
     } else {
         print.string(" - Could not init VBE graphics\n");
