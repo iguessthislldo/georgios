@@ -10,6 +10,7 @@ const kthreading = kernel.threading;
 const ps2 = @import("ps2.zig");
 const interrupts = @import("interrupts.zig");
 const vbe = @import("vbe.zig");
+const vbe_console = @import("vbe_console.zig");
 
 pub const interrupt_number: u8 = 100;
 
@@ -19,7 +20,6 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
     const arg2 = interrupt_stack.ecx;
     const arg3 = interrupt_stack.edx;
     const arg4 = interrupt_stack.edi;
-    _ = arg4;
     const arg5 = interrupt_stack.esi;
     _ = arg5;
 
@@ -287,7 +287,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             rv.* = vbe.get_res();
         },
 
-        // SYSCALL: vbe_draw_raw_image_chunk(&data: []const u8, w: u32, &pos: utils.U32Point, &last: utils.U32Point) void
+        // SYSCALL: vbe_draw_raw_image_chunk(&data: []const u8, w: u32, &pos: utils.U32Point, last: *utils.U32Point) void
         24 => {
             const data = @intToPtr(*[]const u8, arg1).*;
             const width = arg2;
@@ -299,6 +299,15 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: vbe_flush_buffer() void
         25 => {
             vbe.flush_buffer();
+        },
+
+        // SYSCALL: get_vbe_console_info(last_scroll_count: *u32, size: *utils.U32Point, pos: *utils.U32Point, glyph_size: *utils.U32Point) void
+        26 => {
+            const last_scroll_count = @intToPtr(*u32, arg1);
+            const size = @intToPtr(*utils.U32Point, arg2);
+            const pos = @intToPtr(*utils.U32Point, arg3);
+            const glyph_size = @intToPtr(*utils.U32Point, arg4);
+            vbe_console.get_info(last_scroll_count, size, pos, glyph_size);
         },
 
         else => @panic("Invalid System Call"),

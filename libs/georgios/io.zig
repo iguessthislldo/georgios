@@ -139,9 +139,9 @@ pub const File = struct {
         return file.read_impl(file, to);
     }
 
-    /// Same as `read`, but return `FileError.OutOfBounds` if an empty `to` was
-    /// passed or `FileError.OutOfBounds` if trying to read from a file that's
-    /// already reached the end.
+    /// Same as `read`, but returns `FileError.NotEnoughDestination` if an
+    /// empty `to` was passed or `FileError.OutOfBounds` if trying to read from
+    /// a file that's already reached the end.
     pub fn read_or_error(file: *File, to: []u8) callconv(.Inline) FileError!usize {
         if (to.len == 0) {
             return FileError.NotEnoughDestination;

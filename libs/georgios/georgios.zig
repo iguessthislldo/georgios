@@ -8,6 +8,7 @@ pub const start = @import("start.zig");
 pub const keyboard = @import("keyboard.zig");
 pub const io = @import("io.zig");
 pub const memory = @import("memory.zig");
+pub const ImgFile = @import("ImgFile.zig");
 
 pub const is_cross_compiled = builtin.os.tag == .freestanding;
 const root = @import("root");

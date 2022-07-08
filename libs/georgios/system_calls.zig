@@ -420,18 +420,28 @@ pub fn vbe_res() callconv(.Inline) ?utils.U32Point {
     return rv;
 }
 
-pub fn vbe_draw_raw_image_chunk(data: []const u8, w: u32, pos: utils.U32Point, last: utils.U32Point) callconv(.Inline) void {
+pub fn vbe_draw_raw_image_chunk(data: []const u8, w: u32, pos: utils.U32Point, last: *utils.U32Point) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 24)),
         [arg1] "{ebx}" (@ptrToInt(&data)),
         [arg2] "{ecx}" (w),
         [arg3] "{edx}" (@ptrToInt(&pos)),
-        [arg4] "{edi}" (@ptrToInt(&last)),
+        [arg4] "{edi}" (last),
         );
 }
 
 pub fn vbe_flush_buffer() callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 25)),
+        );
+}
+
+pub fn get_vbe_console_info(last_scroll_count: *u32, size: *utils.U32Point, pos: *utils.U32Point, glyph_size: *utils.U32Point) callconv(.Inline) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 26)),
+        [arg1] "{ebx}" (last_scroll_count),
+        [arg2] "{ecx}" (size),
+        [arg3] "{edx}" (pos),
+        [arg4] "{edi}" (glyph_size),
         );
 }

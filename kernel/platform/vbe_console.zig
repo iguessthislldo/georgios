@@ -1,3 +1,5 @@
+const utils = @import("utils");
+
 const kernel = @import("root").kernel;
 const Console = kernel.Console;
 const HexColor = Console.HexColor;
@@ -40,6 +42,7 @@ var fg_color: HexColor = undefined;
 var bg_color: HexColor = undefined;
 var fg_color_value: u32 = undefined;
 var bg_color_value: u32 = undefined;
+var scroll_count: u32 = 0;
 pub var console = Console{
     .place_impl = place_impl,
     .scroll_impl = scroll_impl,
@@ -88,6 +91,7 @@ pub fn get_hex_color_impl(c: *Console, layer: Console.Layer) HexColor {
 }
 
 pub fn reset_attributes_impl(c: *Console) void {
+    scroll_count = 0;
     c.set_hex_colors(default_fg_color, default_bg_color);
 }
 
@@ -110,6 +114,16 @@ pub fn show_cursor_impl(c: *Console, show: bool) void {
 
 pub fn scroll_impl(c: *Console) void {
     _ = c;
+    scroll_count += 1;
     vbe.scroll_buffer(glyph_height, default_bg_color_value);
     vbe.flush_buffer();
+}
+
+pub fn get_info(last_scroll_count: *u32, size: *utils.U32Point, pos: *utils.U32Point, glyph_size: *utils.U32Point) void {
+    last_scroll_count.* = scroll_count;
+    scroll_count = 0;
+    size.* = .{.x = console.width, .y = console.height};
+    pos.* = .{.x = console.column, .y = console.row};
+    const gs = font.bdf_font.bounds.size;
+    glyph_size.* = .{.x = gs.x, .y = gs.y};
 }
