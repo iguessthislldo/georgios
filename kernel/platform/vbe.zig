@@ -216,27 +216,14 @@ var video_memory: []u8 = undefined;
 var bytes_per_pixel: u32 = undefined;
 
 pub fn fill_buffer(color: u32) void {
-    if (bytes_per_pixel == 4) {
-        const color64 = (@as(u64, color) << 32) + color;
-        const b = Range.from_bytes(buffer).to_slice(u64);
-        for (b) |*p| {
-            p.* = color64;
-        }
-
-    } else {
-        // TODO: Optimize?
+    var y: u32 = 0;
+    while (y < mode.height) {
         var x: u32 = 0;
         while (x < mode.width) {
-            var y: u32 = 0;
-            while (y < mode.height) {
-                const offset = video_memory_offset(x, y);
-                buffer[offset + 2] = @truncate(u8, color);
-                buffer[offset + 1] = @truncate(u8, color >> 8);
-                buffer[offset] = @truncate(u8, color >> 16);
-                y += 1;
-            }
+            draw_pixel(x, y, color);
             x += 1;
         }
+        y += 1;
     }
     buffer_clean = false;
 }

@@ -99,7 +99,7 @@ pub fn reset_attributes_impl(c: *Console) void {
 
 pub fn clear_screen_impl(c: *Console) void {
     _ = c;
-    vbe.fill_buffer(default_bg_color_value);
+    vbe.fill_buffer(bg_color_value);
     vbe.flush_buffer();
 }
 
