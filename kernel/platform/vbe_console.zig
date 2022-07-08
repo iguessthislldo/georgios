@@ -1,4 +1,5 @@
 const utils = @import("utils");
+const Point = utils.U32Point;
 
 const kernel = @import("root").kernel;
 const Console = kernel.Console;
@@ -7,7 +8,7 @@ const BitmapFont = kernel.BitmapFont;
 
 const platform = @import("platform.zig");
 const vbe = platform.vbe;
-const U32Box = vbe.U32Box;
+const Box = vbe.Box;
 
 pub fn color_value_from_hex_color(hex_color: HexColor) u32 {
     return switch (hex_color) {
@@ -43,6 +44,7 @@ var bg_color: HexColor = undefined;
 var fg_color_value: u32 = undefined;
 var bg_color_value: u32 = undefined;
 var scroll_count: u32 = 0;
+var show_cursor = true;
 pub var console = Console{
     .place_impl = place_impl,
     .scroll_impl = scroll_impl,
@@ -62,7 +64,7 @@ pub fn init(screen_width: u32, screen_height: u32, bitmap_font: *const BitmapFon
     clear_screen_impl(&console);
 }
 
-fn place_impl_no_flush(c: *Console, utf32_value: u32, row: u32, col: u32) U32Box {
+fn place_impl_no_flush(c: *Console, utf32_value: u32, row: u32, col: u32) Box {
     _ = c;
     const x = col * glyph_width;
     const y = row * glyph_height;
@@ -103,13 +105,17 @@ pub fn clear_screen_impl(c: *Console) void {
 
 pub fn move_cursor_impl(c: *Console, row: u32, col: u32) void {
     _ = c;
-    _ = row;
-    _ = col;
+    if (show_cursor and false) { // TODO: Finish cursor
+        const pos = Box.Pos{.x = col * glyph_width, .y = row * glyph_height};
+        const size = font.bdf_font.bounds.size.as(Box.Size.Num);
+        vbe.draw_box(.{.pos = pos, .size = size.minus_int(1)}, 0x0);
+        vbe.flush_buffer_area(.{.pos = pos, .size = size});
+    }
 }
 
 pub fn show_cursor_impl(c: *Console, show: bool) void {
     _ = c;
-    _ = show;
+    show_cursor = show;
 }
 
 pub fn scroll_impl(c: *Console) void {
@@ -119,7 +125,7 @@ pub fn scroll_impl(c: *Console) void {
     vbe.flush_buffer();
 }
 
-pub fn get_info(last_scroll_count: *u32, size: *utils.U32Point, pos: *utils.U32Point, glyph_size: *utils.U32Point) void {
+pub fn get_info(last_scroll_count: *u32, size: *Point, pos: *Point, glyph_size: *Point) void {
     last_scroll_count.* = scroll_count;
     scroll_count = 0;
     size.* = .{.x = console.width, .y = console.height};

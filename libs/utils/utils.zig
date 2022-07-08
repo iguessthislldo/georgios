@@ -837,10 +837,32 @@ pub fn ends_with(what: []const u8, postfix: []const u8) bool {
 
 pub fn Point(comptime TheNum: type) type {
     return struct {
+        const Self = @This();
+
         pub const Num = TheNum;
 
         x: Num = 0,
         y: Num = 0,
+
+        pub fn as(self: *const Self, comptime NumType: type) Point(NumType) {
+            return .{.x = @as(NumType, self.x), .y = @as(NumType, self.y)};
+        }
+
+        pub fn plus_int(self: *const Self, comptime value: anytype) Self {
+            return .{.x = self.x + value, .y = self.y + value};
+        }
+
+        pub fn minus_int(self: *const Self, comptime value: anytype) Self {
+            return .{.x = self.x - value, .y = self.y - value};
+        }
+
+        pub fn plus_point(self: *const Self, other: Self) Self {
+            return .{.x = self.x + other.x, .y = self.y + other.y};
+        }
+
+        pub fn minus_point(self: *const Self, other: Self) Self {
+            return .{.x = self.x - other.x, .y = self.y - other.y};
+        }
     };
 }
 

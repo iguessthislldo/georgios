@@ -8,7 +8,7 @@ const build_options = @import("build_options");
 
 const utils = @import("utils");
 const U32Point = utils.U32Point;
-pub const U32Box = utils.Box(u32, u32);
+pub const Box = utils.Box(u32, u32);
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
@@ -162,31 +162,35 @@ pub fn draw_glyph(font: *const BitmapFont, x: u32, y: u32, codepoint: u32,
     }
 }
 
-pub fn draw_line(x1: u32, y1: u32, x2: u32, y2: u32, color: u32) void {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    if (dx > 0) {
-        var x = x1;
-        while (x <= x2) {
-            draw_pixel(x, y1 + dy * (x - x1) / dx, color);
+pub fn draw_line(a: U32Point, b: U32Point, color: u32) void {
+    const d = b.minus_point(a);
+    if (d.x > 0) {
+        var x = a.x;
+        while (x <= b.x) {
+            draw_pixel(x, a.y + d.y * (x - a.x) / d.x, color);
             x += 1;
         }
     } else {
-        var y = y1;
-        while (y <= y2) {
-            draw_pixel(x1, y, color);
+        var y = a.y;
+        while (y <= b.y) {
+            draw_pixel(a.x, y, color);
             y += 1;
         }
     }
 }
 
-pub fn draw_frame(x: u32, y: u32, w: u32, h: u32, color: u32) void {
-    const x2 = x + w;
-    const y2 = y + h;
-    draw_line(x, y, x2, y, color);
-    draw_line(x, y, x, y2, color);
-    draw_line(x2, y, x2, y2, color);
-    draw_line(x, y2, x2, y2, color);
+pub fn draw_box(box: Box, color: u32) void {
+    // a > b
+    // V   V
+    // c > d
+    const a = box.pos;
+    const d = box.pos.plus_point(box.size);
+    const b = .{.x = d.x, .y = a.y};
+    const c = .{.x = a.x, .y = d.y};
+    draw_line(a, b, color);
+    draw_line(a, c, color);
+    draw_line(b, d, color);
+    draw_line(c, d, color);
 }
 
 pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const U32Point, last: *U32Point) void {
@@ -284,7 +288,7 @@ pub fn flush_buffer() void {
     buffer_clean = true;
 }
 
-pub fn flush_buffer_area(area: U32Box) void {
+pub fn flush_buffer_area(area: Box) void {
     buffer_sync();
     var offset = video_memory_offset(area.pos.x, area.pos.y);
     var row = area.pos.y;
