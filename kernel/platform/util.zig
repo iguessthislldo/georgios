@@ -85,7 +85,7 @@ pub fn idle() noreturn {
     unreachable;
 }
 
-pub fn done() noreturn {
+pub fn halt_forever() noreturn {
     disable_interrupts();
     while (true) {
         halt();

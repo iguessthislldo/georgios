@@ -21,7 +21,8 @@ pub const kernel_range_real_start_available =
     impl.kernel_range_real_start_available;
 pub const kernel_range_virtual_start_available =
     impl.kernel_range_virtual_start_available;
-pub const done = impl.done;
+pub const shutdown = impl.shutdown;
+pub const halt_forever = impl.halt_forever;
 pub const idle = impl.idle;
 pub const Memory = impl.Memory;
 pub const MemoryMgrImpl = impl.MemoryMgrImpl;

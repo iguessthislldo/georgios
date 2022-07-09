@@ -93,6 +93,9 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
 
 pub fn run() !void {
     try init();
+    if (!build_options.run_rc) {
+        return;
+    }
     print.string("\x1bc"); // Reset Console
     // try @import("sync.zig").system_tests();
 
@@ -123,5 +126,11 @@ pub fn kernel_main() void {
         panic(@errorName(e), @errorReturnTrace());
     }
     print.string("Done\n");
-    platform.done();
+    if (build_options.halt_when_done) {
+        print.string("Kernel configured to halt forever instead of shutdown...\n");
+        platform.halt_forever();
+    } else {
+        print.string("Shutting down...\n");
+        platform.shutdown();
+    }
 }

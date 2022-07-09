@@ -30,6 +30,12 @@ endif
 ifdef direct_disk
 	zig_build_args+="-Ddirect_disk=$(direct_disk)"
 endif
+ifdef run_rc
+	zig_build_args+="-Drun_rc=$(run_rc)"
+endif
+ifdef halt_when_done
+	zig_build_args+="-Dhalt_when_done=$(halt_when_done)"
+endif
 
 all: $(ISO) $(DISK) $(USBDRIVE)
 

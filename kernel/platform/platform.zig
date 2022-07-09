@@ -28,6 +28,7 @@ pub const MemoryMgrImpl = pmemory.ManagerImpl;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;
 pub const idle = util.idle;
+pub const halt_forever = util.halt_forever;
 
 pub const Time = u64;
 pub const time = timing.rdtsc;
@@ -151,6 +152,6 @@ pub fn init() !void {
     interrupts.pic.allow_irq(0, true);
 }
 
-pub fn done() void {
+pub fn shutdown() void {
     acpi.power_off();
 }

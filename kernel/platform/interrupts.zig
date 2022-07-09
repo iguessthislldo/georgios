@@ -216,7 +216,7 @@ pub fn PanicMessage(comptime StackType: type) type {
                 segments.get_name(interrupt_stack.cs / 8),
             });
 
-            putil.done();
+            putil.halt_forever();
         }
     };
 }

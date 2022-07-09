@@ -61,6 +61,12 @@ pub fn build(builder: *std.build.Builder) void {
     const direct_disk = b.option(bool, "direct_disk",
         \\Do not cache disk operations, use disk directly.
         ) orelse false;
+    const run_rc = b.option(bool, "run_rc",
+        \\Run /etc/rc on start
+        ) orelse true;
+    const halt_when_done = b.option(bool, "halt_when_done",
+        \\Halt instead of shutting down.
+        ) orelse false;
 
     target = b.standardTargetOptions(.{
         .default_target = std.zig.CrossTarget.parse(.{
@@ -100,6 +106,8 @@ pub fn build(builder: *std.build.Builder) void {
     kernel_options.addOption(bool, "debug_log", debug_log);
     kernel_options.addOption(bool, "wait_for_anykey", wait_for_anykey);
     kernel_options.addOption(bool, "direct_disk", direct_disk);
+    kernel_options.addOption(bool, "run_rc", run_rc);
+    kernel_options.addOption(bool, "halt_when_done", halt_when_done);
     kernel_options.addOption(bool, "is_kernel", true);
     kernel.addOptions("build_options", kernel_options);
     // Packages
