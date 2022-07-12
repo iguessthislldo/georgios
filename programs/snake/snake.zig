@@ -57,7 +57,7 @@ const Game = struct {
                     },
                     .Key_Escape => {
                         system_calls.print_string("\x1bc");
-                        system_calls.exit(0);
+                        system_calls.exit(.{});
                     },
                     else => {},
                 }

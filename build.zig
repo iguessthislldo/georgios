@@ -136,6 +136,7 @@ pub fn build(builder: *std.build.Builder) void {
     build_program("cksum");
     build_program("img");
     build_program("check-test-file");
+    build_program("test-prog");
     // build_zig_program("hello-zig");
     // build_c_program("hello-c");
 }

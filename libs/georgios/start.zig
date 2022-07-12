@@ -13,12 +13,12 @@ fn start() noreturn {
     system_calls.exit(main_wrapper());
 }
 
-fn main_wrapper() u8 {
-    var exit_status: u8 = 0;
+fn main_wrapper() georgios.ExitInfo {
+    var exit_info: georgios.ExitInfo = .{};
     switch (@typeInfo(@typeInfo(@TypeOf(root.main)).Fn.return_type.?)) {
         .Void => root.main(),
-        .Int => exit_status = root.main(),
+        .Int => exit_info.status = root.main(),
         else => @compileError("main return type not supported"),
     }
-    return exit_status;
+    return exit_info;
 }

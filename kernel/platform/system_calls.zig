@@ -2,6 +2,7 @@
 
 const utils = @import("utils");
 const georgios = @import("georgios");
+const ValueOrErrorT = georgios.system_calls.ValueOrError;
 
 const kernel = @import("root").kernel;
 const print = kernel.print;
@@ -78,25 +79,27 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             kernel.threading_mgr.yield();
         },
 
-        // SYSCALL: exit(status: u8) noreturn
+        // SYSCALL: exit(&info: georgios.ExitInfo) noreturn
+        // IMPORT: georgios "georgios.zig"
         3 => {
-            // TODO: Use status
+            const info = @intToPtr(*georgios.ExitInfo, arg1);
             if (kthreading.debug) print.string("\nE");
-            kernel.threading_mgr.remove_current_thread();
+            kernel.threading_mgr.exit_current_process(info.*);
         },
 
-        // SYSCALL: exec(info: *const georgios.ProcessInfo) georgios.ExecError!void
+        // SYSCALL: exec(info: *const georgios.ProcessInfo) georgios.ExecError!georgios.ExitInfo
         // IMPORT: georgios "georgios.zig"
         4 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(void, georgios.ExecError);
+            const ValueOrError = ValueOrErrorT(georgios.ExitInfo, georgios.ExecError);
             // Should not be able to create kernel mode process from a system
             // call that can be called from user mode.
             var info = @intToPtr(*const georgios.ProcessInfo, arg1).*;
             info.kernel_mode = false;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.exec(&info)) |pid| {
-                kernel.threading_mgr.wait_for_process(pid);
-                rv.set_value(.{});
+                const exit_info = kernel.threading_mgr.wait_for_process(pid)
+                    catch @panic("wait_for_process failed");
+                rv.set_value(exit_info);
             } else |e| {
                 rv.set_error(e);
             }
@@ -144,8 +147,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: file_open(&path: []const u8) georgios.fs.Error!georgios.io.File.Id
         8 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                georgios.io.File.Id, georgios.fs.Error);
+            const ValueOrError = ValueOrErrorT(georgios.io.File.Id, georgios.fs.Error);
             const path = @intToPtr(*[]const u8, arg1);
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.filesystem.open(path.*)) |fs_file| {
@@ -157,8 +159,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: file_read(id: georgios.io.File.Id, &to: []u8) georgios.io.FileError!usize
         9 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                usize, georgios.io.FileError);
+            const ValueOrError = ValueOrErrorT(usize, georgios.io.FileError);
             const id = arg1;
             const to = @intToPtr(*[]u8, arg2);
             const rv = @intToPtr(*ValueOrError, arg3);
@@ -171,8 +172,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: file_write(id: georgios.io.File.Id, &from: []const u8) georgios.io.FileError!usize
         10 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                usize, georgios.io.FileError);
+            const ValueOrError = ValueOrErrorT(usize, georgios.io.FileError);
             const id = arg1;
             const from = @intToPtr(*[]const u8, arg2);
             const rv = @intToPtr(*ValueOrError, arg3);
@@ -192,8 +192,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
         12 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                void, georgios.io.FileError);
+            const ValueOrError = ValueOrErrorT(void, georgios.io.FileError);
             const id = arg1;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.filesystem.file_id_close(id)) {
@@ -205,8 +204,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: get_cwd(&buffer: []u8) georgios.threading.Error![]const u8
         13 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                []const u8, georgios.threading.Error);
+            const ValueOrError = ValueOrErrorT([]const u8, georgios.threading.Error);
             const buffer = @intToPtr(*[]u8, arg1).*;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.threading_mgr.get_cwd(buffer)) |dir| {
@@ -218,8 +216,7 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
 
         // SYSCALL: set_cwd(&dir: []const u8) georgios.ThreadingOrFsError!void
         14 => {
-            const ValueOrError = georgios.system_calls.ValueOrError(
-                void, georgios.ThreadingOrFsError);
+            const ValueOrError = ValueOrErrorT(void, georgios.ThreadingOrFsError);
             const dir = @intToPtr(*[]const u8, arg1).*;
             const rv = @intToPtr(*ValueOrError, arg2);
             if (kernel.threading_mgr.set_cwd(dir)) {

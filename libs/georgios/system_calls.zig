@@ -22,6 +22,7 @@ const ErrorCode = enum(u32) {
     InvalidElfObjectType = 16,
     InvalidElfPlatform = 17,
     NoCurrentProcess = 18,
+    NoSuchProcess = 19,
     _,
 };
 
@@ -54,6 +55,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ExecError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
                     georgios.ExecError.InvalidFree => ErrorCode.InvalidFree,
                     georgios.ExecError.NoCurrentProcess => ErrorCode.NoCurrentProcess,
+                    georgios.ExecError.NoSuchProcess => ErrorCode.NoSuchProcess,
                     georgios.ExecError.InvalidElfFile => ErrorCode.InvalidElfFile,
                     georgios.ExecError.InvalidElfObjectType => ErrorCode.InvalidElfObjectType,
                     georgios.ExecError.InvalidElfPlatform => ErrorCode.InvalidElfPlatform,
@@ -88,6 +90,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                 },
                 georgios.threading.Error => switch (err) {
                     georgios.threading.Error.NoCurrentProcess => ErrorCode.NoCurrentProcess,
+                    georgios.threading.Error.NoSuchProcess => ErrorCode.NoSuchProcess,
                     georgios.threading.Error.Unknown => ErrorCode.Unknown,
                     georgios.threading.Error.OutOfBounds => ErrorCode.OutOfBounds,
                     georgios.threading.Error.NotEnoughSource => ErrorCode.NotEnoughSource,
@@ -112,6 +115,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ThreadingOrFsError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
                     georgios.ThreadingOrFsError.InvalidFree => ErrorCode.InvalidFree,
                     georgios.ThreadingOrFsError.NoCurrentProcess => ErrorCode.NoCurrentProcess,
+                    georgios.ThreadingOrFsError.NoSuchProcess => ErrorCode.NoSuchProcess,
                 },
                 else => @compileError(
                     "Invalid ErrorType for " ++ @typeName(Self) ++ ".set_error: " ++
@@ -139,6 +143,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .ZeroSizedAlloc => georgios.ExecError.ZeroSizedAlloc,
                         .InvalidFree => georgios.ExecError.InvalidFree,
                         .NoCurrentProcess => georgios.ExecError.NoCurrentProcess,
+                        .NoSuchProcess => georgios.ExecError.NoSuchProcess,
                         .InvalidElfFile => georgios.ExecError.InvalidElfFile,
                         .InvalidElfObjectType => georgios.ExecError.InvalidElfObjectType,
                         .InvalidElfPlatform => georgios.ExecError.InvalidElfPlatform,
@@ -176,6 +181,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     },
                     georgios.threading.Error => switch (error_code) {
                         .NoCurrentProcess => georgios.threading.Error.NoCurrentProcess,
+                        .NoSuchProcess => georgios.threading.Error.NoSuchProcess,
                         .Unknown => georgios.threading.Error.Unknown,
                         .OutOfBounds => georgios.threading.Error.OutOfBounds,
                         .NotEnoughSource => georgios.threading.Error.NotEnoughSource,
@@ -201,6 +207,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .ZeroSizedAlloc => georgios.ThreadingOrFsError.ZeroSizedAlloc,
                         .InvalidFree => georgios.ThreadingOrFsError.InvalidFree,
                         .NoCurrentProcess => georgios.ThreadingOrFsError.NoCurrentProcess,
+                        .NoSuchProcess => georgios.ThreadingOrFsError.NoSuchProcess,
                         else => utils.Error.Unknown,
                     },
                     else => @compileError(
@@ -226,16 +233,16 @@ pub fn yield() callconv(.Inline) void {
         );
 }
 
-pub fn exit(status: u8) callconv(.Inline) noreturn {
+pub fn exit(info: georgios.ExitInfo) callconv(.Inline) noreturn {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 3)),
-        [arg1] "{ebx}" (status),
+        [arg1] "{ebx}" (@ptrToInt(&info)),
         );
     unreachable;
 }
 
-pub fn exec(info: *const georgios.ProcessInfo) callconv(.Inline) georgios.ExecError!void {
-    var rv: ValueOrError(void, georgios.ExecError) = undefined;
+pub fn exec(info: *const georgios.ProcessInfo) callconv(.Inline) georgios.ExecError!georgios.ExitInfo {
+    var rv: ValueOrError(georgios.ExitInfo, georgios.ExecError) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 4)),
         [arg1] "{ebx}" (info),

@@ -1,6 +1,9 @@
+const std = @import("std");
+
 const utils = @import("utils");
 const georgios = @import("georgios");
 const Info = georgios.ProcessInfo;
+const ExitInfo = georgios.ExitInfo;
 
 const platform = @import("platform.zig");
 const pthreading = platform.impl.threading;
@@ -230,6 +233,7 @@ pub const Manager = struct {
     }
 
     const ProcessList = MappedList(Process.Id, *Process, pid_eql, pid_cmp);
+    const ExitInfoMap = std.AutoHashMap(Process.Id, ExitInfo);
 
     thread_list: ThreadList = undefined,
     idle_thread: Thread = .{.kernel_mode = true, .state = .Wait},
@@ -239,6 +243,7 @@ pub const Manager = struct {
     head_thread: ?*Thread = null,
     tail_thread: ?*Thread = null,
     process_list: ProcessList = undefined,
+    exit_info_map: ExitInfoMap = undefined,
     next_process_id: Process.Id = 0,
     current_process: ?*Process = null,
     waiting_for_keyboard: ?*Thread = null,
@@ -247,6 +252,7 @@ pub const Manager = struct {
     pub fn init(self: *Manager) Error!void {
         self.thread_list = .{.alloc = kernel.alloc};
         self.process_list = .{.alloc = kernel.alloc};
+        self.exit_info_map = ExitInfoMap.init(kernel.alloc.std_allocator());
         try self.idle_thread.init(false);
         self.idle_thread.entry = @ptrToInt(platform.idle);
         try self.boot_thread.init(true);
@@ -348,6 +354,16 @@ pub const Manager = struct {
         @panic("remove_current_thread: reached end");
     }
 
+    pub fn exit_current_process(self: *Manager, info: ExitInfo) void {
+        if (self.current_thread.?.process) |process| {
+            self.exit_info_map.put(process.id, info)
+                catch @panic("exit_current_process put failed");
+        } else {
+            @panic("exit_current_process no current process");
+        }
+        self.remove_current_thread();
+    }
+
     fn next_from(self: *const Manager, thread_maybe: ?*Thread) ?*Thread {
         if (thread_maybe) |thread| {
             const nt = thread.next_in_system orelse self.head_thread;
@@ -431,7 +447,7 @@ pub const Manager = struct {
         return self.process_list.find(id) != null;
     }
 
-    pub fn wait_for_process(self: *Manager, id: Process.Id) void {
+    pub fn wait_for_process(self: *Manager, id: Process.Id) Error!ExitInfo {
         if (debug) print.format("<Wait for pid {}>\n", .{id});
         platform.disable_interrupts();
         if (self.process_list.find(id)) |proc| {
@@ -443,6 +459,11 @@ pub const Manager = struct {
             self.yield();
         }
         if (debug) print.format("<Wait for pid {} is done>\n", .{id});
+        if (self.exit_info_map.get(id)) |exit_info| {
+            return exit_info;
+        } else {
+            return Error.NoSuchProcess;
+        }
     }
 
     // TODO Make this and keyboard_event_occured generic

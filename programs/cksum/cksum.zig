@@ -19,14 +19,14 @@ fn print_result(filename: []const u8, cksum: *Cksum) !void {
     print_string(ts.get());
 }
 
-pub fn main() void {
+pub fn main() u8 {
     for (georgios.proc_info.args) |arg| {
         var cksum = georgios.utils.Cksum{};
         var file = georgios.fs.open(arg) catch |e| {
             print_string("cksum: open error: ");
             print_string(@errorName(e));
             print_string("\n");
-            return;
+            return 1;
         };
 
         var got: usize = 1;
@@ -37,7 +37,7 @@ pub fn main() void {
                 print_string("cksum: file.read error: ");
                 print_string(@errorName(e));
                 print_string("\n");
-                got = 0;
+                return 1;
             }
             if (got > 0) {
                 cksum.sum_bytes(buffer[0..got]);
@@ -48,14 +48,16 @@ pub fn main() void {
             print_string("cksum: failed to print result: ");
             print_string(@errorName(e));
             print_string("\n");
-            return;
+            return 1;
         };
 
         file.close() catch |e| {
             print_string("cksum: file.close error: ");
             print_string(@errorName(e));
             print_string("\n");
-            return;
+            return 1;
         };
     }
+
+    return 0;
 }

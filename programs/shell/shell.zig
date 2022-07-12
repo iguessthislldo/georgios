@@ -6,10 +6,19 @@ const system_calls = georgios.system_calls;
 const utils = georgios.utils;
 
 const print_string = system_calls.print_string;
+const print_uint = system_calls.print_uint;
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     georgios.panic(msg, trace);
 }
+
+const segment_start = "░▒▓";
+const segment_end = "▓▒░";
+const esc = "\x1b";
+const reset_console = esc ++ "c";
+const ansi_esc = esc ++ "[";
+const invert_colors = ansi_esc ++ "7m";
+const reset_colors = ansi_esc ++ "39;49m";
 
 var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
@@ -130,7 +139,7 @@ fn run_command(command: []const u8) bool {
     if (utils.memory_compare(command_parts[0], "exit")) {
         return true;
     } else if (utils.memory_compare(command_parts[0], "reset")) {
-        print_string("\x1bc"); // Reset Console
+        print_string(reset_console);
     } else if (utils.memory_compare(command_parts[0], "pwd")) {
         if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
             print_string(dir);
@@ -174,7 +183,7 @@ fn run_command(command: []const u8) bool {
         if (check_bin_path("/bin", command_parts[0], path_buffer[0..])) |path| {
             command_path = path[0..];
         }
-        system_calls.exec(&georgios.ProcessInfo{
+        const exit_info = system_calls.exec(&georgios.ProcessInfo{
             .path = command_path,
             .name = command_parts[0],
             .args = command_parts[1..command_part_count],
@@ -184,7 +193,23 @@ fn run_command(command: []const u8) bool {
             print_string("\" failed: ");
             print_string(@errorName(e));
             print_string("\n");
+            return false;
         };
+        if (exit_info.failed()) {
+            // Start
+            print_string(
+                ansi_esc ++ "31m" ++ // Red FG
+                segment_start ++ reset_colors);
+
+            // Status
+            print_string(ansi_esc ++ "30;41m"); // Black FG, Red BG
+            print_uint(exit_info.status, 10);
+
+            // End
+            print_string(
+                reset_colors ++ ansi_esc ++ "31m" ++ // Red FG
+                segment_end ++ reset_colors ++ "\n");
+        }
     }
 
     return false;
@@ -197,7 +222,8 @@ pub fn main() void {
     var got: usize = 0;
     var running = true;
     while (running) {
-        print_string("░▒▓\x1b[7m");
+        // Print Prompt
+        print_string(segment_start ++ invert_colors);
         if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
             if (!(dir.len == 1 and dir[0] == '/')) {
                 system_calls.print_string(dir);
@@ -207,7 +233,9 @@ pub fn main() void {
             print_string(@errorName(e));
             print_string("\n");
         }
-        print_string("%\x1b[7m");
+        print_string("%" ++ invert_colors);
+
+        // Process command
         var getline = true;
         while (getline) {
             const key_event = system_calls.get_key(.Blocking).?;
@@ -251,5 +279,4 @@ pub fn main() void {
         }
     }
     print_string("<shell about to exit>\n");
-    system_calls.exit(0);
 }

@@ -21,6 +21,14 @@ comptime {
     }
 }
 
+pub const ExitInfo = struct {
+    status: u8 = 0,
+
+    pub fn failed(self: *const ExitInfo) bool {
+        return self.status != 0;
+    }
+};
+
 pub var proc_info: if (is_program) *const ProcessInfo else void = undefined;
 
 pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
@@ -33,7 +41,7 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     ts.string(msg) catch unreachable;
     ts.string("\n") catch unreachable;
     system_calls.print_string(ts.get());
-    system_calls.exit(1);
+    system_calls.exit(.{.status = 1});
 }
 
 pub const DirEntry = struct {
@@ -69,6 +77,7 @@ pub const fs = struct {
 pub const threading = struct {
     pub const Error = error {
         NoCurrentProcess,
+        NoSuchProcess,
     } || utils.Error || memory.MemoryError;
 };
 

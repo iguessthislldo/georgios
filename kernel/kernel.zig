@@ -106,7 +106,9 @@ pub fn run() !void {
     var rc_buffer: [128]u8 = undefined;
     var rc_path: []const u8 = rc_buffer[0..try rc_file.io_file.read(rc_buffer[0..])];
     rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
-    threading_mgr.wait_for_process(try exec(&georgios.ProcessInfo{.path = rc_path}));
+    const rc_info: georgios.ProcessInfo = .{.path = rc_path};
+    const rc_exit_info = try threading_mgr.wait_for_process(try exec(&rc_info));
+    print.format("RC: {}\n", .{rc_exit_info});
 }
 
 var quick_debug_ready = false;

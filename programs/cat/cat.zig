@@ -3,13 +3,13 @@ comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
 const print_string = system_calls.print_string;
 
-pub fn main() void {
+pub fn main() u8 {
     for (georgios.proc_info.args) |arg| {
         var file = georgios.fs.open(arg) catch |e| {
             print_string("cat: open error: ");
             print_string(@errorName(e));
             print_string("\n");
-            return;
+            return 1;
         };
 
         var buffer: [128]u8 = undefined;
@@ -21,7 +21,7 @@ pub fn main() void {
                 print_string("cat: file.read error: ");
                 print_string(@errorName(e));
                 print_string("\n");
-                got = 0;
+                return 1;
             }
             if (got > 0) {
                 print_string(buffer[0..got]);
@@ -32,7 +32,9 @@ pub fn main() void {
             print_string("cat: file.close error: ");
             print_string(@errorName(e));
             print_string("\n");
-            return;
+            return 1;
         };
     }
+
+    return 0;
 }

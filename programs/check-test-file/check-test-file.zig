@@ -8,6 +8,7 @@ const IntType = u32;
 const total_size: usize = 1048576;
 const total_int_count = total_size / @sizeOf(IntType);
 
+var status: u8 = 0;
 var msg_buffer: [128]u8 = undefined;
 var streak_start: usize = 0;
 var streak_size: usize = 0;
@@ -25,16 +26,17 @@ fn streak() !void {
         total_invalid += streak_size;
         streak_size = 0;
         streak_start = 0;
+        status = 1;
     }
 }
 
-pub fn main() void {
+pub fn main() u8 {
     var file = georgios.fs.open("files/test-file") catch |e| {
         print_string("open error: ");
         print_string(@errorName(e));
         print_string("\nNOTE: test-file has to be generated using scripts/gen-test-file.py\n");
         print_string("After that remove disk.img and rebuild\n");
-        return;
+        return 1;
     };
 
     var pos: usize = 0;
@@ -55,6 +57,7 @@ pub fn main() void {
                 ts.uint(got) catch unreachable;
                 ts.char('\n') catch unreachable;
                 print_string(ts.get());
+                status = 1;
                 break;
             }
 
@@ -71,6 +74,7 @@ pub fn main() void {
                         ts.uint(expected_int) catch unreachable;
                         ts.char('\n') catch unreachable;
                         print_string(ts.get());
+                        status = 1;
                     } else {
                         print_string(".");
                     }
@@ -84,7 +88,7 @@ pub fn main() void {
                         print_string("streak error: ");
                         print_string(@errorName(e));
                         print_string("\n");
-                        return;
+                        return 1;
                     };
                 }
                 pos += @sizeOf(IntType);
@@ -95,13 +99,14 @@ pub fn main() void {
             print_string(@errorName(e));
             print_string("\n");
             got = 0;
+            return 1;
         }
     }
     streak() catch |e| {
         print_string("streak error: ");
         print_string(@errorName(e));
         print_string("\n");
-        return;
+        return 1;
     };
 
     {
@@ -111,6 +116,7 @@ pub fn main() void {
         ts.uint(total_size) catch unreachable;
         ts.string(" bytes were invalid\n") catch unreachable;
         print_string(ts.get());
+        status = 1;
     }
 
     if (pos != total_size) {
@@ -121,12 +127,15 @@ pub fn main() void {
         ts.uint(pos) catch unreachable;
         ts.string(" bytes\n") catch unreachable;
         print_string(ts.get());
+        status = 1;
     }
 
     file.close() catch |e| {
         print_string("file.close error: ");
         print_string(@errorName(e));
         print_string("\n");
-        return;
+        status = 1;
     };
+
+    return status;
 }

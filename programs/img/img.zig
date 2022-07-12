@@ -12,11 +12,11 @@ const print_uint = system_calls.print_uint;
 
 var buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
-pub fn main() void {
+pub fn main() u8 {
     const res = system_calls.vbe_res();
     if (res == null) {
         print_string("img requires VBE graphics mode\n");
-        return;
+        return 1;
     }
 
     // Parse arguments
@@ -37,7 +37,7 @@ pub fn main() void {
     }
     if (path == null) {
         print_string("img: requires image path\n");
-        return;
+        return 1;
     }
 
     // Open image file
@@ -45,14 +45,14 @@ pub fn main() void {
         print_string("img: open error: ");
         print_string(@errorName(e));
         print_string("\n");
-        return;
+        return 2;
     };
     var img_file = georgios.ImgFile{.file = &file, .buffer = buffer[0..]};
     img_file.parse_header() catch |e| {
         print_string("img: invalid image file: ");
         print_string(@errorName(e));
         print_string("\n");
-        return;
+        return 2;
     };
 
     // Figure out where the image is going.
@@ -111,6 +111,8 @@ pub fn main() void {
         print_string("img: file.close error: ");
         print_string(@errorName(e));
         print_string("\n");
-        return;
+        return 3;
     };
+
+    return if (success) 0 else 3;
 }
