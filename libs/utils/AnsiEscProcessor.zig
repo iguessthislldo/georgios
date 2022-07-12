@@ -48,6 +48,7 @@ hex_color: ?fn(self: *Self, color: HexColor, layer: Layer) void = null,
 invert_colors: ?fn(self: *Self) void = null,
 backspace: ?fn(self: *Self) void = null,
 newline: ?fn(self: *Self) void = null,
+use_default_color: ?fn(self: *Self, layer: Layer) void = null,
 reset_attributes: ?fn(self: *Self) void = null,
 reset_terminal: ?fn(self: *Self) void = null,
 move_cursor: ?fn(self: *Self, r: usize, c: usize) void = null,
@@ -71,7 +72,7 @@ fn process_parameter(self: *Self) bool {
         parameter = 0;
     }
     if (parameter) |p| {
-        // std.debug.warn("Parameter: {}\n", .{p});
+        // std.debug.print("Parameter: {}\n", .{p});
         if (self.parameter_count < self.parameters.len) {
             self.parameters[self.parameter_count] = p;
             self.parameter_count += 1;
@@ -86,14 +87,18 @@ fn select_graphic_rendition(self: *Self) void {
     var i: usize = 0;
     while (i < self.parameter_count) {
         const p = self.parameters[i];
-        // std.debug.warn("SGR: {}\n", .{p});
+        // std.debug.print("SGR: {}\n", .{p});
         switch (p) {
             0 => if (self.reset_attributes) |reset_attributes| reset_attributes(self),
             7 => if (self.invert_colors) |invert_colors| invert_colors(self),
             30...37 => if (self.hex_color) |hex_color|
                 hex_color(self, @intToEnum(HexColor, p - 30), .Foreground),
+            39 => if (self.use_default_color) |use_default_color|
+                use_default_color(self, .Foreground),
             40...47 => if (self.hex_color) |hex_color|
                 hex_color(self, @intToEnum(HexColor, p - 40), .Background),
+            49 => if (self.use_default_color) |use_default_color|
+                use_default_color(self, .Background),
             90...97 => if (self.hex_color) |hex_color|
                 hex_color(self, @intToEnum(HexColor, p - 82), .Foreground),
             100...107 => if (self.hex_color) |hex_color|
@@ -121,7 +126,7 @@ fn process_move_cursor(self: *Self) void {
 pub fn feed_char(self: *Self, char: u8) void {
     self.saved[self.saved_so_far] = char;
 
-    // std.debug.warn("feed_char {c}\n", .{char});
+    // std.debug.print("feed_char {c}\n", .{char});
     var abort = false;
     var reset = false;
     switch (self.state) {
@@ -226,7 +231,7 @@ pub fn feed_char(self: *Self, char: u8) void {
     }
 
     if (abort) {
-        // std.debug.warn("Abort\n", .{});
+        // std.debug.print("Abort\n", .{});
         if (self.print_char) |print_char| {
             // Dump the malformed sequence. Seems to be what Gnome's terminal does.
             for (self.saved[0..self.saved_so_far]) |c| {
@@ -243,7 +248,7 @@ pub fn feed_char(self: *Self, char: u8) void {
         self.parameter_start = null;
     }
 
-    // std.debug.warn("state {s}\n", .{@tagName(self.state)});
+    // std.debug.print("state {s}\n", .{@tagName(self.state)});
 }
 
 pub fn feed_str(self: *Self, str: []const u8) void {
@@ -262,38 +267,56 @@ fn test_print_char(self: *Self, char: u8) void {
     test_print_char_got += 1;
 }
 
+fn test_print_str(self: *Self, str: []const u8) void {
+    for (str) |c| test_print_char(self, c);
+}
+
 fn test_reset(self: *Self) void {
-    _ = self;
-    test_print_char(self, 'R');
+    test_print_str(self, "[RESET]");
 }
 
 fn test_invert_colors(self: *Self) void {
-    _ = self;
-    test_print_char(self, 'I');
+    test_print_str(self, "[INVERT]");
 }
 
 fn test_hex_color(self: *Self, color: HexColor, layer: Layer) void {
+    test_print_char(self, '[');
     test_print_char(self, if (layer == .Background) 'B' else 'F');
-    test_print_char(self, 'C');
-    test_print_char(self, '(');
+    test_print_str(self, "G_COLOR(");
     test_print_char(self, switch (color) {
         .LightRed => 'R',
         .Green => 'g',
         else => '?',
     });
-    test_print_char(self, ')');
+    test_print_str(self, ")]");
+}
+
+fn test_use_default_color(self: *Self, layer: Layer) void {
+    test_print_str(self, "[DEFAULT_");
+    test_print_char(self, if (layer == .Background) 'B' else 'F');
+    test_print_str(self, "G]");
 }
 
 test "AnsiEscProcessor" {
     var esc = Self{
         .print_char = test_print_char,
+        .use_default_color = test_use_default_color,
         .reset_attributes = test_reset,
         .invert_colors = test_invert_colors,
         .hex_color = test_hex_color,
     };
     esc.feed_str("Hello \x1b[7mBob\x1b[0m \x1b[91;42mGoodbye");
-    try std.testing.expectEqualStrings("Hello IBobR FC(R)BC(g)Goodbye",
+    try std.testing.expectEqualStrings(
+        "Hello [INVERT]Bob[RESET] [FG_COLOR(R)][BG_COLOR(g)]Goodbye",
         test_print_char_buffer[0..test_print_char_got]);
+    try std.testing.expectEqual(@as(usize, 0), esc.malformed_sequences);
 
+    test_print_char_got = 0;
+    esc.feed_str("\x1b[91m<<<\x1b[39;49m\x1b[101;32m1\x1b[39;49m");
+    try std.testing.expectEqualStrings(
+        "[FG_COLOR(R)]<<<[DEFAULT_FG][DEFAULT_BG]" ++
+            "[BG_COLOR(R)][FG_COLOR(g)]1[DEFAULT_FG][DEFAULT_BG]",
+        test_print_char_buffer[0..test_print_char_got]);
+    try std.testing.expectEqual(@as(usize, 0), esc.malformed_sequences);
     // TODO: More Tests
 }

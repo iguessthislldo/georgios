@@ -18,6 +18,7 @@ place_impl: fn(console: *Self, utf32_value: u32, row: u32, col: u32) void,
 scroll_impl: fn(console: *Self) void,
 set_hex_color_impl: fn(console: *Self, color: HexColor, layer: Layer) void,
 get_hex_color_impl: fn(console: *Self, layer: Layer) HexColor,
+use_default_color_impl: fn(console: *Self, layer: Layer) void,
 reset_attributes_impl: fn(console: *Self) void,
 move_cursor_impl: fn(console: *Self, row: u32, col: u32) void,
 show_cursor_impl: fn(console: *Self, show: bool) void,
@@ -32,6 +33,7 @@ pub fn init(self: *Self, width: u32, height: u32) void {
       .backspace = ansi_backspace,
       .hex_color = ansi_hex_color,
       .invert_colors = ansi_invert_colors,
+      .use_default_color = ansi_use_default_color,
       .reset_attributes = ansi_reset_attributes,
       .reset_terminal = ansi_reset_terminal,
       .move_cursor = ansi_move_cursor,
@@ -132,7 +134,22 @@ pub fn ansi_invert_colors(ansi: *Ansi) void {
     self.invert_colors();
 }
 
+pub fn use_default_color(self: *Self, layer: Layer) void {
+    self.use_default_color_impl(self, layer);
+}
+
+pub fn ansi_use_default_color(ansi: *Ansi, layer: Layer) void {
+    const self = @fieldParentPtr(Self, "ansi", ansi);
+    self.use_default_color(layer);
+}
+
+pub fn use_default_colors(self: *Self) void {
+    self.use_default_color(.Foreground);
+    self.use_default_color(.Background);
+}
+
 pub fn reset_attributes(self: *Self) void {
+    self.use_default_colors();
     self.reset_attributes_impl(self);
 }
 
@@ -172,7 +189,7 @@ pub fn clear_screen(self: *Self) void {
 
 pub fn reset_terminal(self: *Self) void {
     self.reset_attributes();
-    self.clear_screen_impl(self);
+    self.clear_screen();
     self.reset_cursor();
 }
 

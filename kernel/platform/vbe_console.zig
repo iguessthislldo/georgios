@@ -50,6 +50,7 @@ pub var console = Console{
     .scroll_impl = scroll_impl,
     .set_hex_color_impl = set_hex_color_impl,
     .get_hex_color_impl = get_hex_color_impl,
+    .use_default_color_impl = use_default_color_impl,
     .reset_attributes_impl = reset_attributes_impl,
     .move_cursor_impl = move_cursor_impl,
     .show_cursor_impl = show_cursor_impl,
@@ -92,9 +93,13 @@ pub fn get_hex_color_impl(c: *Console, layer: Console.Layer) HexColor {
     return if (layer == .Foreground) fg_color else bg_color;
 }
 
+fn use_default_color_impl(c: *Console, layer: Console.Layer) void {
+    c.set_hex_color(if (layer == .Foreground) default_fg_color else default_bg_color, layer);
+}
+
 pub fn reset_attributes_impl(c: *Console) void {
+    _ = c;
     scroll_count = 0;
-    c.set_hex_colors(default_fg_color, default_bg_color);
 }
 
 pub fn clear_screen_impl(c: *Console) void {
