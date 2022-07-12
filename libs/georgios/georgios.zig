@@ -23,9 +23,10 @@ comptime {
 
 pub const ExitInfo = struct {
     status: u8 = 0,
+    crashed: bool = false,
 
     pub fn failed(self: *const ExitInfo) bool {
-        return self.status != 0;
+        return self.status != 0 or self.crashed;
     }
 };
 

@@ -21,6 +21,19 @@ pub fn main() u8 {
             return status;
         } else if (streq(arg, "exit-with")) {
             exit_with = true;
+        } else if (streq(arg, "panic")) {
+            @panic("Panic was requested");
+        } else if (streq(arg, "kpanic")) {
+            // Try to invoke an interrupt that's only for the kernel.
+            asm volatile ("int $50");
+        } else if (streq(arg, "kcode")) {
+            // Try to run code in kernel space
+            asm volatile (
+                \\pushl $0xc013bef0
+                \\ret
+            );
+        } else if (streq(arg, "koverflow")) {
+            system_calls.overflow_kernel_stack();
         } else {
             print_string("Invalid argument: ");
             print_string(arg);

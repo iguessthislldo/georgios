@@ -107,15 +107,32 @@ pub const user_flags: u8 = kernel_flags | (3 << 5);
 pub fn PanicMessage(comptime StackType: type) type {
     return struct {
         pub fn show(interrupt_number: u32, interrupt_stack: *const StackType) void {
-            kernel.console.reset_terminal();
-            kernel.console.show_cursor(false);
-            kernel.console.set_hex_colors(.Black, .Red);
-            kernel.console.clear_screen();
             const has_ec = StackType.has_error_code;
             const ec = interrupt_stack.error_code;
+            const gpf = has_ec and interrupt_number == 13;
+            const page_fault = has_ec and interrupt_number == 14;
+
+            const caused_by_user = interrupt_stack.eip < 0xc000000 or
+                (page_fault and (ec & 4) > 0);
+            if (caused_by_user) {
+                print.string(
+                    \\==============================<!>Program Crash<!>=============================
+                    \\A program has encountered an unrecoverable error:
+                    \\
+                );
+            } else {
+                kernel.console.reset_terminal();
+                kernel.console.show_cursor(false);
+                kernel.console.set_hex_colors(.Black, .Red);
+                kernel.console.clear_screen();
+                print.string(
+                    \\==============================<!>Kernel Panic<!>==============================
+                    \\The system has encountered an unrecoverable error:
+                    \\
+                );
+            }
+
             print.format(
-                \\==============================<!>Kernel Panic<!>==============================
-                \\The system has encountered an unrecoverable error:
                 \\  Interrupt Number: {}
                 \\
                 , .{interrupt_number});
@@ -127,7 +144,7 @@ pub fn PanicMessage(comptime StackType: type) type {
                 print.string(kernel.panic_message);
             } else {
                 print.string(get_name(interrupt_number));
-                if (has_ec and interrupt_number == 13) {
+                if (gpf) {
                     // Explain General Protection Fault Cause
                     const which_table = @intCast(u2, (ec >> 1) & 3);
                     const table_index = (ec >> 3) & 8191;
@@ -148,7 +165,7 @@ pub fn PanicMessage(comptime StackType: type) type {
                         print.format(" ({})", .{get_name(table_index)});
                     }
 
-                } else if (has_ec and interrupt_number == 14) {
+                } else if (page_fault) {
                     // Explain Page Fault Cause
                     const what = if ((ec & 1) > 0)
                         @as([]const u8, "Page Protection Violation") else
@@ -163,7 +180,7 @@ pub fn PanicMessage(comptime StackType: type) type {
                             (if ((ec & 2) > 0) @as([]const u8, "Writing to") else
                             @as([]const u8, "Reading From"));
                     const user =
-                        if ((ec & 4) > 0) @as([]const u8, "User") else
+                        if (caused_by_user) @as([]const u8, "User") else
                             @as([]const u8, "Non-User");
                     print.format("\n    {}{} While {} {:a} while in {} Ring", .{
                         what, reserved, when, putil.cr2(), user});
@@ -216,7 +233,12 @@ pub fn PanicMessage(comptime StackType: type) type {
                 segments.get_name(interrupt_stack.cs / 8),
             });
 
-            putil.halt_forever();
+            if (caused_by_user) {
+                print.char('\n');
+                kernel.threading_mgr.exit_current_process(.{.crashed = true});
+            } else {
+                putil.halt_forever();
+            }
         }
     };
 }

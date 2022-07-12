@@ -173,8 +173,6 @@ fn run_command(command: []const u8) bool {
                 print_string("\n");
             }
         }
-    } else if (utils.memory_compare(command_parts[0], "koverflow")) {
-        system_calls.overflow_kernel_stack();
     } else if (utils.memory_compare(command_parts[0], "motd")) {
         read_motd();
     } else {
@@ -203,7 +201,11 @@ fn run_command(command: []const u8) bool {
 
             // Status
             print_string(ansi_esc ++ "30;41m"); // Black FG, Red BG
-            print_uint(exit_info.status, 10);
+            if (exit_info.crashed) {
+                print_string("crashed");
+            } else {
+                print_uint(exit_info.status, 10);
+            }
 
             // End
             print_string(
