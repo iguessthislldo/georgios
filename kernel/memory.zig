@@ -182,10 +182,22 @@ pub const UnitTestAllocator = struct {
         self.allocated = 0;
     }
 
+    pub fn done_no_checks(self: *Self) void {
+        self.impl.deinit();
+    }
+
     pub fn done(self: *Self) void {
         std.testing.expectEqual(@as(usize, 0), self.allocated)
             catch @panic("outstanding allocations or wrong sizes");
-        self.impl.deinit();
+        self.done_no_checks();
+    }
+
+    pub fn done_check_if(self: *Self, condition: *bool) void {
+        if (condition.*) {
+            self.done();
+        } else {
+            self.done_no_checks();
+        }
     }
 
     pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
@@ -195,10 +207,12 @@ pub const UnitTestAllocator = struct {
         const align_u29 = @truncate(u29, align_to);
         const rv = self.impl.allocator().allocBytes(align_u29, size,
             align_u29, @returnAddress()) catch return AllocError.OutOfMemory;
+        // std.debug.print("alloc {x}: {}\n", .{@ptrToInt(rv.ptr), rv.len});
         return rv;
     }
 
     pub fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
+        // std.debug.print("free {x}: {}\n", .{@ptrToInt(value.ptr), value.len});
         const self = @fieldParentPtr(Self, "allocator", allocator);
         std.testing.expectEqual(true, self.allocated >= value.len)
             catch @panic("free arg is bigger than allocated sum");

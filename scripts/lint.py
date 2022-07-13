@@ -72,7 +72,7 @@ if missing_zig_test_roots:
 
 # Make sure all zig files with tests are in a test root
 imported_in_test_roots = set()
-test_import_re = re.compile(r'_ = @import\("(\w+.zig)"\);')
+test_import_re = re.compile(r'_ = @import\("([\w/]+.zig)"\);')
 for zig_test_root in zig_test_roots:
     with open(zig_test_root) as f:
         for line in f.readlines():

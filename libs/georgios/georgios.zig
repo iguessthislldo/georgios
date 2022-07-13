@@ -67,6 +67,7 @@ pub const fs = struct {
         FileNotFound,
         NotADirectory,
         NotAFile,
+        DirectoryNotEmpty,
         InvalidFilesystem,
     } || io.FileError;
 

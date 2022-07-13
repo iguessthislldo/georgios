@@ -6,5 +6,6 @@ test "kernel test root" {
     _ = @import("mapped_list.zig");
     _ = @import("log.zig");
     _ = @import("fs.zig");
+    _ = @import("fs/RamDisk.zig");
     _ = @import("sync.zig");
 }

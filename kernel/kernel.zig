@@ -19,6 +19,7 @@ pub const keys = @import("keys.zig");
 pub const builtin_font_data = @import("builtin_font_data.zig");
 pub const BitmapFont = @import("BitmapFont.zig");
 pub const Console = @import("Console.zig");
+pub const List = @import("list.zig").List;
 
 pub var panic_message: []const u8 = "";
 

@@ -24,6 +24,7 @@ const List = @import("list.zig").List;
 
 pub const Error = georgios.fs.Error;
 pub const InitError = ext2.Error || gpt.Error || Guid.Error;
+pub const RamDisk = @import("fs/RamDisk.zig");
 
 const FileId = io.File.Id;
 
@@ -35,10 +36,10 @@ fn file_id_cmp(a: FileId, b: FileId) bool {
     return a > b;
 }
 
-/// TODO: Make Abstract
+/// TODO: Remove
 pub const File = ext2.File;
 
-/// TODO: Make Abstract
+/// TODO: Relocate existing code and remove
 pub const Filesystem = struct {
     const OpenFiles = MappedList(FileId, *File, file_id_eql, file_id_cmp);
 
@@ -149,21 +150,6 @@ pub const Filesystem = struct {
         return self.impl.resolve_directory_path(path);
     }
 };
-
-pub const Manager = struct {
-    root: *Filesystem,
-};
-
-/// TODO
-pub const Directory = struct {
-    mount: ?*Filesystem = null,
-};
-
-// File System Implementation Management / Mounting
-// Root of File System
-// On Disk File Structure?
-// Directory Structure
-// Directory Contents Iterator
 
 pub const PathIterator = struct {
     path: []const u8,
@@ -451,3 +437,235 @@ test "Path" {
     try assert_path(galloc, "hello", "goodbye", "hello/goodbye", "goodbye");
     try assert_path(galloc, "/", "a", "/a", "a");
 }
+
+// Virtual Filesystem
+// TODO: mouting filesystems
+// TODO: hard and symbolic links
+// TODO: different open modes
+// TODO: permissions
+pub const DirIterator = struct {
+    pub const Result = struct {
+        name: []const u8,
+        node: *Vnode,
+    };
+
+    dir: *Vnode,
+    current: ?Result = null,
+    finished: bool = false,
+    next_impl: fn(self: *DirIterator) Error!?Result,
+    done_impl: fn(self: *DirIterator) void,
+
+    pub fn next(self: *DirIterator) Error!?Result {
+        if (self.finished) {
+            return null;
+        }
+        return self.next_impl(self);
+    }
+
+    pub fn done(self: *DirIterator) void {
+        return self.done_impl(self);
+    }
+};
+
+pub const Vnode = struct {
+    pub const Kind = struct {
+        file: bool = false,
+        directory: bool = false,
+    };
+
+    fs: *Vfilesystem,
+    kind: Kind,
+    mounted_here: ?*Vfilesystem = null,
+
+    get_dir_iter_impl: fn(*Vnode) Error!*DirIterator,
+    create_node_impl: fn(*Vnode, []const u8, Kind) Error!*Vnode,
+    unlink_impl: fn(*Vnode, []const u8) Error!void,
+    get_io_file_impl: fn(*Vnode) ?*io.File,
+    close_impl: fn(*Vnode) Error!void,
+
+    pub fn assert_directory(self: *const Vnode) Error!void {
+        if (!self.kind.directory) {
+            return Error.NotADirectory;
+        }
+    }
+
+    pub fn assert_file(self: *const Vnode) Error!void {
+        if (!self.kind.file) {
+            return Error.NotAFile;
+        }
+    }
+
+    pub fn dir_iter(self: *Vnode) Error!*DirIterator {
+        try self.assert_directory();
+        return self.get_dir_iter_impl(self);
+    }
+
+    pub fn find_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
+        var it = try self.dir_iter();
+        defer it.done();
+        while (try it.next()) |result| {
+            if (utils.memory_compare(name, result.name)) {
+                return result.node;
+            }
+        }
+        return Error.FileNotFound;
+    }
+
+    pub fn directory_empty(self: *Vnode) Error!bool {
+        var it = try self.dir_iter();
+        defer it.done();
+        return (try it.next()) == null;
+    }
+
+    pub fn create_node(self: *Vnode, name: []const u8, kind: Kind) Error!*Vnode {
+        try self.assert_directory();
+        return self.create_node_impl(self, name, kind);
+    }
+
+    pub fn unlink(self: *Vnode, name: []const u8) Error!void {
+        const vnode_to_unlink = try self.find_in_directory(name);
+        if (vnode_to_unlink.kind.directory and !try vnode_to_unlink.directory_empty()) {
+            return Error.DirectoryNotEmpty;
+        }
+        try self.unlink_impl(self, name);
+    }
+
+    pub fn get_io_file(self: *Vnode) ?*io.File {
+        return self.get_io_file_impl(self);
+    }
+
+    pub fn close(self: *Vnode) Error!void {
+        try self.close_impl(self);
+    }
+};
+
+pub const Vfilesystem = struct {
+    get_root_vnode_impl: fn(self: *Vfilesystem) *Vnode,
+
+    pub fn get_root_vnode(self: *Vfilesystem) *Vnode {
+        return self.get_root_vnode_impl(self);
+    }
+};
+
+pub const ResolvedVnode = struct {
+    // Optionally set to get canonical path
+    path: ?*[]u8 = null,
+    // The resulting node. Optionally set to starting point. Will also be
+    // the last valid part of the path if there's an error.
+    node: ?*Vnode = null,
+    owns_node: bool = undefined,
+    alloc: *memory.Allocator = undefined,
+};
+
+pub const Manager = struct {
+    alloc: *memory.Allocator,
+    root_fs: *Vfilesystem,
+    get_cwd: fn() ?[]const u8,
+
+    pub fn init(self: *Manager,
+            alloc: *memory.Allocator, root_fs: *Vfilesystem, get_cwd: fn() ?[]const u8) void {
+        self.* = .{
+            .alloc = alloc,
+            .root_fs = root_fs,
+            .get_cwd = get_cwd,
+        };
+    }
+
+    pub fn get_root_vnode(self: *Manager) *Vnode {
+        return self.root_fs.get_root_vnode();
+    }
+
+    fn get_absolute_path(self: *Manager, path_str: []const u8) Error!Path {
+        var path = Path{.alloc = self.alloc};
+        try path.init(path_str);
+        if (!path.absolute) {
+            var cwd = self.get_cwd() orelse @panic("resolve_path: get_cwd()");
+            try path.prepend(cwd);
+            try self.alloc.free_array(cwd);
+        }
+        return path;
+    }
+
+    fn resolve_path_i(self: *Manager, raw_path: *Path, resolved: *ResolvedVnode) Error!void {
+        if (resolved.node == null) {
+            resolved.node = self.get_root_vnode();
+        }
+
+        var resolved_path = Path{.alloc = self.alloc, .absolute = true};
+        try resolved_path.init(null);
+        defer (resolved_path.done() catch @panic("resolve_path_i: resolved_path.done()"));
+        var it = raw_path.list.const_iterator();
+        while (it.next()) |component| {
+            resolved.node = try resolved.node.?.find_in_directory(component);
+            if (utils.memory_compare(component, "..")) {
+                try resolved_path.pop_component();
+            } else {
+                try resolved_path.push_component(component);
+            }
+        }
+
+        if (resolved.path) |rp| {
+            rp.* = try resolved_path.get();
+        }
+    }
+
+    fn resolve_path(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
+        // See man page path_resolution(7) for reference
+        // TODO: Assert path with trailing slash is a directory
+
+        // Get unresolved absolute path
+        var path = try self.get_absolute_path(path_str);
+        defer (path.done() catch @panic("resolve_path: path.done()"));
+
+        // Find node and build resolved path
+        try self.resolve_path_i(&path, resolved);
+    }
+
+    pub fn resolve_directory(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
+        try self.resolve_path(path_str, resolved);
+        try resolved.node.?.assert_directory();
+    }
+
+    pub fn resolve_directory_path(self: *Manager, path: []const u8) Error![]const u8 {
+        var resolved_path: []u8 = undefined;
+        var resolved = ResolvedVnode{.path = &resolved_path};
+        try self.resolve_directory(path, &resolved);
+        return resolved_path;
+    }
+
+    pub fn resolve_parent_directory(self: *Manager, path_str: []const u8,
+            resolved: *ResolvedVnode) Error![]const u8 {
+        var path = try self.get_absolute_path(path_str);
+        defer (path.done() catch @panic("create_node: path.done()"));
+        const node_name = try path.filename();
+        try path.pop_component();
+        try self.resolve_path_i(&path, resolved);
+        return node_name;
+    }
+
+    fn resolve_file(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
+        try self.resolve_path(path_str, resolved);
+        try resolved.node.?.assert_file();
+    }
+
+    pub fn open(self: *Manager, path: []const u8) Error!*Vnode {
+        _ = self;
+        _ = path;
+        // TODO
+    }
+
+    pub fn create_node(self: *Manager, path_str: []const u8, kind: Vnode.Kind) Error!*Vnode {
+        var resolved_parent = ResolvedVnode{};
+        const node_name = try self.resolve_parent_directory(path_str, &resolved_parent);
+        const parent_node = resolved_parent.node.?;
+        return parent_node.create_node(node_name, kind);
+    }
+
+    pub fn unlink(self: *Manager, path_str: []const u8) Error!void {
+        var resolved_parent = ResolvedVnode{};
+        const node_name = try self.resolve_parent_directory(path_str, &resolved_parent);
+        defer self.alloc.free_array(node_name) catch unreachable;
+        const parent_node = resolved_parent.node.?;
+        try parent_node.unlink(node_name);
+    }
+};
