@@ -406,7 +406,7 @@ test "RamDisk: Files and Directories" {
     try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1"});
 
     // Make a directory
-    _ = try t.m.create_node("/dir", .{.directory = true}, .{});
+    const dir = try t.m.create_node("/dir", .{.directory = true}, .{});
     // And it should now be available
     try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "dir"});
     _ = try t.m.resolve_directory("/dir", .{});
@@ -414,8 +414,24 @@ test "RamDisk: Files and Directories" {
     // Make some files in the directory
     _ = try t.m.create_node("/dir/file2", .{.file = true}, .{});
     _ = try t.m.create_node("/dir/file3", .{.file = true}, .{});
+    const file_list = [_][]const u8{".", "..", "file2", "file3"};
     // And they should now be there
-    try t.assert_directory_has("/dir", &[_][]const u8{".", "..", "file2", "file3"});
+    try t.assert_directory_has("/dir", &file_list);
+
+    // Test directory io read
+    {
+        const dir_io = try dir.get_io_file();
+        defer dir_io.close() catch unreachable;
+        var buffer: [16]u8 = undefined;
+        var count: usize = 0;
+        while (true) {
+            const read = try dir_io.read(buffer[0..]);
+            if (read == 0) break;
+            try std.testing.expect(count < file_list.len);
+            try std.testing.expectEqualStrings(file_list[count], buffer[0..read]);
+            count += 1;
+        }
+    }
 
     // Remove file1
     try t.m.unlink("/file1", .{});

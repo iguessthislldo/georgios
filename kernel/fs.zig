@@ -2,6 +2,10 @@
 // Virtual Filesystem Interface
 // ===========================================================================
 //
+// TODO: hard and symbolic links
+// TODO: different open modes
+// TODO: permissions
+//
 // References:
 //   - The main source of inspiration and requirements is
 //      "UNIX Internals: The New Frontiers" by Uresh Vahalia
@@ -438,11 +442,6 @@ test "Path" {
     try assert_path(galloc, "/", "a", "/a", "a");
 }
 
-// Virtual Filesystem
-// TODO: mouting filesystems
-// TODO: hard and symbolic links
-// TODO: different open modes
-// TODO: permissions
 pub const DirIterator = struct {
     pub const Result = struct {
         name: []const u8,
@@ -467,6 +466,7 @@ pub const DirIterator = struct {
     }
 };
 
+// TODO: Seperate Open Context Interface
 pub const Vnode = struct {
     pub const Kind = struct {
         file: bool = false,
@@ -482,6 +482,11 @@ pub const Vnode = struct {
     unlink_impl: fn(*Vnode, []const u8) Error!void,
     get_io_file_impl: fn(*Vnode) Error!*io.File,
     close_impl: fn(*Vnode) Error!void,
+    dir_io: io.File = .{
+        .read_impl = dir_io_read_impl,
+        .close_impl = dir_io_close_impl,
+    },
+    dir_io_it: ?*DirIterator = null,
 
     pub fn assert_directory(self: *const Vnode) Error!void {
         if (!self.kind.directory) {
@@ -562,11 +567,35 @@ pub const Vnode = struct {
         return self.node_with_content().unlink_i(name);
     }
 
+    fn dir_io_read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
+        const self = @fieldParentPtr(Vnode, "dir_io", io_file);
+        if (self.dir_io_it == null) {
+            self.dir_io_it = self.dir_iter() catch return io.FileError.Internal;
+        }
+        if (self.dir_io_it.?.next() catch return io.FileError.Internal) |item| {
+            return utils.memory_copy_truncate(to, item.name);
+        }
+        return 0;
+    }
+
+    fn dir_io_close_impl(io_file: *io.File) io.FileError!void {
+        const self = @fieldParentPtr(Vnode, "dir_io", io_file);
+        if (self.dir_io_it) |dir_it| {
+            dir_it.done();
+        }
+    }
+
     pub fn get_io_file(self: *Vnode) Error!*io.File {
+        if (self.kind.directory) {
+            return &self.dir_io;
+        }
         return self.get_io_file_impl(self);
     }
 
     pub fn close(self: *Vnode) Error!void {
+        if (self.dir_io_it) |dir_it| {
+            dir_it.done();
+        }
         try self.close_impl(self);
     }
 };
