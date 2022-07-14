@@ -201,10 +201,21 @@ pub const Node = struct {
     const DirIteratorImpl = struct {
         alloc: *Allocator,
         dir_iter: DirIterator,
+        returned_self: bool = false,
+        returned_parent: bool = false,
         node_iter: Nodes.Iterator,
 
         fn next_impl(dir_it: *DirIterator) Error!?DirIterator.Result {
             const self = @fieldParentPtr(DirIteratorImpl, "dir_iter", dir_it);
+            const node = @fieldParentPtr(Node, "vnode", dir_it.dir);
+            if (!self.returned_self) {
+                self.returned_self = true;
+                return DirIterator.Result{.name = ".", .node = dir_it.dir};
+            }
+            if (!self.returned_parent) {
+                self.returned_parent = true;
+                return DirIterator.Result{.name = "..", .node = node.parent};
+            }
             if (self.node_iter.next()) |kv| {
                 return DirIterator.Result{.name = kv.key_ptr.*, .node = &kv.value_ptr.*.vnode};
             }
@@ -219,10 +230,11 @@ pub const Node = struct {
 
     ram_disk: *RamDisk,
     vnode: Vnode,
+    parent: *Vnode,
     nodes: ?Nodes = null,
     page_file: ?PageFile = null,
 
-    pub fn init(self: *Node, ram_disk: *RamDisk, kind: Vnode.Kind) void {
+    pub fn init(self: *Node, ram_disk: *RamDisk, kind: Vnode.Kind, parent: *Vnode) void {
         self.* = .{
             .ram_disk = ram_disk,
             .vnode = .{
@@ -234,6 +246,7 @@ pub const Node = struct {
                 .get_io_file_impl = get_io_file_impl,
                 .close_impl = close_impl,
             },
+            .parent = parent,
         };
         if (kind.directory) {
             self.nodes = Nodes.init(ram_disk.alloc.std_allocator());
@@ -266,7 +279,7 @@ pub const Node = struct {
         const self = @fieldParentPtr(Node, "vnode", vnode);
         if (self.nodes) |*nodes| {
             var node = try self.ram_disk.alloc.alloc(Node);
-            node.init(self.ram_disk, kind);
+            node.init(self.ram_disk, kind, vnode);
             try nodes.put(name, node);
             return &node.vnode;
         }
@@ -328,7 +341,7 @@ pub fn init(self: *RamDisk, alloc: *Allocator, page_alloc: *Allocator, page_size
         .page_alloc = page_alloc,
         .page_size = page_size,
     };
-    self.root_node.init(self, .{.directory = true});
+    self.root_node.init(self, .{.directory = true}, &self.root_node.vnode);
 }
 
 fn get_root_vnode_impl(vfs: *Vfilesystem) *Vnode {
@@ -385,36 +398,36 @@ test "RamDisk: Files and Directories" {
     defer t.done();
 
     // Assert root is empty
-    try t.assert_directory_has("/", &[_][]const u8{});
+    try t.assert_directory_has("/", &[_][]const u8{".", ".."});
 
     // Make a file
     _ = try t.m.create_node("/file1", .{.file = true}, .{});
     // And it should now be available
-    try t.assert_directory_has("/", &[_][]const u8{"file1"});
+    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1"});
 
     // Make a directory
     _ = try t.m.create_node("/dir", .{.directory = true}, .{});
     // And it should now be available
-    try t.assert_directory_has("/", &[_][]const u8{"file1", "dir"});
+    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "dir"});
     _ = try t.m.resolve_directory("/dir", .{});
 
     // Make some files in the directory
     _ = try t.m.create_node("/dir/file2", .{.file = true}, .{});
     _ = try t.m.create_node("/dir/file3", .{.file = true}, .{});
     // And they should now be there
-    try t.assert_directory_has("/dir", &[_][]const u8{"file2", "file3"});
+    try t.assert_directory_has("/dir", &[_][]const u8{".", "..", "file2", "file3"});
 
     // Remove file1
     try t.m.unlink("/file1", .{});
-    try t.assert_directory_has("/", &[_][]const u8{"dir"});
+    try t.assert_directory_has("/", &[_][]const u8{".", "..", "dir"});
 
     // Try to remove dir
     try std.testing.expectError(Error.DirectoryNotEmpty, t.m.unlink("/dir", .{}));
     // Remove files first
     try t.m.unlink("/dir/file2", .{});
-    try t.assert_directory_has("/dir", &[_][]const u8{"file3"});
+    try t.assert_directory_has("/dir", &[_][]const u8{".", "..", "file3"});
     try t.m.unlink("/dir/file3", .{});
-    try t.assert_directory_has("/dir", &[_][]const u8{});
+    try t.assert_directory_has("/dir", &[_][]const u8{".", ".."});
     // Try again
     try t.m.unlink("/dir", .{});
 
@@ -448,8 +461,8 @@ test "RamDisk: Mount Another Ram Disk" {
     _ = try t.m.create_node("/mount/file4", .{.file = true}, .{});
 
     // Should contain:
-    try t.assert_directory_has("/", &[_][]const u8{"file1", "file2", "mount"});
-    try t.assert_directory_has("/mount", &[_][]const u8{"file3", "file4"});
+    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "file2", "mount"});
+    try t.assert_directory_has("/mount", &[_][]const u8{".", "..", "file3", "file4"});
     // Confirm these are in the seperate filesystems
     try std.testing.expectEqual(@as(usize, 3), t.rd.root_node.nodes.?.count());
     try std.testing.expectEqual(@as(usize, 2), t.rd2.root_node.nodes.?.count());

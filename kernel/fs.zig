@@ -11,6 +11,7 @@ const std = @import("std");
 
 const georgios = @import("georgios");
 const utils = @import("utils");
+const streq = utils.memory_compare;
 const Guid = utils.Guid;
 
 const ext2 = @import("ext2.zig");
@@ -201,7 +202,7 @@ pub const PathIterator = struct {
                 component = self.path[self.pos..];
                 self.pos = self.path.len;
             }
-            if (component.?.len == 0 or utils.memory_compare(component.?, ".")) {
+            if (component.?.len == 0 or streq(component.?, ".")) {
                 component = null;
             }
         }
@@ -317,7 +318,7 @@ pub const Path = struct {
         var it = PathIterator.new(path);
         while (it.next()) |component| {
             // Parent of root is root
-            if (utils.memory_compare(component, "..") and it.absolute and list.len == 0) {
+            if (streq(component, "..") and it.absolute and list.len == 0) {
                 continue;
             }
             try self.push_to_list(list, component);
@@ -514,7 +515,7 @@ pub const Vnode = struct {
         var it = try self.dir_iter_i();
         defer it.done();
         while (try it.next()) |result| {
-            if (utils.memory_compare(name, result.name)) {
+            if (streq(name, result.name)) {
                 return result.node;
             }
         }
@@ -528,7 +529,12 @@ pub const Vnode = struct {
     fn directory_empty_i(self: *Vnode) callconv(.Inline) Error!bool {
         var it = try self.dir_iter_i();
         defer it.done();
-        return (try it.next()) == null;
+        while (try it.next()) |result| {
+            if (!(streq(result.name, ".") or streq(result.name, ".."))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn directory_empty(self: *Vnode) Error!bool {
@@ -640,7 +646,7 @@ pub const Manager = struct {
         while (it.next()) |component| {
             vnode = try vnode.find_in_directory(component);
             opts.set_node(vnode);
-            if (utils.memory_compare(component, "..")) {
+            if (streq(component, "..")) {
                 try resolved_path.pop_component();
             } else {
                 try resolved_path.push_component(component);
@@ -687,7 +693,7 @@ pub const Manager = struct {
         return child_name;
     }
 
-    fn resolve_file(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode{
+    pub fn resolve_file(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode{
         var dnp: *Vnode = undefined;
         var opts_copy = opts.get_working_copy(&dnp);
         const vnode = try self.resolve_path(path_str, opts_copy);
