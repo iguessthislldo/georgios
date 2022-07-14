@@ -494,13 +494,24 @@ pub const Vnode = struct {
         }
     }
 
-    pub fn dir_iter(self: *Vnode) Error!*DirIterator {
+    fn node_with_content(self: *Vnode) callconv(.Inline) *Vnode {
+        if (self.mounted_here) |other_fs| {
+            return other_fs.get_root_vnode();
+        }
+        return self;
+    }
+
+    fn dir_iter_i(self: *Vnode) callconv(.Inline) Error!*DirIterator {
         try self.assert_directory();
         return self.get_dir_iter_impl(self);
     }
 
-    pub fn find_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
-        var it = try self.dir_iter();
+    pub fn dir_iter(self: *Vnode) Error!*DirIterator {
+        return self.node_with_content().dir_iter_i();
+    }
+
+    fn find_in_directory_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!*Vnode {
+        var it = try self.dir_iter_i();
         defer it.done();
         while (try it.next()) |result| {
             if (utils.memory_compare(name, result.name)) {
@@ -510,23 +521,39 @@ pub const Vnode = struct {
         return Error.FileNotFound;
     }
 
-    pub fn directory_empty(self: *Vnode) Error!bool {
-        var it = try self.dir_iter();
+    pub fn find_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
+        return self.node_with_content().find_in_directory_i(name);
+    }
+
+    fn directory_empty_i(self: *Vnode) callconv(.Inline) Error!bool {
+        var it = try self.dir_iter_i();
         defer it.done();
         return (try it.next()) == null;
     }
 
-    pub fn create_node(self: *Vnode, name: []const u8, kind: Kind) Error!*Vnode {
+    pub fn directory_empty(self: *Vnode) Error!bool {
+        return self.node_with_content().directory_empty_i();
+    }
+
+    fn create_node_i(self: *Vnode, name: []const u8, kind: Kind) callconv(.Inline) Error!*Vnode {
         try self.assert_directory();
         return self.create_node_impl(self, name, kind);
     }
 
-    pub fn unlink(self: *Vnode, name: []const u8) Error!void {
-        const vnode_to_unlink = try self.find_in_directory(name);
+    pub fn create_node(self: *Vnode, name: []const u8, kind: Kind) Error!*Vnode {
+        return self.node_with_content().create_node_i(name, kind);
+    }
+
+    fn unlink_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!void {
+        const vnode_to_unlink = try self.find_in_directory_i(name);
         if (vnode_to_unlink.kind.directory and !try vnode_to_unlink.directory_empty()) {
             return Error.DirectoryNotEmpty;
         }
         try self.unlink_impl(self, name);
+    }
+
+    pub fn unlink(self: *Vnode, name: []const u8) Error!void {
+        return self.node_with_content().unlink_i(name);
     }
 
     pub fn get_io_file(self: *Vnode) Error!*io.File {
@@ -682,5 +709,16 @@ pub const Manager = struct {
         const child_name = try self.resolve_parent_directory(path_str, opts_copy);
         defer self.alloc.free_array(child_name) catch unreachable;
         try opts_copy.get_node().unlink(child_name);
+    }
+
+    pub fn mount(self: *Manager, fs: *Vfilesystem, path: []const u8) Error!void {
+        // TODO: Support mounting at any node, for example if the filesystem
+        // consists of just a file.
+        var opts = ResolvePathOpts{};
+        const node = try self.resolve_directory(path, opts);
+        if (node.mounted_here != null) {
+            return Error.FilesystemAlreadyMountedHere;
+        }
+        node.mounted_here = fs;
     }
 };

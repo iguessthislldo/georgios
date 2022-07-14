@@ -69,6 +69,7 @@ pub const fs = struct {
         NotAFile,
         DirectoryNotEmpty,
         InvalidFilesystem,
+        FilesystemAlreadyMountedHere,
     } || io.FileError;
 
     pub fn open(path: []const u8) Error!io.File {

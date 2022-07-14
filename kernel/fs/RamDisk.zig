@@ -344,12 +344,14 @@ const RamDiskTest = struct {
     alloc: memory.UnitTestAllocator = .{},
     check_allocs: bool = false,
     rd: RamDisk = undefined,
+    rd2: RamDisk = undefined,
     m: fs.Manager = undefined,
 
     pub fn init(self: *RamDiskTest) void {
         self.alloc.init();
         const galloc = &self.alloc.allocator;
         self.rd.init(galloc, galloc, test_page_size);
+        self.rd2.init(galloc, galloc, test_page_size);
         self.m.init(galloc, &self.rd.vfs);
     }
 
@@ -359,6 +361,7 @@ const RamDiskTest = struct {
 
     pub fn done(self: *RamDiskTest) void {
         self.rd.done() catch unreachable;
+        self.rd2.done() catch unreachable;
         self.alloc.done_check_if(&self.check_allocs);
     }
 
@@ -425,4 +428,31 @@ test "RamDisk: Write and Read Files" {
 
     const a = try t.m.create_node("/a", .{.file = true}, .{});
     try basic_test_page_file(try a.get_io_file());
+}
+
+test "RamDisk: Mount Another Ram Disk" {
+    var t = RamDiskTest{};
+    t.init();
+    defer t.done();
+
+    // Create some files in root
+    _ = try t.m.create_node("/file1", .{.file = true}, .{});
+    _ = try t.m.create_node("/file2", .{.file = true}, .{});
+
+    // Mount another ram disk
+    _ = try t.m.create_node("/mount", .{.directory = true}, .{});
+    try t.m.mount(&t.rd2.vfs, "/mount");
+
+    // Create some files there
+    _ = try t.m.create_node("/mount/file3", .{.file = true}, .{});
+    _ = try t.m.create_node("/mount/file4", .{.file = true}, .{});
+
+    // Should contain:
+    try t.assert_directory_has("/", &[_][]const u8{"file1", "file2", "mount"});
+    try t.assert_directory_has("/mount", &[_][]const u8{"file3", "file4"});
+    // Confirm these are in the seperate filesystems
+    try std.testing.expectEqual(@as(usize, 3), t.rd.root_node.nodes.?.count());
+    try std.testing.expectEqual(@as(usize, 2), t.rd2.root_node.nodes.?.count());
+
+    // TODO: More tests, like unmount and what happens if we delete a mount point?
 }
