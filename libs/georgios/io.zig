@@ -11,6 +11,7 @@ pub const FileError = error {
     /// An Implementation-Related Error Occured.
     Internal,
     InvalidFileId,
+    OutOfSpace,
 } || utils.Error || memory.MemoryError;
 
 /// File IO Interface

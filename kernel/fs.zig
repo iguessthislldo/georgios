@@ -1,7 +1,6 @@
 // ===========================================================================
 // Virtual Filesystem Interface
 // ===========================================================================
-// TODO: Acutally Make It Virtual
 //
 // References:
 //   - The main source of inspiration and requirements is
@@ -480,7 +479,7 @@ pub const Vnode = struct {
     get_dir_iter_impl: fn(*Vnode) Error!*DirIterator,
     create_node_impl: fn(*Vnode, []const u8, Kind) Error!*Vnode,
     unlink_impl: fn(*Vnode, []const u8) Error!void,
-    get_io_file_impl: fn(*Vnode) ?*io.File,
+    get_io_file_impl: fn(*Vnode) Error!*io.File,
     close_impl: fn(*Vnode) Error!void,
 
     pub fn assert_directory(self: *const Vnode) Error!void {
@@ -530,7 +529,7 @@ pub const Vnode = struct {
         try self.unlink_impl(self, name);
     }
 
-    pub fn get_io_file(self: *Vnode) ?*io.File {
+    pub fn get_io_file(self: *Vnode) Error!*io.File {
         return self.get_io_file_impl(self);
     }
 
@@ -547,27 +546,48 @@ pub const Vfilesystem = struct {
     }
 };
 
-pub const ResolvedVnode = struct {
-    // Optionally set to get canonical path
+pub const ResolvePathOpts = struct {
+    // Optionally set to get canonical path if set.
     path: ?*[]u8 = null,
-    // The resulting node. Optionally set to starting point. Will also be
-    // the last valid part of the path if there's an error.
-    node: ?*Vnode = null,
-    owns_node: bool = undefined,
-    alloc: *memory.Allocator = undefined,
+    // Optionally set the current working directory.
+    cwd: ?[]const u8 = null,
+    // Optionally set the starting node for resolution. cwd should be null.
+    starting_node: ?*Vnode = null,
+    // The resulting node. Will also be the last valid part of the path if there's an error.
+    node: ?**Vnode = null,
+
+    pub fn get_cwd(self: *const ResolvePathOpts) []const u8 {
+        return self.cwd orelse "/";
+    }
+
+    pub fn get_working_copy(self: *const ResolvePathOpts, default_node_ptr_ptr: **Vnode) ResolvePathOpts {
+        var ro = self.*;
+        if (ro.cwd == null) {
+            ro.cwd = "/";
+        }
+        if (ro.node == null) {
+            ro.node = default_node_ptr_ptr;
+        }
+        return ro;
+    }
+
+    pub fn set_node(self: *const ResolvePathOpts, node: *Vnode) void {
+        self.node.?.* = node;
+    }
+
+    pub fn get_node(self: *const ResolvePathOpts) *Vnode {
+        return self.node.?.*;
+    }
 };
 
 pub const Manager = struct {
     alloc: *memory.Allocator,
     root_fs: *Vfilesystem,
-    get_cwd: fn() ?[]const u8,
 
-    pub fn init(self: *Manager,
-            alloc: *memory.Allocator, root_fs: *Vfilesystem, get_cwd: fn() ?[]const u8) void {
+    pub fn init(self: *Manager, alloc: *memory.Allocator, root_fs: *Vfilesystem) void {
         self.* = .{
             .alloc = alloc,
             .root_fs = root_fs,
-            .get_cwd = get_cwd,
         };
     }
 
@@ -575,28 +595,24 @@ pub const Manager = struct {
         return self.root_fs.get_root_vnode();
     }
 
-    fn get_absolute_path(self: *Manager, path_str: []const u8) Error!Path {
+    fn get_absolute_path(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!Path {
         var path = Path{.alloc = self.alloc};
         try path.init(path_str);
         if (!path.absolute) {
-            var cwd = self.get_cwd() orelse @panic("resolve_path: get_cwd()");
-            try path.prepend(cwd);
-            try self.alloc.free_array(cwd);
+            try path.prepend(opts.get_cwd());
         }
         return path;
     }
 
-    fn resolve_path_i(self: *Manager, raw_path: *Path, resolved: *ResolvedVnode) Error!void {
-        if (resolved.node == null) {
-            resolved.node = self.get_root_vnode();
-        }
-
+    fn resolve_path_i(self: *Manager, raw_path: *Path, opts: ResolvePathOpts) Error!*Vnode {
+        var vnode = opts.starting_node orelse self.get_root_vnode();
         var resolved_path = Path{.alloc = self.alloc, .absolute = true};
         try resolved_path.init(null);
         defer (resolved_path.done() catch @panic("resolve_path_i: resolved_path.done()"));
         var it = raw_path.list.const_iterator();
         while (it.next()) |component| {
-            resolved.node = try resolved.node.?.find_in_directory(component);
+            vnode = try vnode.find_in_directory(component);
+            opts.set_node(vnode);
             if (utils.memory_compare(component, "..")) {
                 try resolved_path.pop_component();
             } else {
@@ -604,68 +620,67 @@ pub const Manager = struct {
             }
         }
 
-        if (resolved.path) |rp| {
+        if (opts.path) |rp| {
             rp.* = try resolved_path.get();
         }
+
+        opts.set_node(vnode);
+        return vnode;
     }
 
-    fn resolve_path(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
+    fn resolve_path(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode {
         // See man page path_resolution(7) for reference
         // TODO: Assert path with trailing slash is a directory
 
         // Get unresolved absolute path
-        var path = try self.get_absolute_path(path_str);
+        var path = try self.get_absolute_path(path_str, opts);
         defer (path.done() catch @panic("resolve_path: path.done()"));
 
         // Find node and build resolved path
-        try self.resolve_path_i(&path, resolved);
+        return self.resolve_path_i(&path, opts);
     }
 
-    pub fn resolve_directory(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
-        try self.resolve_path(path_str, resolved);
-        try resolved.node.?.assert_directory();
-    }
-
-    pub fn resolve_directory_path(self: *Manager, path: []const u8) Error![]const u8 {
-        var resolved_path: []u8 = undefined;
-        var resolved = ResolvedVnode{.path = &resolved_path};
-        try self.resolve_directory(path, &resolved);
-        return resolved_path;
+    pub fn resolve_directory(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode {
+        var dnp: *Vnode = undefined;
+        var opts_copy = opts.get_working_copy(&dnp);
+        const vnode = try self.resolve_path(path_str, opts_copy);
+        try vnode.assert_directory();
+        return vnode;
     }
 
     pub fn resolve_parent_directory(self: *Manager, path_str: []const u8,
-            resolved: *ResolvedVnode) Error![]const u8 {
-        var path = try self.get_absolute_path(path_str);
+            opts: ResolvePathOpts) Error![]const u8 {
+        var dnp: *Vnode = undefined;
+        var opts_copy = opts.get_working_copy(&dnp);
+        var path = try self.get_absolute_path(path_str, opts_copy);
         defer (path.done() catch @panic("create_node: path.done()"));
-        const node_name = try path.filename();
+        const child_name = try path.filename();
         try path.pop_component();
-        try self.resolve_path_i(&path, resolved);
-        return node_name;
+        _ = try self.resolve_path_i(&path, opts_copy);
+        return child_name;
     }
 
-    fn resolve_file(self: *Manager, path_str: []const u8, resolved: *ResolvedVnode) Error!void {
-        try self.resolve_path(path_str, resolved);
-        try resolved.node.?.assert_file();
+    fn resolve_file(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode{
+        var dnp: *Vnode = undefined;
+        var opts_copy = opts.get_working_copy(&dnp);
+        const vnode = try self.resolve_path(path_str, opts_copy);
+        try vnode.assert_file();
+        return vnode;
     }
 
-    pub fn open(self: *Manager, path: []const u8) Error!*Vnode {
-        _ = self;
-        _ = path;
-        // TODO
+    pub fn create_node(self: *Manager,
+            path_str: []const u8, kind: Vnode.Kind, opts: ResolvePathOpts) Error!*Vnode {
+        var dnp: *Vnode = undefined;
+        var opts_copy = opts.get_working_copy(&dnp);
+        const child_name = try self.resolve_parent_directory(path_str, opts_copy);
+        return opts_copy.get_node().create_node(child_name, kind);
     }
 
-    pub fn create_node(self: *Manager, path_str: []const u8, kind: Vnode.Kind) Error!*Vnode {
-        var resolved_parent = ResolvedVnode{};
-        const node_name = try self.resolve_parent_directory(path_str, &resolved_parent);
-        const parent_node = resolved_parent.node.?;
-        return parent_node.create_node(node_name, kind);
-    }
-
-    pub fn unlink(self: *Manager, path_str: []const u8) Error!void {
-        var resolved_parent = ResolvedVnode{};
-        const node_name = try self.resolve_parent_directory(path_str, &resolved_parent);
-        defer self.alloc.free_array(node_name) catch unreachable;
-        const parent_node = resolved_parent.node.?;
-        try parent_node.unlink(node_name);
+    pub fn unlink(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!void {
+        var dnp: *Vnode = undefined;
+        var opts_copy = opts.get_working_copy(&dnp);
+        const child_name = try self.resolve_parent_directory(path_str, opts_copy);
+        defer self.alloc.free_array(child_name) catch unreachable;
+        try opts_copy.get_node().unlink(child_name);
     }
 };
