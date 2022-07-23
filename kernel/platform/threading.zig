@@ -21,6 +21,8 @@ pub const Error = georgios.threading.Error;
 
 const pmem = &kernel.memory_mgr.impl;
 
+const usermode_stack_size = platform.frame_size * 10;
+
 fn v86(ss: u32, esp: u32, cs: u32, eip: u32) noreturn {
     asm volatile ("push %[ss]" :: [ss] "{ax}" (ss));
     asm volatile ("push %[esp]" :: [esp] "{ax}" (esp));
@@ -257,8 +259,8 @@ pub const ProcessImpl = struct {
         const stack_bottom: usize =
             if (self.v8086) main_bios_memory.start else platform.kernel_to_virtual(0);
         thread.usermode_stack = .{
-            .start = stack_bottom - platform.frame_size,
-            .size = platform.frame_size};
+            .start = stack_bottom - usermode_stack_size,
+            .size = usermode_stack_size};
         pmem.mark_virtual_memory_present(
             self.page_directory, thread.usermode_stack, true)
             catch @panic("setup_context: mark_virtual_memory_present");
