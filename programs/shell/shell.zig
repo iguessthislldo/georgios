@@ -4,6 +4,8 @@ const georgios = @import("georgios");
 comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
 const utils = georgios.utils;
+const streq = utils.memory_compare;
+const TinyishLisp = @import("TinyishLisp");
 
 const print_string = system_calls.print_string;
 const print_uint = system_calls.print_uint;
@@ -21,6 +23,21 @@ const invert_colors = ansi_esc ++ "7m";
 const reset_colors = ansi_esc ++ "39;49m";
 
 var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
+
+var tl: TinyishLisp = undefined;
+var tl_mem = [_]TinyishLisp.Expr{undefined} ** (1024);
+
+const console_writer = georgios.get_console_writer();
+
+const OurToString = struct {
+    ts: utils.ToString = .{.ext_func = ts_print_str},
+
+    fn ts_print_str(ts: *utils.ToString, s: []const u8) void {
+        const self = @fieldParentPtr(OurToString, "ts", ts);
+        _ = self;
+        print_string(s);
+    }
+};
 
 fn draw_dragon() void {
     if (system_calls.vbe_res()) |res| {
@@ -96,7 +113,7 @@ fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 
     var pos = utils.memory_copy_truncate(buffer[0..], name);
     pos = pos + utils.memory_copy_truncate(buffer[pos..], ".elf");
     while (!dir_entry.done) {
-        if (utils.memory_compare(dir_entry.current_entry, buffer[0..pos])) {
+        if (streq(dir_entry.current_entry, buffer[0..pos])) {
             pos = 0;
             pos = utils.memory_copy_truncate(buffer, path);
             pos = pos + utils.memory_copy_truncate(buffer[pos..], "/");
@@ -136,11 +153,11 @@ fn run_command(command: []const u8) bool {
     }
 
     // Process command_parts
-    if (utils.memory_compare(command_parts[0], "exit")) {
+    if (streq(command_parts[0], "exit")) {
         return true;
-    } else if (utils.memory_compare(command_parts[0], "reset")) {
+    } else if (streq(command_parts[0], "reset")) {
         print_string(reset_console);
-    } else if (utils.memory_compare(command_parts[0], "pwd")) {
+    } else if (streq(command_parts[0], "pwd")) {
         if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
             print_string(dir);
             print_string("\n");
@@ -149,7 +166,7 @@ fn run_command(command: []const u8) bool {
             print_string(@errorName(e));
             print_string("\n");
         }
-    } else if (utils.memory_compare(command_parts[0], "cd")) {
+    } else if (streq(command_parts[0], "cd")) {
         if (command_part_count != 2) {
             print_string("cd requires exactly one argument\n");
         } else {
@@ -161,7 +178,7 @@ fn run_command(command: []const u8) bool {
                 print_string("\n");
             };
         }
-    } else if (utils.memory_compare(command_parts[0], "sleep")) {
+    } else if (streq(command_parts[0], "sleep")) {
         if (command_part_count != 2) {
             print_string("sleep requires exactly one argument\n");
         } else {
@@ -173,8 +190,10 @@ fn run_command(command: []const u8) bool {
                 print_string("\n");
             }
         }
-    } else if (utils.memory_compare(command_parts[0], "motd")) {
+    } else if (streq(command_parts[0], "motd")) {
         read_motd();
+    } else if (streq(command_parts[0], "free")) {
+        try console_writer.print("{}\n", .{tl.free()});
     } else {
         var command_path = command_parts[0];
         var path_buffer: [128]u8 = undefined;
@@ -217,10 +236,43 @@ fn run_command(command: []const u8) bool {
     return false;
 }
 
+fn run_lisp(command: []const u8) void {
+    var ots = OurToString{};
+    tl.set_input(command, null, &ots.ts);
+    while (true) {
+        const expr_maybe = tl.parse_input() catch |err| {
+            print_string("Interpreter error: ");
+            print_string(@errorName(err));
+            print_string("\n");
+            break;
+        };
+        if (expr_maybe) |expr| {
+            tl.print_expr(&ots.ts, expr) catch |err| {
+                print_string("Could not print expression error: ");
+                print_string(@errorName(err));
+                print_string("\n");
+                break;
+            };
+            print_string("\n");
+        } else {
+            break;
+        }
+    }
+}
+
 pub fn main() void {
     if (system_calls.get_process_id() == 0) {
         read_motd();
     }
+
+    // TODO: allocator
+    tl = TinyishLisp.new(&tl_mem, undefined) catch |e| {
+        print_string("lisp init failed: ");
+        print_string(@errorName(e));
+        print_string("\n");
+        return;
+    };
+
     var got: usize = 0;
     var running = true;
     while (running) {
@@ -228,7 +280,7 @@ pub fn main() void {
         print_string(segment_start ++ invert_colors);
         if (system_calls.get_cwd(cwd_buffer[0..])) |dir| {
             if (!(dir.len == 1 and dir[0] == '/')) {
-                system_calls.print_string(dir);
+                print_string(dir);
             }
         } else |e| {
             print_string("get_cwd failed: ");
@@ -273,7 +325,12 @@ pub fn main() void {
             }
         }
         if (got > 0) {
-            if (run_command(command_buffer[0..got])) {
+            const command = command_buffer[0..got];
+            if (command[0] == '(' or command[0] == '\'') {
+                run_lisp(command);
+            } else if (command[0] == '!') {
+                run_lisp(command[1..]);
+            } else if (run_command(command)) {
                 break; // exit was run
             }
 

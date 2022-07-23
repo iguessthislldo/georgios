@@ -100,3 +100,27 @@ pub const Blocking = enum {
     Blocking,
     NonBlocking,
 };
+
+pub const ConsoleWriter = struct {
+    pub const Error = error{};
+    pub const Writer = std.io.Writer(ConsoleWriter, Error, write);
+
+    pub fn writer(self: ConsoleWriter) Writer {
+        return Writer{.context = self};
+    }
+
+    pub fn write(self: ConsoleWriter, bytes: []const u8) Error!usize {
+        _ = self;
+        if (is_program) {
+            system_calls.print_string(bytes);
+        } else {
+            root.kernel.print.string(bytes);
+        }
+        return bytes.len;
+    }
+};
+
+pub fn get_console_writer() ConsoleWriter.Writer {
+    const cw = ConsoleWriter{};
+    return cw.writer();
+}

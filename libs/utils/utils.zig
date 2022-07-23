@@ -902,3 +902,57 @@ pub fn FixedString(comptime the_max_len: comptime_int) type {
         }
     };
 }
+
+pub fn unions_equal(comptime Union: type, a: Union, b: Union) bool {
+    const union_ti = @typeInfo(Union).Union;
+    const Tag = union_ti.tag_type.?;
+    const tag_ti = @typeInfo(Tag).Enum;
+    const kind = @as(Tag, a);
+    if (kind != @as(Tag, b)) {
+        return false;
+    }
+    inline for (tag_ti.fields) |field| {
+        if (kind == @intToEnum(Tag, field.value)) {
+            if (@TypeOf(@field(a, field.name)) == []const u8) {
+                return memory_compare(@field(a, field.name), @field(b, field.name));
+            } else {
+                return @field(a, field.name) == @field(b, field.name);
+            }
+        }
+    }
+    return false;
+}
+
+const UnionsEqualTestKind = enum {
+    Int,
+    String1,
+    String2,
+    Nil,
+};
+
+const UnionsEqualTestValue = union (UnionsEqualTestKind) {
+    Int: u32,
+    String1: []const u8,
+    String2: []const u8,
+    Nil: void,
+
+    fn eq(self: UnionsEqualTestValue, other: UnionsEqualTestValue) bool {
+        return unions_equal(UnionsEqualTestValue, self, other);
+    }
+};
+
+test "unions_equal" {
+    const Value = UnionsEqualTestValue;
+    const int1 = Value{.Int = 1};
+    const int2 = Value{.Int = 2};
+    const str1 = Value{.String1 = "hello"};
+    const str2 = Value{.String2 = "hello"};
+    const nil = Value{.Nil = .{}};
+    try std.testing.expect(int1.eq(int1));
+    try std.testing.expect(!int1.eq(int2));
+    try std.testing.expect(!int1.eq(str1));
+    try std.testing.expect(str1.eq(str1));
+    try std.testing.expect(!str1.eq(str2));
+    try std.testing.expect(nil.eq(nil));
+    try std.testing.expect(!nil.eq(int1));
+}

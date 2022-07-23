@@ -22,6 +22,13 @@ const georgios_pkg = std.build.Pkg{
         utils_pkg,
     },
 };
+const tinyishlisp_pkg = std.build.Pkg{
+    .name = "TinyishLisp",
+    .path = .{.path = "libs/tinyishlisp/TinyishLisp.zig"},
+    .dependencies = &[_]std.build.Pkg {
+        utils_pkg,
+    },
+};
 
 var b: *std.build.Builder = undefined;
 var target: std.zig.CrossTarget = undefined;
@@ -92,6 +99,7 @@ pub fn build(builder: *std.build.Builder) void {
     test_step = b.step("test", "Run Tests");
     add_tests("libs/utils/test.zig");
     add_tests("libs/georgios/test.zig");
+    add_tests("libs/tinyishlisp/test.zig");
     add_tests("kernel/test.zig");
 
     // Kernel
@@ -233,6 +241,7 @@ fn build_program(name: []const u8) void {
     prog.setLinkerScriptPath(program_link_script);
     prog.setTarget(target);
     prog.addPackage(georgios_pkg);
+    prog.addPackage(tinyishlisp_pkg);
     prog.install();
 }
 
