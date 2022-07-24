@@ -8,4 +8,6 @@ test "kernel test root" {
     _ = @import("fs.zig");
     _ = @import("fs/RamDisk.zig");
     _ = @import("sync.zig");
+    _ = @import("io.zig");
+    _ = @import("ext2.zig");
 }

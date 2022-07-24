@@ -47,7 +47,7 @@ pub const File = struct {
             return 0;
         }
 
-        pub fn close_impl(file: *File) FileError!void {
+        pub fn close_impl(file: *File) georgios.fs.Error!void {
             _ = file;
         }
     };
@@ -73,7 +73,7 @@ pub const File = struct {
             return FileError.Unsupported;
         }
 
-        pub fn close_impl(file: *File) FileError!void {
+        pub fn close_impl(file: *File) georgios.fs.Error!void {
             _ = file;
             return FileError.Unsupported;
         }
@@ -98,7 +98,7 @@ pub const File = struct {
             return FileError.Unsupported;
         }
 
-        pub fn close_impl(file: *File) FileError!void {
+        pub fn close_impl(file: *File) georgios.fs.Error!void {
             return georgios.system_calls.file_close(file.id.?);
         }
     };
@@ -112,7 +112,7 @@ pub const File = struct {
     read_impl: fn(*File, []u8) FileError!usize = default_impl.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = default_impl.write_impl,
     seek_impl: fn(*File, isize, SeekType) FileError!usize = default_impl.seek_impl,
-    close_impl: fn(*File) FileError!void = default_impl.close_impl,
+    close_impl: fn(*File) georgios.fs.Error!void = default_impl.close_impl,
 
     /// Set the file to do nothing when used.
     pub fn set_nop_impl(self: *File) void {
@@ -183,7 +183,7 @@ pub const File = struct {
     }
 
     /// Free resources used by the file.
-    pub fn close(file: *File) callconv(.Inline) FileError!void {
+    pub fn close(file: *File) callconv(.Inline) georgios.fs.Error!void {
         defer file.valid = false;
         file.close_impl(file) catch |e| return e;
     }

@@ -18,7 +18,6 @@ const utils = @import("utils");
 const streq = utils.memory_compare;
 const Guid = utils.Guid;
 
-const ext2 = @import("ext2.zig");
 const gpt = @import("gpt.zig");
 const io = @import("io.zig");
 const memory = @import("memory.zig");
@@ -27,133 +26,75 @@ const MappedList = @import("mapped_list.zig").MappedList;
 const List = @import("list.zig").List;
 
 pub const Error = georgios.fs.Error;
-pub const InitError = ext2.Error || gpt.Error || Guid.Error;
 pub const RamDisk = @import("fs/RamDisk.zig");
+pub const ext2 = @import("ext2.zig");
+pub const FileId = io.File.Id;
 
-const FileId = io.File.Id;
+// TODO: Something better
+var root_ext2: ext2.Ext2 = .{};
+fn found_partition(block_store: *io.BlockStore) !bool {
+    if (gpt.Disk.new(block_store)) |disk| {
+        var disk_guid: [Guid.string_size]u8 = undefined;
+        try disk.guid.to_string(disk_guid[0..]);
+        print.format(
+            \\ - Disk GUID is {}
+            \\   - Disk partitions entries at LBA {}
+            \\   - Disk partitions entries are {}B each
+            \\   - Partitions:
+            \\
+            , .{
+            disk_guid,
+            disk.partition_entries_lba,
+            disk.partition_entry_size,
+        });
 
-fn file_id_eql(a: FileId, b: FileId) bool {
-    return a == b;
-}
-
-fn file_id_cmp(a: FileId, b: FileId) bool {
-    return a > b;
-}
-
-/// TODO: Remove
-pub const File = ext2.File;
-
-/// TODO: Relocate existing code and remove
-pub const Filesystem = struct {
-    const OpenFiles = MappedList(FileId, *File, file_id_eql, file_id_cmp);
-
-    impl: ext2.Ext2 = ext2.Ext2{},
-    open_files: OpenFiles = undefined,
-    next_file_id: FileId = 0,
-
-    pub fn init(self: *Filesystem,
-            alloc: *memory.Allocator, block_store: *io.BlockStore) InitError!void {
-        var found = false;
-        if (gpt.Disk.new(block_store)) |disk| {
-            var disk_guid: [Guid.string_size]u8 = undefined;
-            try disk.guid.to_string(disk_guid[0..]);
+        var part_it = try disk.partitions();
+        defer (part_it.done() catch unreachable);
+        while (try part_it.next()) |part| {
+            var type_guid: [Guid.string_size]u8 = undefined;
+            try part.type_guid.to_string(type_guid[0..]);
             print.format(
-                \\ - Disk GUID is {}
-                \\   - Disk partitions entries at LBA {}
-                \\   - Disk partitions entries are {}B each
-                \\   - Partitions:
+                \\     - Part
+                \\       - {}
+                \\       - {} - {}
                 \\
                 , .{
-                disk_guid,
-                disk.partition_entries_lba,
-                disk.partition_entry_size,
+                type_guid,
+                part.start,
+                part.end,
             });
-
-            var part_it = try disk.partitions();
-            defer (part_it.done() catch unreachable);
-            while (try part_it.next()) |part| {
-                var type_guid: [Guid.string_size]u8 = undefined;
-                try part.type_guid.to_string(type_guid[0..]);
-                print.format(
-                    \\     - Part
-                    \\       - {}
-                    \\       - {} - {}
-                    \\
-                    , .{
-                    type_guid,
-                    part.start,
-                    part.end,
-                });
-                if (part.is_linux()) {
-                    // TODO: Acutally see if this the right partition
-                    print.string("     - Is Linux!\n");
-                    self.impl.offset = part.start * block_store.block_size;
-                    found = true;
-                }
-            }
-
-        } else |e| {
-            if (e != gpt.Error.InvalidMbr) {
-                return e;
-            } else {
-                print.string(" - Disk doesn't have a MBR, going to try to use whole " ++
-                    "disk as a ext2 filesystem.\n");
-                // Else try to use whole disk
-                found = true;
+            if (part.is_linux()) {
+                // TODO: Acutally see if this the right partition
+                print.string("     - Is Linux!\n");
+                root_ext2.offset = part.start * block_store.block_size;
+                return true;
             }
         }
 
-        if (found) {
-            print.string(" - Filesystem\n");
-            try self.impl.init(alloc, block_store);
+    } else |e| {
+        if (e != gpt.Error.InvalidMbr) {
+            return e;
         } else {
-            print.string(" - No Filesystem\n");
-        }
-
-        self.open_files = OpenFiles{.alloc = alloc};
-    }
-
-    pub fn open(self: *Filesystem, path: []const u8) Error!*File {
-        const file = try self.impl.open(path);
-        file.io_file.id = self.next_file_id;
-        self.next_file_id += 1;
-        try self.open_files.push_front(file.io_file.id.?, file);
-        return file;
-    }
-
-    pub fn file_id_read(self: *Filesystem, id: FileId, to: []u8) io.FileError!usize {
-        if (self.open_files.find(id)) |file| {
-            return file.io_file.read(to);
-        } else {
-            return io.FileError.InvalidFileId;
+            print.string(" - Disk doesn't have a MBR, going to try to use whole " ++
+                "disk as a ext2 filesystem.\n");
+            // Else try to use whole disk
+            return true;
         }
     }
 
-    pub fn file_id_write(self: *Filesystem, id: FileId, from: []const u8) io.FileError!usize {
-        _ = from;
-        if (self.open_files.find(id)) |file| {
-            // TODO
-            _ = file;
-            @panic("Filesystem.file_id_write called");
-        } else {
-            return io.FileError.InvalidFileId;
-        }
-    }
+    return false;
+}
 
-    // TODO: file_id_seek
-
-    pub fn file_id_close(self: *Filesystem, id: FileId) io.FileError!void {
-        if (try self.open_files.find_remove(id)) |file| {
-            try self.impl.close(file);
-        } else {
-            return io.FileError.InvalidFileId;
-        }
+pub fn get_root(alloc: *memory.Allocator, block_store: *io.BlockStore) ?*Vfilesystem {
+    if (found_partition(block_store) catch false) {
+        print.string(" - Filesystem\n");
+        root_ext2.init(alloc, block_store) catch return null;
+        return &root_ext2.vfs;
+    } else {
+        print.string(" - No Filesystem\n");
+        return null;
     }
-
-    pub fn resolve_directory_path(self: *Filesystem, path: []const u8) Error![]const u8 {
-        return self.impl.resolve_directory_path(path);
-    }
-};
+}
 
 pub const PathIterator = struct {
     path: []const u8,
@@ -500,7 +441,7 @@ pub const Vnode = struct {
         }
     }
 
-    fn node_with_content(self: *Vnode) callconv(.Inline) *Vnode {
+    fn node_with_content(self: *Vnode) callconv(.Inline) Error!*Vnode {
         if (self.mounted_here) |other_fs| {
             return other_fs.get_root_vnode();
         }
@@ -513,7 +454,7 @@ pub const Vnode = struct {
     }
 
     pub fn dir_iter(self: *Vnode) Error!*DirIterator {
-        return self.node_with_content().dir_iter_i();
+        return (try self.node_with_content()).dir_iter_i();
     }
 
     fn find_in_directory_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!*Vnode {
@@ -528,7 +469,7 @@ pub const Vnode = struct {
     }
 
     pub fn find_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
-        return self.node_with_content().find_in_directory_i(name);
+        return (try self.node_with_content()).find_in_directory_i(name);
     }
 
     fn directory_empty_i(self: *Vnode) callconv(.Inline) Error!bool {
@@ -543,7 +484,7 @@ pub const Vnode = struct {
     }
 
     pub fn directory_empty(self: *Vnode) Error!bool {
-        return self.node_with_content().directory_empty_i();
+        return (try self.node_with_content()).directory_empty_i();
     }
 
     fn create_node_i(self: *Vnode, name: []const u8, kind: Kind) callconv(.Inline) Error!*Vnode {
@@ -552,7 +493,7 @@ pub const Vnode = struct {
     }
 
     pub fn create_node(self: *Vnode, name: []const u8, kind: Kind) Error!*Vnode {
-        return self.node_with_content().create_node_i(name, kind);
+        return (try self.node_with_content()).create_node_i(name, kind);
     }
 
     fn unlink_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!void {
@@ -564,7 +505,7 @@ pub const Vnode = struct {
     }
 
     pub fn unlink(self: *Vnode, name: []const u8) Error!void {
-        return self.node_with_content().unlink_i(name);
+        return (try self.node_with_content()).unlink_i(name);
     }
 
     fn dir_io_read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
@@ -583,6 +524,7 @@ pub const Vnode = struct {
         if (self.dir_io_it) |dir_it| {
             dir_it.done();
         }
+        self.dir_io_it = null;
     }
 
     pub fn get_io_file(self: *Vnode) Error!*io.File {
@@ -593,17 +535,15 @@ pub const Vnode = struct {
     }
 
     pub fn close(self: *Vnode) Error!void {
-        if (self.dir_io_it) |dir_it| {
-            dir_it.done();
-        }
+        try self.dir_io.close();
         try self.close_impl(self);
     }
 };
 
 pub const Vfilesystem = struct {
-    get_root_vnode_impl: fn(self: *Vfilesystem) *Vnode,
+    get_root_vnode_impl: fn(self: *Vfilesystem) Error!*Vnode,
 
-    pub fn get_root_vnode(self: *Vfilesystem) *Vnode {
+    pub fn get_root_vnode(self: *Vfilesystem) Error!*Vnode {
         return self.get_root_vnode_impl(self);
     }
 };
@@ -634,7 +574,9 @@ pub const ResolvePathOpts = struct {
     }
 
     pub fn set_node(self: *const ResolvePathOpts, node: *Vnode) void {
-        self.node.?.* = node;
+        if (self.node) |node_ptr| {
+            node_ptr.* = node;
+        }
     }
 
     pub fn get_node(self: *const ResolvePathOpts) *Vnode {
@@ -653,7 +595,7 @@ pub const Manager = struct {
         };
     }
 
-    pub fn get_root_vnode(self: *Manager) *Vnode {
+    pub fn get_root_vnode(self: *Manager) Error!*Vnode {
         return self.root_fs.get_root_vnode();
     }
 
@@ -667,7 +609,7 @@ pub const Manager = struct {
     }
 
     fn resolve_path_i(self: *Manager, raw_path: *Path, opts: ResolvePathOpts) Error!*Vnode {
-        var vnode = opts.starting_node orelse self.get_root_vnode();
+        var vnode = opts.starting_node orelse try self.get_root_vnode();
         var resolved_path = Path{.alloc = self.alloc, .absolute = true};
         try resolved_path.init(null);
         defer (resolved_path.done() catch @panic("resolve_path_i: resolved_path.done()"));
@@ -708,6 +650,12 @@ pub const Manager = struct {
         const vnode = try self.resolve_path(path_str, opts_copy);
         try vnode.assert_directory();
         return vnode;
+    }
+
+    pub fn resolve_directory_path(self: *Manager, path: []const u8, cwd: []const u8) Error![]const u8 {
+        var resolved: []u8 = undefined;
+        _ = try self.resolve_directory(path, .{.path = &resolved, .cwd = cwd});
+        return resolved;
     }
 
     pub fn resolve_parent_directory(self: *Manager, path_str: []const u8,
@@ -755,5 +703,77 @@ pub const Manager = struct {
             return Error.FilesystemAlreadyMountedHere;
         }
         node.mounted_here = fs;
+    }
+
+    pub fn assert_directory_has(self: *Manager, path: []const u8, expected: []const []const u8) !void {
+        var count: usize = 0;
+        const dir = try self.resolve_directory(path, .{});
+        var it = try dir.dir_iter();
+        defer it.done();
+        while (try it.next()) |item| {
+            try std.testing.expect(count < expected.len);
+            try std.testing.expectEqualStrings(expected[count], item.name);
+            count += 1;
+        }
+        try std.testing.expectEqual(expected.len, count);
+    }
+};
+
+pub const Submanager = struct {
+    const OpenFiles = std.AutoHashMap(FileId, *Vnode);
+
+    manager: *Manager,
+    open_files: OpenFiles,
+    cwd_ptr: *[]const u8,
+    next_file_id: FileId = 0,
+
+    pub fn init(self: *Submanager, manager: *Manager, cwd_ptr: *[]const u8) void {
+        self.* = .{
+            .manager = manager,
+            .open_files = OpenFiles.init(manager.alloc.std_allocator()),
+            .cwd_ptr = cwd_ptr,
+        };
+    }
+
+    pub fn done(self: *Submanager) void {
+        {
+            var it = self.open_files.iterator();
+            while (it.next()) |kv| {
+                kv.value_ptr.*.close() catch unreachable; // TODO?
+            }
+            self.open_files.deinit();
+        }
+    }
+
+    pub fn open(self: *Submanager, path: []const u8) Error!FileId {
+        const vnode = try self.manager.resolve_path(path, .{.cwd = self.cwd_ptr.*});
+        const id = self.next_file_id;
+        self.next_file_id += 1;
+        try self.open_files.put(id, vnode);
+        return id;
+    }
+
+    pub fn close(self: *Submanager, id: FileId) Error!void {
+        const kv = self.open_files.fetchRemove(id) orelse return Error.InvalidFileId;
+        try kv.value.close();
+    }
+
+    pub fn read(self: *Submanager, id: FileId, to: []u8) io.FileError!usize {
+        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        return try io_file.read(to);
+    }
+
+    pub fn write(self: *Submanager, id: FileId, from: []const u8) io.FileError!usize {
+        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        return io_file.write(from);
+    }
+
+    pub fn seek(self: *Submanager, id: FileId,
+            offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
+        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        return io_file.seek(offset, seek_type);
     }
 };

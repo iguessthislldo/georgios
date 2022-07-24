@@ -45,15 +45,6 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     system_calls.exit(.{.status = 1});
 }
 
-pub const DirEntry = struct {
-    dir: []const u8,
-    dir_inode: ?usize = null,
-    current_entry_buffer: [128]u8 = undefined,
-    current_entry: []u8 = undefined,
-    current_entry_inode: ?usize = null,
-    done: bool = false,
-};
-
 pub const ProcessInfo = struct {
     path: []const u8,
     name: []const u8 = utils.make_const_slice(u8, @intToPtr([*]const u8, 1024), 0),
@@ -70,7 +61,7 @@ pub const fs = struct {
         DirectoryNotEmpty,
         InvalidFilesystem,
         FilesystemAlreadyMountedHere,
-    } || io.FileError;
+    } || io.FileError || memory.MemoryError;
 
     pub fn open(path: []const u8) Error!io.File {
         return io.File{.valid = true, .id = try system_calls.file_open(path)};

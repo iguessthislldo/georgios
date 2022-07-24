@@ -5,6 +5,8 @@
 //   https://wiki.osdev.org/Ext2
 //   https://www.nongnu.org/ext2-doc/ext2.html
 
+const std = @import("std");
+
 const utils = @import("utils");
 const georgios = @import("georgios");
 
@@ -14,8 +16,10 @@ const Allocator = @import("memory.zig").Allocator;
 const MemoryError = @import("memory.zig").MemoryError;
 const io = @import("io.zig");
 const fs = @import("fs.zig");
-
-pub const Error = fs.Error || io.BlockError || MemoryError || utils.Error;
+const Vnode = fs.Vnode;
+const Vfilesystem = fs.Vfilesystem;
+const DirIterator = fs.DirIterator;
+const Error = fs.Error;
 
 const Superblock = packed struct {
     const expected_magic: u16 = 0xef53;
@@ -51,7 +55,7 @@ const Superblock = packed struct {
     inode_size: u32 = 0,
     // Rest has been left out for now
 
-    pub fn verify(self: *const Superblock) Error!void {
+    fn verify(self: *const Superblock) Error!void {
         if (self.magic != expected_magic) {
             print.string("Invalid Ext2 Magic\n");
             return Error.InvalidFilesystem;
@@ -68,12 +72,12 @@ const Superblock = packed struct {
         // TODO: Verify things related to inode_size
     }
 
-    pub fn block_size(self: *const Superblock) usize {
+    fn block_size(self: *const Superblock) usize {
         // TODO: Zig Bug? Can't inline utils.Ki(1)
         return @as(usize, 1024) << @truncate(utils.UsizeLog2Type, self.log_block_size);
     }
 
-    pub fn block_group_count(self: *const Superblock) usize {
+    fn block_group_count(self: *const Superblock) usize {
         return utils.align_up(self.block_count, self.blocks_per_group) / self.blocks_per_group;
     }
 };
@@ -102,23 +106,25 @@ const Inode = packed struct {
     block_count: u32,
     flags: u32,
     os_dependant_field_1: u32,
-    blocks: [15]u32,
-    generation: u32,
+    // TODO: Revert when https://github.com/ziglang/zig/issues/2627 is fixed
+    // blocks: [15]u32,
+    // generation: u32,
+    blocks: [16]u32,
     file_acl: u32,
     dir_acl: u32,
     fragment_address: u32,
     os_dependant_field_2: [12]u8,
 
-    pub fn is_file(self: *const Inode) bool {
+    fn is_file(self: *const Inode) bool {
         return self.mode & 0x8000 > 0;
     }
 
-    pub fn is_directory(self: *const Inode) bool {
+    fn is_directory(self: *const Inode) bool {
         return self.mode & 0x4000 > 0;
     }
 };
 
-pub const DataBlockIterator = struct {
+const DataBlockIterator = struct {
     const max_first_level_index: u8 = 11;
     const second_level_index = max_first_level_index + 1;
     const third_level_index = second_level_index + 1;
@@ -147,7 +153,7 @@ pub const DataBlockIterator = struct {
     fourth_level_pos: usize = 0,
     new_pos: bool = false,
 
-    pub fn set_position(self: *DataBlockIterator, block: usize) Error!void {
+    fn set_position(self: *DataBlockIterator, block: usize) Error!void {
         if (block <= max_first_level_index) {
             self.first_level_pos = block;
             self.second_level_pos = 0;
@@ -280,7 +286,7 @@ pub const DataBlockIterator = struct {
         }
     }
 
-    pub fn next(self: *DataBlockIterator, dest: []u8) Error!?[]u8 {
+    fn next(self: *DataBlockIterator, dest: []u8) Error!?[]u8 {
         if (dest.len < self.ext2.block_size) {
             return Error.NotEnoughDestination;
         }
@@ -292,13 +298,13 @@ pub const DataBlockIterator = struct {
             .FillInZeros => utils.memory_set(dest_use, 0),
             .EndOfFile => return null,
         }
-        const got = utils.min(u32, self.inode.size - self.got, self.ext2.block_size);
-        // print.format("DataBlockIterator.next: got: {} {}\n", self.inode.size, self.got);
+        const got = @minimum(@as(usize, self.inode.size) - self.got, self.ext2.block_size);
+        // std.debug.print("DataBlockIterator.next: got: {} {} {}\n", .{self.inode.size, self.got, self.ext2.block_size});
         self.got += got;
         return dest_use[0..got];
     }
 
-    pub fn done(self: *DataBlockIterator) Error!void {
+    fn done(self: *DataBlockIterator) Error!void {
         if (self.second_level != null) try self.ext2.alloc.free_array(self.second_level.?);
         if (self.third_level != null) try self.ext2.alloc.free_array(self.third_level.?);
         if (self.fourth_level != null) try self.ext2.alloc.free_array(self.fourth_level.?);
@@ -314,99 +320,141 @@ const DirectoryEntry = packed struct {
     // time of writing, so this field can't be relied on.
 };
 
-const DirectoryIterator = struct {
-    pub const Value = struct {
-        inode_number: u32,
-        name: []const u8,
-        inode: Inode,
-    };
-
+const DirIteratorImpl = struct {
     ext2: *Ext2,
-    inode: *Inode,
+    node: *Node,
+    alloc: *Allocator,
+    dir_iter: DirIterator,
     data_block_iter: DataBlockIterator,
     buffer: []u8,
     block_count: usize,
     buffer_pos: usize = 0,
     initial: bool = true,
-    value: Value = undefined,
-
-    pub fn new(ext2: *Ext2, inode: *Inode) fs.Error!DirectoryIterator {
-        if (!inode.is_directory()) {
-            return fs.Error.NotADirectory;
-        }
-        return DirectoryIterator{
+    fn new(vnode: *Vnode) Error!*DirIterator {
+        const node = @fieldParentPtr(Node, "vnode", vnode);
+        const ext2 = node.ext2;
+        const inode = &node.inode;
+        var impl = try ext2.alloc.alloc(DirIteratorImpl);
+        impl.* = .{
+            .alloc = ext2.alloc,
             .ext2 = ext2,
-            .inode = inode,
+            .node = node,
             .data_block_iter = DataBlockIterator{.ext2 = ext2, .inode = inode},
             .buffer = try ext2.alloc.alloc_array(u8, ext2.block_size),
             .block_count = inode.size / ext2.block_size,
+            .dir_iter = .{.dir = &node.vnode, .next_impl = next_impl, .done_impl = done_impl},
         };
+        return &impl.dir_iter;
     }
 
-    pub fn next(self: *DirectoryIterator) fs.Error!bool {
+    fn next_impl(dir_it: *DirIterator) Error!?DirIterator.Result {
+        const self = @fieldParentPtr(DirIteratorImpl, "dir_iter", dir_it);
+
         const get_next_block = self.buffer_pos >= self.ext2.block_size;
         if (get_next_block) {
             self.buffer_pos = 0;
             self.block_count -= 1;
             if (self.block_count == 0) {
-                return false;
+                return null;
             }
         }
         if (get_next_block or self.initial) {
             self.initial = false;
             const result = self.data_block_iter.next(self.buffer) catch
-                return fs.Error.Internal;
+                return Error.Internal;
             if (result == null) {
-                return false;
+                return null;
             }
         }
         const entry = @ptrCast(*DirectoryEntry, &self.buffer[self.buffer_pos]);
         const name_pos = self.buffer_pos + @sizeOf(DirectoryEntry);
         self.buffer_pos += entry.next_entry_offset;
-        self.value.inode_number = entry.inode;
-        self.value.name = self.buffer[name_pos..name_pos + entry.name_size];
-        self.ext2.get_inode(entry.inode, &self.value.inode) catch
-            return fs.Error.Internal;
-        return true;
+
+        return DirIterator.Result{
+            .name = self.buffer[name_pos..name_pos + entry.name_size],
+            .node = &(try self.ext2.get_node(entry.inode)).vnode,
+        };
     }
 
-    pub fn done(self: *DirectoryIterator) Error!void {
-        try self.data_block_iter.done();
-        try self.ext2.alloc.free_array(self.buffer);
+    fn done_impl(dir_it: *DirIterator) void {
+        const self = @fieldParentPtr(DirIteratorImpl, "dir_iter", dir_it);
+        self.alloc.free(self.buffer) catch @panic("Ext2 DirIterator done");
+        self.alloc.free(self) catch @panic("Ext2 DirIterator done");
     }
 };
 
-pub const File = struct {
-    const Self = @This();
-
-    ext2: *Ext2 = undefined,
+const Node = struct {
+    ext2: *Ext2,
+    vnode: Vnode,
     inode: Inode = undefined,
     io_file: io.File = undefined,
+
     data_block_iter: DataBlockIterator = undefined,
     buffer: ?[]u8 = null,
     position: usize = 0,
 
-    pub fn init(self: *File, ext2: *Ext2, inode: u32) Error!void {
-        self.* = File{};
-        self.ext2 = ext2;
-        try ext2.get_inode(inode, &self.inode);
-        self.data_block_iter = DataBlockIterator{.ext2 = ext2, .inode = &self.inode};
-        self.io_file = io.File{
-            .read_impl = Self.read,
-            .write_impl = io.File.unsupported.write_impl,
-            .seek_impl = Self.seek,
-            .close_impl = io.File.nop.close_impl,
+    fn init(self: *Node, ext2: *Ext2, kind: Vnode.Kind) void {
+        self.* = .{
+            .ext2 = ext2,
+            .vnode = .{
+                .fs = &ext2.vfs,
+                .kind = kind,
+                .get_dir_iter_impl = DirIteratorImpl.new,
+                .create_node_impl = create_node_impl,
+                .unlink_impl = unlink_impl,
+                .get_io_file_impl = get_io_file_impl,
+                .close_impl = close_impl,
+            },
+            .io_file = .{
+                .read_impl = read,
+                .write_impl = io.File.unsupported.write_impl,
+                .seek_impl = seek,
+                .close_impl = io.File.nop.close_impl,
+            },
         };
     }
 
-    pub fn close(self: *File) MemoryError!void {
+    fn init_after_inode(self: *Node) void {
+        self.vnode.kind = .{
+            .file = self.inode.is_file(),
+            .directory = self.inode.is_directory(),
+        };
+        self.data_block_iter = DataBlockIterator{.ext2 = self.ext2, .inode = &self.inode};
+    }
+
+    fn done(self: *Node) Error!void {
         if (self.buffer) |buffer| {
             try self.ext2.alloc.free_array(buffer);
         }
     }
 
-    pub fn read(file: *io.File, to: []u8) io.FileError!usize {
-        const self = @fieldParentPtr(Self, "io_file", file);
+    fn create_node_impl(vnode: *Vnode, name: []const u8, kind: Vnode.Kind) Error!*Vnode {
+        const self = @fieldParentPtr(Node, "vnode", vnode);
+        _ = self;
+        _ = name;
+        _ = kind;
+        return Error.Unsupported;
+    }
+
+    fn unlink_impl(vnode: *Vnode, name: []const u8) Error!void {
+        const self = @fieldParentPtr(Node, "vnode", vnode);
+        _ = self;
+        _ = name;
+        return Error.Unsupported;
+    }
+
+    fn get_io_file_impl(vnode: *Vnode) Error!*io.File {
+        const self = @fieldParentPtr(Node, "vnode", vnode);
+        return &self.io_file;
+    }
+
+    fn close_impl(vnode: *Vnode) Error!void {
+        const self = @fieldParentPtr(Node, "vnode", vnode);
+        self.position = 0;
+    }
+
+    fn read(file: *io.File, to: []u8) io.FileError!usize {
+        const self = @fieldParentPtr(Node, "io_file", file);
         if (self.buffer == null) {
             self.buffer = try self.ext2.alloc.alloc_array(u8, self.ext2.block_size);
         }
@@ -432,19 +480,23 @@ pub const File = struct {
         return got;
     }
 
-    pub fn seek(file: *io.File,
+    fn seek(file: *io.File,
             offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
-        const self = @fieldParentPtr(Self, "io_file", file);
+        const self = @fieldParentPtr(Node, "io_file", file);
         self.position = try io.File.generic_seek(
             self.position, self.inode.size, null, offset, seek_type);
         return self.position;
     }
 };
 
+const NodeCache = std.AutoHashMap(u32, *Node);
+
 pub const Ext2 = struct {
     const root_inode_number = @as(usize, 2);
     const second_level_start = 12;
 
+    vfs: fs.Vfilesystem = undefined,
+    node_cache: NodeCache = undefined,
     initialized: bool = false,
     alloc: *Allocator = undefined,
     block_store: *io.BlockStore = undefined,
@@ -462,40 +514,59 @@ pub const Ext2 = struct {
         return self.offset + @as(u64, index) * @as(u64, self.block_size);
     }
 
-    pub fn get_block_group_descriptor(self: *Ext2,
+    fn get_block_group_descriptor(self: *Ext2,
             index: usize, dest: *BlockGroupDescriptor) Error!void {
         try self.block_store.read(
             self.block_group_descriptor_table + @sizeOf(BlockGroupDescriptor) * index,
             utils.to_bytes(dest));
     }
 
-    pub fn get_inode(self: *Ext2, n: usize, inode: *Inode) Error!void {
+    fn get_node(self: *Ext2, n: u32) Error!*Node {
+        if (self.node_cache.get(n)) |node| {
+            return node;
+        }
+
+        var node: *Node = try self.alloc.alloc(Node);
+        node.init(self, undefined); // On purpose, wait until we got the inode
+        errdefer self.alloc.free(node) catch unreachable;
+
+        // Get Inode
         var block_group: BlockGroupDescriptor = undefined;
         const nm1 = n - 1;
         try self.get_block_group_descriptor(
             nm1 / self.superblock.inodes_per_group, &block_group);
         const address = @as(u64, block_group.inode_table) * self.block_size +
             (nm1 % self.superblock.inodes_per_group) * self.superblock.inode_size;
-        try self.block_store.read(self.offset + address, utils.to_bytes(inode));
-        // print.format("inode {}\n{}\n", n, inode.*);
+        try self.block_store.read(self.offset + address, utils.to_bytes(&node.inode));
+
+        node.init_after_inode();
+        try self.node_cache.put(n, node);
+
+        return node;
     }
 
-    pub fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
+    fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
         try self.block_store.read(self.get_block_address(index), block);
     }
 
-    pub fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
+    fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
         try self.get_data_block(
             @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
     }
 
     pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
         self.alloc = alloc;
+
+        self.vfs = .{
+            .get_root_vnode_impl = get_root_vnode_impl,
+        };
+        self.node_cache = NodeCache.init(alloc.std_allocator());
+
         self.block_store = block_store;
 
         try block_store.read(self.offset + utils.Ki(1), utils.to_bytes(&self.superblock));
 
-        // print.format("{}\n", self.superblock);
+        // std.debug.print("{}\n", .{self.superblock});
         try self.superblock.verify();
 
         self.block_size = self.superblock.block_size();
@@ -512,192 +583,80 @@ pub const Ext2 = struct {
         self.initialized = true;
     }
 
-    fn find_in_directory(
-            self: *Ext2, dir_inode: *Inode, name: []const u8, inode: *Inode) Error!u32 {
-        if (!dir_inode.is_directory()) {
-            return fs.Error.NotADirectory;
+    fn done(self: *Ext2) void {
+        var it = self.node_cache.iterator();
+        while (it.next()) |kv| {
+            kv.value_ptr.*.done() catch unreachable;
+            self.alloc.free(kv.value_ptr.*) catch unreachable;
         }
-
-        var dir_iter = try DirectoryIterator.new(self, dir_inode);
-        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
-        while (try dir_iter.next()) {
-            if (utils.memory_compare(name, dir_iter.value.name)) {
-                inode.* = dir_iter.value.inode;
-                return dir_iter.value.inode_number;
-            }
-        }
-
-        return fs.Error.FileNotFound;
+        self.node_cache.deinit();
     }
 
-    const Resolved = struct {
-        inode_number: u32 = undefined,
-        path: ?*[]u8 = null,
-        inode: ?*Inode = null,
-    };
-
-    fn resolve_path(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
-        // See man page path_resolution(7) for reference
-        // TODO: Assert path with trailing slash is a directory
-
-        // Get unresolved full path
-        var path = fs.Path{.alloc = self.alloc};
-        try path.init(path_str);
-        defer (path.done() catch @panic("path.done()"));
-        if (!path.absolute) {
-            var cwd = kernel.threading_mgr.get_cwd_heap() catch return fs.Error.Internal;
-            try path.prepend(cwd);
-            try kernel.alloc.free_array(cwd);
-        }
-
-        // Get root node
-        var inode: *Inode = resolved.inode orelse try self.alloc.alloc(Inode);
-        defer {
-            if (resolved.inode == null) {
-                self.alloc.free(inode) catch @panic("self.alloc.free(inode)");
-            }
-        }
-        resolved.inode_number = Ext2.root_inode_number;
-        self.get_inode(resolved.inode_number, inode) catch return fs.Error.Internal;
-
-        // Find inode and build resolved path
-        var resolved_path = fs.Path{.alloc = self.alloc, .absolute = true};
-        try resolved_path.init(null);
-        defer (resolved_path.done() catch @panic("resolved_path.done()"));
-        var it = path.list.const_iterator();
-        while (it.next()) |component| {
-            resolved.inode_number = try self.find_in_directory(inode, component, inode);
-            if (utils.memory_compare(component, "..")) {
-                try resolved_path.pop_component();
-            } else {
-                try resolved_path.push_component(component);
-            }
-        }
-
-        if (resolved.path) |rp| {
-            rp.* = try resolved_path.get();
-        }
-    }
-
-    fn resolve_kind(self: *Ext2, path_str: []const u8, resolved: *Resolved,
-            valid_fn: fn(inode: *const Inode) bool, invalid_error: Error) Error!void {
-        const alloc_inode = resolved.inode == null;
-        if (alloc_inode) {
-            resolved.inode = try self.alloc.alloc(Inode);
-        }
-        defer {
-            if (alloc_inode) {
-                self.alloc.free(resolved.inode.?) catch @panic("self.alloc.free(inode)");
-                resolved.inode = null;
-            }
-        }
-        try self.resolve_path(path_str, resolved);
-        if (!valid_fn(resolved.inode.?)) {
-            return invalid_error;
-        }
-    }
-
-    fn resolve_directory(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
-        try self.resolve_kind(path_str, resolved, Inode.is_directory, fs.Error.NotADirectory);
-    }
-
-    pub fn resolve_directory_path(self: *Ext2, path: []const u8) Error![]const u8 {
-        var resolved_path: []u8 = undefined;
-        var resolved = Resolved{.path = &resolved_path};
-        try self.resolve_directory(path, &resolved);
-        return resolved_path;
-    }
-
-    fn resolve_file(self: *Ext2, path_str: []const u8, resolved: *Resolved) Error!void {
-        try self.resolve_kind(path_str, resolved, Inode.is_file, fs.Error.NotAFile);
-    }
-
-    pub fn open(self: *Ext2, path: []const u8) fs.Error!*File {
-        if (!self.initialized) return fs.Error.InvalidFilesystem;
-        // print.format("open({})\n", .{path});
-
-        var resolved = Resolved{};
-        try self.resolve_file(path, &resolved);
-
-        const file = try self.alloc.alloc(File);
-        file.init(self, resolved.inode_number) catch return fs.Error.Internal;
-
-        return file;
-    }
-
-    pub fn close(self: *Ext2, file: *File) io.FileError!void {
-        if (!self.initialized) return io.FileError.InvalidFileId;
-        try file.close();
-        try self.alloc.free(file);
-    }
-
-    fn open_dir(self: *Ext2, path: []const u8) fs.Error!DirectoryIterator.Value {
-        var inode = try self.alloc.alloc(Inode);
-        defer self.alloc.free(inode) catch @panic("self.alloc.free(inode)");
-        var resolved = Resolved{.inode = inode};
-        try self.resolve_directory(path, &resolved);
-
-        return DirectoryIterator.Value{
-            .inode_number = resolved.inode_number,
-            .name = "",
-            .inode = resolved.inode.?.*,
-        };
-    }
-
-    pub fn next_dir_entry(self: *Ext2, dir_entry: *georgios.DirEntry) Error!void {
-        if (!self.initialized) return fs.Error.InvalidFilesystem;
-
-        var in_dir: DirectoryIterator.Value = undefined;
-        if (dir_entry.dir_inode) |dir_inode| {
-            try self.get_inode(dir_inode, &in_dir.inode);
-            // Note: Leaving in_dir.inode_number undefined
-        } else {
-            in_dir = try self.open_dir(dir_entry.dir);
-            dir_entry.dir_inode = in_dir.inode_number;
-        }
-
-        var dir_iter = try DirectoryIterator.new(self, &in_dir.inode);
-        defer dir_iter.done() catch |e| @panic(@typeName(@TypeOf(e)));
-        var get_next = false;
-        while (try dir_iter.next()) {
-            // print.format("dir_item: {} {}\n", .{dir_iter.value.inode_number, dir_iter.value.name});
-            var return_this = false;
-            if (get_next) {
-                if (dir_entry.current_entry_inode) |current| {
-                    // Case of listing / where . == ..
-                    // TODO: Also maybe if there are two or more hard links to
-                    // the same file in a row. This might be have be rethought
-                    // out though because it will get in a loop if identical
-                    // hard links are interspersed in the directory listing.
-                    if (current == dir_iter.value.inode_number) {
-                        continue;
-                    }
-                }
-                // print.format("get_next return this\n", .{});
-                return_this = true;
-            } else if (dir_entry.current_entry_inode) |current| {
-                // print.format("current: {}\n", .{current});
-                if (current == dir_iter.value.inode_number) {
-                    get_next = true;
-                    continue;
-                }
-            } else {
-                // print.format("return this\n", .{});
-                return_this = true;
-            }
-            if (return_this) {
-                dir_entry.current_entry_inode = dir_iter.value.inode_number;
-                const len = utils.memory_copy_truncate(
-                    dir_entry.current_entry_buffer[0..], dir_iter.value.name);
-                dir_entry.current_entry = dir_entry.current_entry_buffer[0..len];
-                return;
-            }
-        }
-
-        // print.format("done\n", .{});
-
-        dir_entry.current_entry.len = 0;
-        dir_entry.current_entry_inode = null;
-        dir_entry.done = true;
+    fn get_root_vnode_impl(vfs: *Vfilesystem) Error!*Vnode {
+        const self = @fieldParentPtr(Ext2, "vfs", vfs);
+        return &(try self.get_node(2)).vnode;
     }
 };
+
+const Ext2Test = struct {
+    alloc: kernel.memory.UnitTestAllocator = .{},
+    check_allocs: bool = false,
+    file: std.fs.File = undefined,
+    fbs: io.StdFileBlockStore = .{},
+    ext2: Ext2 = .{},
+    m: fs.Manager = undefined,
+
+    fn init(self: *Ext2Test) !void {
+        self.alloc.init();
+        const alloc_if = &self.alloc.allocator;
+        self.file = try std.fs.cwd().openFile(
+            "misc/ext2-test-disk/ext2-test-disk.img", .{.read = true});
+        self.fbs.init(alloc_if, &self.file, 1024);
+        try self.ext2.init(alloc_if, &self.fbs.block_store_if);
+        self.m.init(alloc_if, &self.ext2.vfs);
+    }
+
+    fn reached_end(self: *Ext2Test) void {
+        self.check_allocs = true;
+    }
+
+    fn done(self: *Ext2Test) void {
+        self.ext2.done();
+        self.alloc.done_check_if(&self.check_allocs);
+        self.file.close();
+    }
+};
+
+fn test_reading(file: *io.File, comptime expected: []const u8) !void {
+    var offset: usize = 0;
+    var read_buffer: [expected.len]u8 = undefined;
+    while (offset < expected.len) {
+        try std.testing.expectEqual(offset, try file.seek(@intCast(isize, offset), .FromStart));
+        try std.testing.expectEqual(expected.len - offset, try file.read(read_buffer[offset..]));
+        try std.testing.expectEqualStrings(expected[offset..], read_buffer[offset..]);
+        offset += 1;
+    }
+}
+
+test "Ext2" {
+    var t = Ext2Test{};
+    try t.init();
+    defer t.done();
+
+    try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "lost+found", "dir", "file1"});
+    try t.m.assert_directory_has("/dir", &[_][]const u8{".", "..", "file2"});
+
+    const file1 = try t.m.resolve_file("/file1", .{});
+    try test_reading(try file1.get_io_file(),
+        \\Hello this is a file
+        \\
+    );
+
+    const file2 = try t.m.resolve_file("/dir/file2", .{});
+    try test_reading(try file2.get_io_file(),
+        \\This is another file
+        \\
+    );
+
+    t.reached_end();
+}

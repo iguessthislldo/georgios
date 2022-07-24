@@ -357,16 +357,16 @@ const Controller = struct {
             try self.read_impl(sector.address, sector.data[0..]);
         }
 
-        pub fn read_block(block_store: *io.BlockStore, block: *io.Block) io.BlockError!void {
+        pub fn read_block(block_store: *io.BlockStore, block: *io.Block) io.FileError!void {
             const self = @fieldParentPtr(Device, "block_store_interface", block_store);
             if (block.data == null) {
                 block.data = try self.alloc.alloc_array(u8, Sector.size);
             }
             self.read_impl(block.address, block.data.?[0..])
-                catch return io.BlockError.Internal;
+                catch return io.FileError.Internal;
         }
 
-        pub fn free_block(block_store: *io.BlockStore, block: *io.Block) io.BlockError!void {
+        pub fn free_block(block_store: *io.BlockStore, block: *io.Block) io.FileError!void {
             const self = @fieldParentPtr(Device, "block_store_interface", block_store);
             if (block.data) |data| {
                 try self.alloc.free_array(data);

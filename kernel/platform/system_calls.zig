@@ -123,20 +123,6 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
-        // TODO: Return Zig Error
-        // SYSCALL: next_dir_entry(iter: *georgios.DirEntry) bool
-        // IMPORT: georgios "georgios.zig"
-        6 => {
-            const entry = @intToPtr(*georgios.DirEntry, arg1);
-            const failure_ptr = @intToPtr(*bool, arg2);
-            failure_ptr.* = false;
-            kernel.filesystem.impl.next_dir_entry(entry) catch |e| {
-                print.format("next_dir_entry failed in dir {}: {}\n", .{entry.dir, @errorName(e)});
-                failure_ptr.* = true;
-                return;
-            };
-        },
-
         // SYSCALL: print_uint(value: u32, base: u8) void
         7 => {
             switch (arg2) {
@@ -150,10 +136,11 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             const ValueOrError = ValueOrErrorT(georgios.io.File.Id, georgios.fs.Error);
             const path = @intToPtr(*[]const u8, arg1);
             const rv = @intToPtr(*ValueOrError, arg2);
-            if (kernel.filesystem.open(path.*)) |fs_file| {
-                rv.set_value(fs_file.io_file.id.?);
-            } else |e| {
-                rv.set_error(e);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.fs_submgr.open(path.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
             }
         },
 
@@ -163,10 +150,11 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             const id = arg1;
             const to = @intToPtr(*[]u8, arg2);
             const rv = @intToPtr(*ValueOrError, arg3);
-            if (kernel.filesystem.file_id_read(id, to.*)) |read| {
-                rv.set_value(read);
-            } else |e| {
-                rv.set_error(e);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.fs_submgr.read(id, to.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
             }
         },
 
@@ -176,29 +164,41 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             const id = arg1;
             const from = @intToPtr(*[]const u8, arg2);
             const rv = @intToPtr(*ValueOrError, arg3);
-            if (kernel.filesystem.file_id_write(id, from.*)) |written| {
-                rv.set_value(written);
-            } else |e| {
-                rv.set_error(e);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.fs_submgr.write(id, from.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
             }
         },
 
         // SYSCALL: file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.File.SeekType) georgios.io.FileError!usize
         11 => {
-            // TODO
-            @panic("file_seek called");
+            const ValueOrError = ValueOrErrorT(usize, georgios.io.FileError);
+            const id = arg1;
+            const offset = @bitCast(isize, arg2);
+            // TODO Check arg3 is valid?
+            const seek_type = utils.int_to_enum(georgios.io.File.SeekType, @intCast(u2, arg3)).?;
+            const rv = @intToPtr(*ValueOrError, arg4);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.fs_submgr.seek(id, offset, seek_type) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
+            }
         },
 
 
-        // SYSCALL: file_close(id: georgios.io.File.Id) georgios.io.FileError!void
+        // SYSCALL: file_close(id: georgios.io.File.Id) georgios.fs.Error!void
         12 => {
-            const ValueOrError = ValueOrErrorT(void, georgios.io.FileError);
+            const ValueOrError = ValueOrErrorT(void, georgios.fs.Error);
             const id = arg1;
             const rv = @intToPtr(*ValueOrError, arg2);
-            if (kernel.filesystem.file_id_close(id)) {
-                rv.set_value(.{});
-            } else |e| {
-                rv.set_error(e);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.fs_submgr.close(id) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
             }
         },
 

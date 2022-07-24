@@ -43,6 +43,7 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
 pub var memory_mgr = memory.Manager{};
 pub var device_mgr = devices.Manager{};
 pub var threading_mgr = threading.Manager{};
+pub var filesystem_mgr: fs.Manager = undefined;
 
 pub var alloc: *memory.Allocator = undefined;
 pub var big_alloc: *memory.Allocator = undefined;
@@ -50,7 +51,6 @@ pub var console: *Console = undefined;
 pub var console_file = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
-pub var filesystem: fs.Filesystem = .{};
 pub var builtin_font: BitmapFont = undefined;
 
 pub fn platform_init() !void {
@@ -66,7 +66,9 @@ pub fn init() !void {
     if (raw_block_store) |raw| {
         block_store.use_direct = build_options.direct_disk;
         block_store.init(alloc, raw, 128);
-        try filesystem.init(alloc, block_store.block_store);
+        if (fs.get_root(alloc, block_store.block_store)) |root_fs| {
+            filesystem_mgr.init(alloc, root_fs);
+        }
     } else {
         print.string(" - No Disk Found\n");
     }
@@ -75,10 +77,10 @@ pub fn init() !void {
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_mgr.new_process(info);
     // print.format("exec: {}\n", .{info.path});
-    var file = try filesystem.open(info.path);
-    // TODO: better way to close the file!!
-    defer filesystem.file_id_close(file.io_file.id.?) catch @panic("file_id_close");
-    var elf_object = try elf.Object.from_file(alloc, big_alloc, &file.io_file);
+    var file = try filesystem_mgr.resolve_file(info.path, .{});
+    defer file.close() catch @panic("exec: file.close");
+    const file_io = try file.get_io_file();
+    var elf_object = try elf.Object.from_file(alloc, big_alloc, file_io);
     var segments = elf_object.segments.iterator();
     while (segments.next()) |segment| {
         switch (segment.what) {
@@ -101,11 +103,11 @@ pub fn run() !void {
     // try @import("sync.zig").system_tests();
 
     // Read and execute the path in the rc file
-    var rc_file = try filesystem.open("/etc/rc");
-    // TODO: better way to close the file!!
-    defer filesystem.file_id_close(rc_file.io_file.id.?) catch @panic("file_id_close");
+    var file = try filesystem_mgr.resolve_file("/etc/rc", .{});
+    defer file.close() catch @panic("run: file.close");
+    const file_io = try file.get_io_file();
     var rc_buffer: [128]u8 = undefined;
-    var rc_path: []const u8 = rc_buffer[0..try rc_file.io_file.read(rc_buffer[0..])];
+    var rc_path: []const u8 = rc_buffer[0..try file_io.read(rc_buffer[0..])];
     rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
     const rc_info: georgios.ProcessInfo = .{.path = rc_path};
     const rc_exit_info = try threading_mgr.wait_for_process(try exec(&rc_info));

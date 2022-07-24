@@ -284,16 +284,6 @@ pub fn get_key(blocking: georgios.Blocking) callconv(.Inline) ?georgios.keyboard
     return key;
 }
 
-pub fn next_dir_entry(iter: *georgios.DirEntry) callconv(.Inline) bool {
-    var rv: bool = undefined;
-    asm volatile ("int $100" ::
-        [syscall_number] "{eax}" (@as(u32, 6)),
-        [arg1] "{ebx}" (iter),
-        [arg2] "{ecx}" (@ptrToInt(&rv)),
-        );
-    return rv;
-}
-
 pub fn print_uint(value: u32, base: u8) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 7)),
@@ -346,8 +336,8 @@ pub fn file_seek(id: georgios.io.File.Id, offset: isize, seek_type: georgios.io.
     return rv.get();
 }
 
-pub fn file_close(id: georgios.io.File.Id) callconv(.Inline) georgios.io.FileError!void {
-    var rv: ValueOrError(void, georgios.io.FileError) = undefined;
+pub fn file_close(id: georgios.io.File.Id) callconv(.Inline) georgios.fs.Error!void {
+    var rv: ValueOrError(void, georgios.fs.Error) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 12)),
         [arg1] "{ebx}" (id),

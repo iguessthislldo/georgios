@@ -10,7 +10,7 @@ const constant_guids = @import("constant_guids.zig");
 pub const Error = error {
     InvalidMbr,
     InvalidGptHeader,
-} || Guid.Error || io.BlockError;
+} || Guid.Error || io.FileError;
 
 pub const Mbr = struct {
     const Part = packed struct {

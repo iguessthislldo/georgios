@@ -58,7 +58,6 @@ pub const Thread = struct {
 
 pub const Process = struct {
     pub const Id = u32;
-    // pub const OpenedFiles = MappedList(, *Thread, tid_eql, tid_cmp);
 
     info: ?Info = null,
     id: Id = undefined,
@@ -68,6 +67,7 @@ pub const Process = struct {
     entry: usize = 0,
     /// Current Working Directory
     cwd: ?[]const u8 = null,
+    fs_submgr: kernel.fs.Submanager = undefined,
 
     pub fn init(self: *Process, current: ?*Process) Error!void {
         // TODO: Cleanup on failure
@@ -99,6 +99,8 @@ pub const Process = struct {
         }
 
         try self.set_cwd(if (current) |c| c.cwd.? else "/");
+
+        self.fs_submgr.init(&kernel.filesystem_mgr, &self.cwd.?);
 
         try self.impl.init(self);
         self.main_thread.process = self;
@@ -500,7 +502,7 @@ pub const Manager = struct {
 
     pub fn set_cwd(self: *Manager, dir: []const u8) georgios.ThreadingOrFsError!void {
         if (self.current_process) |proc| {
-            const resolved = try kernel.filesystem.resolve_directory_path(dir);
+            const resolved = try kernel.filesystem_mgr.resolve_directory_path(dir, proc.cwd.?);
             try proc.set_cwd(resolved);
             try kernel.memory_mgr.alloc.free_array(resolved);
         } else {

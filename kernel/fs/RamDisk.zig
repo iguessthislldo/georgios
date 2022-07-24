@@ -344,7 +344,7 @@ pub fn init(self: *RamDisk, alloc: *Allocator, page_alloc: *Allocator, page_size
     self.root_node.init(self, .{.directory = true}, &self.root_node.vnode);
 }
 
-fn get_root_vnode_impl(vfs: *Vfilesystem) *Vnode {
+fn get_root_vnode_impl(vfs: *Vfilesystem) Error!*Vnode {
     const self = @fieldParentPtr(RamDisk, "vfs", vfs);
     return &self.root_node.vnode;
 }
@@ -377,19 +377,6 @@ const RamDiskTest = struct {
         self.rd2.done() catch unreachable;
         self.alloc.done_check_if(&self.check_allocs);
     }
-
-    fn assert_directory_has(self: *RamDiskTest, path: []const u8, expected: []const []const u8) !void {
-        var count: usize = 0;
-        const dir = try self.m.resolve_directory(path, .{});
-        var it = try dir.dir_iter();
-        defer it.done();
-        while (try it.next()) |item| {
-            try std.testing.expect(count < expected.len);
-            try std.testing.expectEqualStrings(expected[count], item.name);
-            count += 1;
-        }
-        try std.testing.expectEqual(expected.len, count);
-    }
 };
 
 test "RamDisk: Files and Directories" {
@@ -398,17 +385,17 @@ test "RamDisk: Files and Directories" {
     defer t.done();
 
     // Assert root is empty
-    try t.assert_directory_has("/", &[_][]const u8{".", ".."});
+    try t.m.assert_directory_has("/", &[_][]const u8{".", ".."});
 
     // Make a file
     _ = try t.m.create_node("/file1", .{.file = true}, .{});
     // And it should now be available
-    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1"});
+    try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "file1"});
 
     // Make a directory
     const dir = try t.m.create_node("/dir", .{.directory = true}, .{});
     // And it should now be available
-    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "dir"});
+    try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "dir"});
     _ = try t.m.resolve_directory("/dir", .{});
 
     // Make some files in the directory
@@ -416,7 +403,7 @@ test "RamDisk: Files and Directories" {
     _ = try t.m.create_node("/dir/file3", .{.file = true}, .{});
     const file_list = [_][]const u8{".", "..", "file2", "file3"};
     // And they should now be there
-    try t.assert_directory_has("/dir", &file_list);
+    try t.m.assert_directory_has("/dir", &file_list);
 
     // Test directory io read
     {
@@ -435,15 +422,15 @@ test "RamDisk: Files and Directories" {
 
     // Remove file1
     try t.m.unlink("/file1", .{});
-    try t.assert_directory_has("/", &[_][]const u8{".", "..", "dir"});
+    try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "dir"});
 
     // Try to remove dir
     try std.testing.expectError(Error.DirectoryNotEmpty, t.m.unlink("/dir", .{}));
     // Remove files first
     try t.m.unlink("/dir/file2", .{});
-    try t.assert_directory_has("/dir", &[_][]const u8{".", "..", "file3"});
+    try t.m.assert_directory_has("/dir", &[_][]const u8{".", "..", "file3"});
     try t.m.unlink("/dir/file3", .{});
-    try t.assert_directory_has("/dir", &[_][]const u8{".", ".."});
+    try t.m.assert_directory_has("/dir", &[_][]const u8{".", ".."});
     // Try again
     try t.m.unlink("/dir", .{});
 
@@ -477,8 +464,8 @@ test "RamDisk: Mount Another Ram Disk" {
     _ = try t.m.create_node("/mount/file4", .{.file = true}, .{});
 
     // Should contain:
-    try t.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "file2", "mount"});
-    try t.assert_directory_has("/mount", &[_][]const u8{".", "..", "file3", "file4"});
+    try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "file1", "file2", "mount"});
+    try t.m.assert_directory_has("/mount", &[_][]const u8{".", "..", "file3", "file4"});
     // Confirm these are in the seperate filesystems
     try std.testing.expectEqual(@as(usize, 3), t.rd.root_node.nodes.?.count());
     try std.testing.expectEqual(@as(usize, 2), t.rd2.root_node.nodes.?.count());

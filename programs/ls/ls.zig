@@ -1,24 +1,33 @@
 const georgios = @import("georgios");
 comptime {_ = georgios;}
 const system_calls = georgios.system_calls;
+const print_string = system_calls.print_string;
 
 pub fn main() u8 {
     var path: []const u8 = ".";
     if (georgios.proc_info.args.len > 0) {
         path = georgios.proc_info.args[0];
     }
-    var dir_entry = georgios.DirEntry{.dir = path};
-    if (system_calls.next_dir_entry(&dir_entry)) {
-        system_calls.print_string("Failed\n");
+
+    const dir_file = system_calls.file_open(path) catch |e| {
+        print_string("ls: open error: ");
+        print_string(@errorName(e));
+        print_string("\n");
         return 1;
-    }
-    while (!dir_entry.done) {
-        system_calls.print_string(dir_entry.current_entry);
-        system_calls.print_string("\n");
-        if (system_calls.next_dir_entry(&dir_entry)) {
-            system_calls.print_string("Failed in middle of listing?\n");
+    };
+    defer system_calls.file_close(dir_file) catch unreachable;
+
+    var entry_buffer: [256]u8 = undefined;
+    while (true) {
+        const read = system_calls.file_read(dir_file, entry_buffer[0..]) catch |e| {
+            print_string("ls: read error: ");
+            print_string(@errorName(e));
+            print_string("\n");
             return 1;
-        }
+        };
+        if (read == 0) break;
+        system_calls.print_string(entry_buffer[0..read]);
+        system_calls.print_string("\n");
     }
 
     return 0;

@@ -106,23 +106,31 @@ fn read_motd() void {
 }
 
 fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 {
-    var dir_entry = georgios.DirEntry{.dir = path};
-    if (system_calls.next_dir_entry(&dir_entry)) {
+    const dir_file = system_calls.file_open(path) catch |e| {
+        print_string("check_bin_path open error: ");
+        print_string(@errorName(e));
+        print_string("\n");
         return null;
-    }
+    };
+    defer system_calls.file_close(dir_file) catch unreachable;
     var pos = utils.memory_copy_truncate(buffer[0..], name);
     pos = pos + utils.memory_copy_truncate(buffer[pos..], ".elf");
-    while (!dir_entry.done) {
-        if (streq(dir_entry.current_entry, buffer[0..pos])) {
+    var entry_buffer: [256]u8 = undefined;
+    while (true) {
+        const read = system_calls.file_read(dir_file, entry_buffer[0..]) catch |e| {
+            print_string("check_bin_path read error: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return null;
+        };
+        if (read == 0) break;
+        const entry = entry_buffer[0..read];
+        if (streq(entry, buffer[0..pos])) {
             pos = 0;
             pos = utils.memory_copy_truncate(buffer, path);
             pos = pos + utils.memory_copy_truncate(buffer[pos..], "/");
-            pos = pos + utils.memory_copy_truncate(buffer[pos..], dir_entry.current_entry);
+            pos = pos + utils.memory_copy_truncate(buffer[pos..], entry);
             return buffer[0..pos];
-        }
-        if (system_calls.next_dir_entry(&dir_entry)) {
-            print_string("Failure in middle of check_bin_path?\n");
-            return null;
         }
     }
     return null;
