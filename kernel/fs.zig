@@ -27,11 +27,11 @@ const List = @import("list.zig").List;
 
 pub const Error = georgios.fs.Error;
 pub const RamDisk = @import("fs/RamDisk.zig");
-pub const ext2 = @import("ext2.zig");
+pub const Ext2 = @import("fs/Ext2.zig");
 pub const FileId = io.File.Id;
 
 // TODO: Something better
-var root_ext2: ext2.Ext2 = .{};
+var root_ext2: Ext2 = .{};
 fn found_partition(block_store: *io.BlockStore) !bool {
     if (gpt.Disk.new(block_store)) |disk| {
         var disk_guid: [Guid.string_size]u8 = undefined;

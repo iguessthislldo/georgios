@@ -10,16 +10,18 @@ const std = @import("std");
 const utils = @import("utils");
 const georgios = @import("georgios");
 
-const kernel = @import("kernel.zig");
-const print = @import("print.zig");
-const Allocator = @import("memory.zig").Allocator;
-const MemoryError = @import("memory.zig").MemoryError;
-const io = @import("io.zig");
-const fs = @import("fs.zig");
+const kernel = @import("../kernel.zig");
+const print = @import("../print.zig");
+const Allocator = @import("../memory.zig").Allocator;
+const MemoryError = @import("../memory.zig").MemoryError;
+const io = @import("../io.zig");
+const fs = @import("../fs.zig");
 const Vnode = fs.Vnode;
 const Vfilesystem = fs.Vfilesystem;
 const DirIterator = fs.DirIterator;
 const Error = fs.Error;
+
+const Ext2 = @This();
 
 const Superblock = packed struct {
     const expected_magic: u16 = 0xef53;
@@ -491,112 +493,110 @@ const Node = struct {
 
 const NodeCache = std.AutoHashMap(u32, *Node);
 
-pub const Ext2 = struct {
-    const root_inode_number = @as(usize, 2);
-    const second_level_start = 12;
+const root_inode_number = @as(usize, 2);
+const second_level_start = 12;
 
-    vfs: fs.Vfilesystem = undefined,
-    node_cache: NodeCache = undefined,
-    initialized: bool = false,
-    alloc: *Allocator = undefined,
-    block_store: *io.BlockStore = undefined,
-    offset: io.AddressType = 0,
-    superblock: Superblock = Superblock{},
-    block_size: usize = 0,
-    block_group_descriptor_table: io.AddressType = 0,
-    max_entries_per_block: usize = 0,
-    max_third_level_entries: usize = 0,
-    max_fourth_level_entries: usize = 0,
-    third_level_start: usize = 0,
-    fourth_level_start: usize = 0,
+vfs: fs.Vfilesystem = undefined,
+node_cache: NodeCache = undefined,
+initialized: bool = false,
+alloc: *Allocator = undefined,
+block_store: *io.BlockStore = undefined,
+offset: io.AddressType = 0,
+superblock: Superblock = Superblock{},
+block_size: usize = 0,
+block_group_descriptor_table: io.AddressType = 0,
+max_entries_per_block: usize = 0,
+max_third_level_entries: usize = 0,
+max_fourth_level_entries: usize = 0,
+third_level_start: usize = 0,
+fourth_level_start: usize = 0,
 
-    fn get_block_address(self: *const Ext2, index: usize) io.AddressType {
-        return self.offset + @as(u64, index) * @as(u64, self.block_size);
-    }
+fn get_block_address(self: *const Ext2, index: usize) io.AddressType {
+    return self.offset + @as(u64, index) * @as(u64, self.block_size);
+}
 
-    fn get_block_group_descriptor(self: *Ext2,
-            index: usize, dest: *BlockGroupDescriptor) Error!void {
-        try self.block_store.read(
-            self.block_group_descriptor_table + @sizeOf(BlockGroupDescriptor) * index,
-            utils.to_bytes(dest));
-    }
+fn get_block_group_descriptor(self: *Ext2,
+        index: usize, dest: *BlockGroupDescriptor) Error!void {
+    try self.block_store.read(
+        self.block_group_descriptor_table + @sizeOf(BlockGroupDescriptor) * index,
+        utils.to_bytes(dest));
+}
 
-    fn get_node(self: *Ext2, n: u32) Error!*Node {
-        if (self.node_cache.get(n)) |node| {
-            return node;
-        }
-
-        var node: *Node = try self.alloc.alloc(Node);
-        node.init(self, undefined); // On purpose, wait until we got the inode
-        errdefer self.alloc.free(node) catch unreachable;
-
-        // Get Inode
-        var block_group: BlockGroupDescriptor = undefined;
-        const nm1 = n - 1;
-        try self.get_block_group_descriptor(
-            nm1 / self.superblock.inodes_per_group, &block_group);
-        const address = @as(u64, block_group.inode_table) * self.block_size +
-            (nm1 % self.superblock.inodes_per_group) * self.superblock.inode_size;
-        try self.block_store.read(self.offset + address, utils.to_bytes(&node.inode));
-
-        node.init_after_inode();
-        try self.node_cache.put(n, node);
-
+fn get_node(self: *Ext2, n: u32) Error!*Node {
+    if (self.node_cache.get(n)) |node| {
         return node;
     }
 
-    fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
-        try self.block_store.read(self.get_block_address(index), block);
+    var node: *Node = try self.alloc.alloc(Node);
+    node.init(self, undefined); // On purpose, wait until we got the inode
+    errdefer self.alloc.free(node) catch unreachable;
+
+    // Get Inode
+    var block_group: BlockGroupDescriptor = undefined;
+    const nm1 = n - 1;
+    try self.get_block_group_descriptor(
+        nm1 / self.superblock.inodes_per_group, &block_group);
+    const address = @as(u64, block_group.inode_table) * self.block_size +
+        (nm1 % self.superblock.inodes_per_group) * self.superblock.inode_size;
+    try self.block_store.read(self.offset + address, utils.to_bytes(&node.inode));
+
+    node.init_after_inode();
+    try self.node_cache.put(n, node);
+
+    return node;
+}
+
+fn get_data_block(self: *Ext2, block: []u8, index: usize) Error!void {
+    try self.block_store.read(self.get_block_address(index), block);
+}
+
+fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
+    try self.get_data_block(
+        @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
+}
+
+pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
+    self.alloc = alloc;
+
+    self.vfs = .{
+        .get_root_vnode_impl = get_root_vnode_impl,
+    };
+    self.node_cache = NodeCache.init(alloc.std_allocator());
+
+    self.block_store = block_store;
+
+    try block_store.read(self.offset + utils.Ki(1), utils.to_bytes(&self.superblock));
+
+    // std.debug.print("{}\n", .{self.superblock});
+    try self.superblock.verify();
+
+    self.block_size = self.superblock.block_size();
+    self.max_entries_per_block = self.block_size / @sizeOf(u32);
+    self.block_group_descriptor_table = self.get_block_address(
+        if (self.block_size >= utils.Ki(2)) 1 else 2);
+    self.third_level_start = second_level_start + self.max_entries_per_block;
+    self.max_third_level_entries =
+        self.max_entries_per_block * self.max_entries_per_block;
+    self.fourth_level_start = self.third_level_start + self.max_third_level_entries;
+    self.max_fourth_level_entries =
+        self.max_third_level_entries * self.max_entries_per_block;
+
+    self.initialized = true;
+}
+
+fn done(self: *Ext2) void {
+    var it = self.node_cache.iterator();
+    while (it.next()) |kv| {
+        kv.value_ptr.*.done() catch unreachable;
+        self.alloc.free(kv.value_ptr.*) catch unreachable;
     }
+    self.node_cache.deinit();
+}
 
-    fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
-        try self.get_data_block(
-            @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
-    }
-
-    pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
-        self.alloc = alloc;
-
-        self.vfs = .{
-            .get_root_vnode_impl = get_root_vnode_impl,
-        };
-        self.node_cache = NodeCache.init(alloc.std_allocator());
-
-        self.block_store = block_store;
-
-        try block_store.read(self.offset + utils.Ki(1), utils.to_bytes(&self.superblock));
-
-        // std.debug.print("{}\n", .{self.superblock});
-        try self.superblock.verify();
-
-        self.block_size = self.superblock.block_size();
-        self.max_entries_per_block = self.block_size / @sizeOf(u32);
-        self.block_group_descriptor_table = self.get_block_address(
-            if (self.block_size >= utils.Ki(2)) 1 else 2);
-        self.third_level_start = second_level_start + self.max_entries_per_block;
-        self.max_third_level_entries =
-            self.max_entries_per_block * self.max_entries_per_block;
-        self.fourth_level_start = self.third_level_start + self.max_third_level_entries;
-        self.max_fourth_level_entries =
-            self.max_third_level_entries * self.max_entries_per_block;
-
-        self.initialized = true;
-    }
-
-    fn done(self: *Ext2) void {
-        var it = self.node_cache.iterator();
-        while (it.next()) |kv| {
-            kv.value_ptr.*.done() catch unreachable;
-            self.alloc.free(kv.value_ptr.*) catch unreachable;
-        }
-        self.node_cache.deinit();
-    }
-
-    fn get_root_vnode_impl(vfs: *Vfilesystem) Error!*Vnode {
-        const self = @fieldParentPtr(Ext2, "vfs", vfs);
-        return &(try self.get_node(2)).vnode;
-    }
-};
+fn get_root_vnode_impl(vfs: *Vfilesystem) Error!*Vnode {
+    const self = @fieldParentPtr(Ext2, "vfs", vfs);
+    return &(try self.get_node(2)).vnode;
+}
 
 const Ext2Test = struct {
     alloc: kernel.memory.UnitTestAllocator = .{},
