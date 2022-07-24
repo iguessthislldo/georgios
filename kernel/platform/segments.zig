@@ -116,7 +116,7 @@ pub fn get_name(index: u32) []const u8 {
 fn set(name: []const u8, index: u8, base: u32, limit: u32,
         access: Access, flags: Flags) u16 {
     names[index] = name;
-    print.debug_format("   - [{}]: \"{}\" ", .{index, name});
+    print.debug_format("   - [{}]: \"{}\"", .{index, name});
     if (access.valid) {
         print.debug_format("\n     - starts at {:a}, size is {:x} {}, {} Ring {} ", .{
             base, limit,

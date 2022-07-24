@@ -265,7 +265,7 @@ pub const Manager = struct {
         }
         print.debug_string("   - Frame Groups:\n");
         for (map.frame_groups[0..map.frame_group_count]) |*i| {
-            print.debug_format("     - {} Frames starting at {:a} \n",
+            print.debug_format("     - {} Frames starting at {:a}\n",
                 .{i.frame_count, i.start});
         }
 
