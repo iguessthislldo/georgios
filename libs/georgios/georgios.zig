@@ -10,6 +10,8 @@ pub const io = @import("io.zig");
 pub const memory = @import("memory.zig");
 pub const ImgFile = @import("ImgFile.zig");
 
+pub var page_allocator: std.mem.Allocator = undefined;
+
 pub const is_cross_compiled = builtin.os.tag == .freestanding;
 const root = @import("root");
 pub const is_kernel = is_cross_compiled and @hasDecl(root, "kernel_main");

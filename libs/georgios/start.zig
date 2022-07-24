@@ -14,6 +14,9 @@ fn start() noreturn {
 }
 
 fn main_wrapper() georgios.ExitInfo {
+    var pa = georgios.memory.PageAllocator{};
+    georgios.page_allocator = pa.allocator();
+
     var exit_info: georgios.ExitInfo = .{};
     const ret = @typeInfo(@typeInfo(@TypeOf(root.main)).Fn.return_type.?);
     switch (ret) {

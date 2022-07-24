@@ -22,6 +22,8 @@ const ansi_esc = esc ++ "[";
 const invert_colors = ansi_esc ++ "7m";
 const reset_colors = ansi_esc ++ "39;49m";
 
+var alloc: std.mem.Allocator = undefined;
+
 var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
 var tl: TinyishLisp = undefined;
@@ -273,8 +275,11 @@ pub fn main() void {
         read_motd();
     }
 
-    // TODO: allocator
-    tl = TinyishLisp.new(&tl_mem, undefined) catch |e| {
+    var arena = std.heap.ArenaAllocator.init(georgios.page_allocator);
+    alloc = arena.allocator();
+    defer arena.deinit();
+
+    tl = TinyishLisp.new(&tl_mem, alloc) catch |e| {
         print_string("lisp init failed: ");
         print_string(@errorName(e));
         print_string("\n");
