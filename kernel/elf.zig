@@ -175,6 +175,13 @@ pub const Object = struct {
                 else => {},
             }
         }
+
+        pub fn size(self: *const Segment) usize {
+            return switch (self.what) {
+                .Data => |data| data.len,
+                .UndefinedMemory => |size| size,
+            };
+        }
     };
     pub const Segments = List(Segment);
 

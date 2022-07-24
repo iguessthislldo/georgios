@@ -9,6 +9,7 @@ const platform = @import("platform.zig");
 const pthreading = platform.impl.threading;
 const kernel = @import("kernel.zig");
 const memory = @import("memory.zig");
+const Range = memory.Range;
 const print = @import("print.zig");
 const MappedList = @import("mapped_list.zig").MappedList;
 
@@ -65,6 +66,8 @@ pub const Process = struct {
     main_thread: Thread = .{},
     /// Address of First Instruction for Main Thread
     entry: usize = 0,
+    // TODO: Replace with something like mmap provides
+    dynamic_memory: Range = .{},
     /// Current Working Directory
     cwd: ?[]const u8 = null,
     fs_submgr: kernel.fs.Submanager = undefined,
@@ -120,6 +123,23 @@ pub const Process = struct {
     pub fn address_space_set(self: *Process,
             address: usize, byte: u8, len: usize) memory.AllocError!void {
         try self.impl.address_space_set(address, byte, len);
+    }
+
+    // TODO: Replace with something like mmap provides
+    pub fn add_dynamic_memory(self: *Process, inc: usize) memory.AllocError![]u8 {
+        if (inc > 0) {
+            var new_end: usize = undefined;
+            if (@addWithOverflow(usize, self.dynamic_memory.end(), inc, &new_end)) {
+                return memory.AllocError.OutOfMemory;
+            }
+            if (new_end >=
+                    (platform.kernel_to_virtual(0) - pthreading.ProcessImpl.usermode_stack_size)) {
+                return memory.AllocError.OutOfMemory;
+            }
+            try self.impl.address_space_set(self.dynamic_memory.end(), 0xee, inc);
+            self.dynamic_memory.size += inc;
+        }
+        return self.dynamic_memory.to_slice(u8);
     }
 
     pub fn set_cwd(self: *Process, dir: []const u8) Error!void {

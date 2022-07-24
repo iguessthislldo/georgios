@@ -82,13 +82,17 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
     const file_io = try file.get_io_file();
     var elf_object = try elf.Object.from_file(alloc, big_alloc, file_io);
     var segments = elf_object.segments.iterator();
+    var dynamic_memory_start: usize = 0;
     while (segments.next()) |segment| {
         switch (segment.what) {
             .Data => |data| try process.address_space_copy(segment.address, data),
             .UndefinedMemory => |size| try process.address_space_set(segment.address, 0, size),
         }
+        dynamic_memory_start = @maximum(segment.address + segment.size(), dynamic_memory_start);
     }
     process.entry = elf_object.header.entry;
+    process.dynamic_memory.start = utils.align_up(dynamic_memory_start, platform.page_size);
+    // print.format("dynamic: {:a}", .{process.dynamic_memory.start});
     try elf_object.teardown();
     try threading_mgr.start_process(process);
     return process.id;

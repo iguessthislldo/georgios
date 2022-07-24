@@ -264,7 +264,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
         for error_value in error_values:
             print('                        .{0} => {1}.{0},'.format(
                 error_value, error_type), file=f)
-        print('                        {} => utils.Error.Unknown,'.format(
+        print('                        {} => georgios.BasicError.Unknown,'.format(
             '_' if len(error_values) == len(all_error_codes) else 'else'), file=f)
         print('                    },', file=f)
 

@@ -73,6 +73,19 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // SYSCALL: print_string(&s: []const u8) void
         0 => print.string(@intToPtr(*[]const u8, arg1).*),
 
+        // SYSCALL: add_dynamic_memory(inc: usize) georgios.BasicError![]u8
+        1 => {
+            const ValueOrError = ValueOrErrorT([]u8, georgios.BasicError);
+            const inc = arg1;
+            const rv = @intToPtr(*ValueOrError, arg2);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.add_dynamic_memory(inc) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
+            }
+        },
+
         // SYSCALL: yield() void
         2 => {
             if (kthreading.debug) print.string("\nY");

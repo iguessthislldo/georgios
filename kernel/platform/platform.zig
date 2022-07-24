@@ -24,6 +24,7 @@ pub const timing = @import("timing.zig");
 pub const bios_int = @import("bios_int.zig");
 
 pub const frame_size = pmemory.frame_size;
+pub const page_size = pmemory.page_size;
 pub const MemoryMgrImpl = pmemory.ManagerImpl;
 pub const enable_interrupts = util.enable_interrupts;
 pub const disable_interrupts = util.disable_interrupts;

@@ -15,9 +15,25 @@ fn start() noreturn {
 
 fn main_wrapper() georgios.ExitInfo {
     var exit_info: georgios.ExitInfo = .{};
-    switch (@typeInfo(@typeInfo(@TypeOf(root.main)).Fn.return_type.?)) {
+    const ret = @typeInfo(@typeInfo(@TypeOf(root.main)).Fn.return_type.?);
+    switch (ret) {
         .Void => root.main(),
         .Int => exit_info.status = root.main(),
+        .ErrorUnion => |eu| switch (@typeInfo(eu.payload)) {
+            .Void => {
+                if (root.main()) |_| {} else |e| {
+                    @panic(@errorName(e));
+                }
+            },
+            .Int => {
+                if (root.main()) |status| {
+                    exit_info.status = status;
+                } else |e| {
+                    @panic(@errorName(e));
+                }
+            },
+            else => @compileError("main return type not supported"),
+        },
         else => @compileError("main return type not supported"),
     }
     return exit_info;

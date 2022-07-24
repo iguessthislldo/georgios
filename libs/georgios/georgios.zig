@@ -61,18 +61,20 @@ pub const fs = struct {
         DirectoryNotEmpty,
         InvalidFilesystem,
         FilesystemAlreadyMountedHere,
-    } || io.FileError || memory.MemoryError;
+    } || io.FileError;
 
     pub fn open(path: []const u8) Error!io.File {
         return io.File{.valid = true, .id = try system_calls.file_open(path)};
     }
 };
 
+pub const BasicError = utils.Error || memory.MemoryError;
+
 pub const threading = struct {
     pub const Error = error {
         NoCurrentProcess,
         NoSuchProcess,
-    } || utils.Error || memory.MemoryError;
+    } || BasicError;
 };
 
 pub const ThreadingOrFsError = fs.Error || threading.Error;

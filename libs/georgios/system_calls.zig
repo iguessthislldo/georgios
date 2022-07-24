@@ -42,6 +42,15 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
 
         pub fn set_error(self: *Self, err: ErrorType) void {
             self.* = Self{.error_code = switch (ErrorType) {
+                georgios.BasicError => switch (err) {
+                    georgios.BasicError.Unknown => ErrorCode.Unknown,
+                    georgios.BasicError.OutOfBounds => ErrorCode.OutOfBounds,
+                    georgios.BasicError.NotEnoughSource => ErrorCode.NotEnoughSource,
+                    georgios.BasicError.NotEnoughDestination => ErrorCode.NotEnoughDestination,
+                    georgios.BasicError.OutOfMemory => ErrorCode.OutOfMemory,
+                    georgios.BasicError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
+                    georgios.BasicError.InvalidFree => ErrorCode.InvalidFree,
+                },
                 georgios.ExecError => switch (err) {
                     georgios.ExecError.FileNotFound => ErrorCode.FileNotFound,
                     georgios.ExecError.NotADirectory => ErrorCode.NotADirectory,
@@ -140,6 +149,16 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
             return switch (self.*) {
                 Self.value => |value| return value,
                 Self.error_code => |error_code| switch (ErrorType) {
+                    georgios.BasicError => switch (error_code) {
+                        .Unknown => georgios.BasicError.Unknown,
+                        .OutOfBounds => georgios.BasicError.OutOfBounds,
+                        .NotEnoughSource => georgios.BasicError.NotEnoughSource,
+                        .NotEnoughDestination => georgios.BasicError.NotEnoughDestination,
+                        .OutOfMemory => georgios.BasicError.OutOfMemory,
+                        .ZeroSizedAlloc => georgios.BasicError.ZeroSizedAlloc,
+                        .InvalidFree => georgios.BasicError.InvalidFree,
+                        else => georgios.BasicError.Unknown,
+                    },
                     georgios.ExecError => switch (error_code) {
                         .FileNotFound => georgios.ExecError.FileNotFound,
                         .NotADirectory => georgios.ExecError.NotADirectory,
@@ -163,7 +182,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidElfFile => georgios.ExecError.InvalidElfFile,
                         .InvalidElfObjectType => georgios.ExecError.InvalidElfObjectType,
                         .InvalidElfPlatform => georgios.ExecError.InvalidElfPlatform,
-                        _ => utils.Error.Unknown,
+                        _ => georgios.BasicError.Unknown,
                     },
                     georgios.fs.Error => switch (error_code) {
                         .FileNotFound => georgios.fs.Error.FileNotFound,
@@ -183,7 +202,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .OutOfMemory => georgios.fs.Error.OutOfMemory,
                         .ZeroSizedAlloc => georgios.fs.Error.ZeroSizedAlloc,
                         .InvalidFree => georgios.fs.Error.InvalidFree,
-                        else => utils.Error.Unknown,
+                        else => georgios.BasicError.Unknown,
                     },
                     georgios.io.FileError => switch (error_code) {
                         .Unsupported => georgios.io.FileError.Unsupported,
@@ -197,7 +216,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .OutOfMemory => georgios.io.FileError.OutOfMemory,
                         .ZeroSizedAlloc => georgios.io.FileError.ZeroSizedAlloc,
                         .InvalidFree => georgios.io.FileError.InvalidFree,
-                        else => utils.Error.Unknown,
+                        else => georgios.BasicError.Unknown,
                     },
                     georgios.threading.Error => switch (error_code) {
                         .NoCurrentProcess => georgios.threading.Error.NoCurrentProcess,
@@ -209,7 +228,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .OutOfMemory => georgios.threading.Error.OutOfMemory,
                         .ZeroSizedAlloc => georgios.threading.Error.ZeroSizedAlloc,
                         .InvalidFree => georgios.threading.Error.InvalidFree,
-                        else => utils.Error.Unknown,
+                        else => georgios.BasicError.Unknown,
                     },
                     georgios.ThreadingOrFsError => switch (error_code) {
                         .FileNotFound => georgios.ThreadingOrFsError.FileNotFound,
@@ -231,7 +250,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidFree => georgios.ThreadingOrFsError.InvalidFree,
                         .NoCurrentProcess => georgios.ThreadingOrFsError.NoCurrentProcess,
                         .NoSuchProcess => georgios.ThreadingOrFsError.NoSuchProcess,
-                        else => utils.Error.Unknown,
+                        else => georgios.BasicError.Unknown,
                     },
                     else => @compileError(
                             "Invalid ErrorType for " ++ @typeName(Self) ++ ".get: " ++
@@ -248,6 +267,16 @@ pub fn print_string(s: []const u8) callconv(.Inline) void {
         [syscall_number] "{eax}" (@as(u32, 0)),
         [arg1] "{ebx}" (@ptrToInt(&s)),
         );
+}
+
+pub fn add_dynamic_memory(inc: usize) callconv(.Inline) georgios.BasicError![]u8 {
+    var rv: ValueOrError([]u8, georgios.BasicError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 1)),
+        [arg1] "{ebx}" (inc),
+        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
 }
 
 pub fn yield() callconv(.Inline) void {

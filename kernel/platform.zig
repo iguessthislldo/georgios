@@ -7,6 +7,7 @@ pub const impl = switch(builtin.cpu.arch) {
 };
 
 pub const frame_size = impl.frame_size;
+pub const page_size = impl.page_size;
 pub const init = impl.init;
 pub const setup_devices = impl.setup_devices;
 pub const panic = impl.panic;
@@ -16,7 +17,7 @@ pub const kernel_virtual_start = impl.kernel_virtual_start;
 pub const kernel_virtual_end = impl.kernel_virtual_end;
 pub const kernel_size = impl.kernel_size;
 pub const kernel_to_real = impl.kernel_to_real;
-pub const kernel_to_virutal = impl.kernel_to_virutal;
+pub const kernel_to_virtual = impl.kernel_to_virtual;
 pub const kernel_range_real_start_available =
     impl.kernel_range_real_start_available;
 pub const kernel_range_virtual_start_available =

@@ -12,7 +12,7 @@ pub const FileError = error {
     Internal,
     InvalidFileId,
     OutOfSpace,
-} || utils.Error || memory.MemoryError;
+} || georgios.BasicError;
 
 /// File IO Interface
 pub const File = struct {

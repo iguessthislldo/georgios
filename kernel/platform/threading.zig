@@ -21,8 +21,6 @@ pub const Error = georgios.threading.Error;
 
 const pmem = &kernel.memory_mgr.impl;
 
-const usermode_stack_size = platform.frame_size * 10;
-
 fn v86(ss: u32, esp: u32, cs: u32, eip: u32) noreturn {
     asm volatile ("push %[ss]" :: [ss] "{ax}" (ss));
     asm volatile ("push %[esp]" :: [esp] "{ax}" (esp));
@@ -225,6 +223,9 @@ pub const ThreadImpl = struct {
 };
 
 pub const ProcessImpl = struct {
+    // TODO: Growable stack
+    pub const usermode_stack_size = platform.frame_size * 10;
+
     const main_bios_memory = Range{.start = 0x00080000, .size = 0x00080000};
 
     process: *Process = undefined,
