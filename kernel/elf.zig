@@ -195,6 +195,7 @@ pub const Object = struct {
     pub fn from_file(alloc: *Allocator, data_alloc: *Allocator, file: *io.File) !Object {
         var object = Object{.alloc = alloc, .data_alloc = data_alloc};
         object.segments = Segments{.alloc = alloc};
+        errdefer object.teardown() catch unreachable;
 
         // Read Header
         _ = try file.read(utils.to_bytes(&object.header));
@@ -254,24 +255,35 @@ pub const Object = struct {
                         program_header.virtual_address, program_header.kind,
                         program_header.size_in_file, program_header.size_in_memory,
                         });
-                var segment = Segment{.address = program_header.virtual_address};
-                const nonzero = program_header.size_in_memory > 0;
-                if (nonzero and program_header.size_in_memory == program_header.size_in_file) {
-                    segment.what = Segment.What{
-                        .Data = try data_alloc.alloc_array(u8, program_header.size_in_file)};
+                if (program_header.size_in_file > program_header.size_in_memory) {
+                    return Error.InvalidElfFile;
+                }
+                var address = program_header.virtual_address;
+                var left = program_header.size_in_memory;
+                if (program_header.size_in_file > 0) {
+                    const segment = Segment{
+                        .address = address,
+                        .what = Segment.What{
+                            .Data = try data_alloc.alloc_array(u8, program_header.size_in_file)
+                        },
+                    };
                     _ = try file.seek(@intCast(isize, program_header.offset), .FromStart);
                     _ = try file.read_or_error(segment.what.Data);
                     if (dump_segments) print.dump_bytes(segment.what.Data);
-                } else if (nonzero and program_header.size_in_file == 0) {
-                    segment.what = Segment.What{
-                        .UndefinedMemory = program_header.size_in_memory};
-                } else {
-                    @panic("elf unexpected situation with program header sizes");
+                    try object.segments.push_back(segment);
+                    left -= program_header.size_in_file;
+                    address += program_header.size_in_file;
                 }
-                try object.segments.push_back(segment);
+                if (left > 0) {
+                    try object.segments.push_back(
+                        .{.address = address, .what = Segment.What{.UndefinedMemory = left}});
+                }
             }
         }
-        if (object.segments.len == 0) @panic("No LOADs in ELF!");
+        if (object.segments.len == 0) {
+            print.string("No LOADs in ELF!\n");
+            return Error.InvalidElfFile;
+        }
 
         return object;
     }
