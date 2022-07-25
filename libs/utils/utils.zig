@@ -10,6 +10,7 @@ pub const ToString = @import("ToString.zig");
 pub const Cksum = @import("Cksum.zig");
 pub const WordIterator = @import("WordIterator.zig");
 pub const Bdf = @import("Bdf.zig");
+pub const List = @import("list.zig").List;
 
 pub const Error = error {
     Unknown,

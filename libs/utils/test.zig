@@ -7,4 +7,5 @@ test "utils test root" {
     _ = @import("Cksum.zig");
     _ = @import("WordIterator.zig");
     _ = @import("Bdf.zig");
+    _ = @import("list.zig");
 }
