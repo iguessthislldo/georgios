@@ -1,12 +1,10 @@
 # Georgios
 
-![It's a really limited shell!](misc/screenshot1.png)
+![Screenshot of text mode](misc/screenshot1.png)
 
 Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
 making for fun which currently targets i386/IA-32. The purpose of this project
 is to serve as a learning experience.
-
-![It's a snake clone in IBM PC 80x25 text mode!](misc/screenshot2.png)
 
 Georgios is so simplistic right that now the most impressive application is a
 snake clone. This is probably going to be the case until applications can be
@@ -19,7 +17,9 @@ ported.
 - Kernel console that supports UTF-8 (specifically the subset needed for
   [Code page 437](https://en.wikipedia.org/wiki/Code_page_437) subset) and some
   basic ANSI escape codes
-- Ext2 filesystem accessed using an ATA Driver (All read only for now)
+- Support for multilple mounted filesytems:
+  - Ext2 accessed using an ATA Driver (read only)
+  - In-memory filesystem mounted at boot (read/write)
 - Basic preemptive multitasking between processes that can be loaded from ELF
   files
 - ACPI shutdown (thanks in part to [ACPICA](https://www.acpica.org/))
@@ -29,6 +29,7 @@ ported.
 - A graphics mode using VESA BIOS Extensions (VBE)
   - This makes use of [libx86emu](https://github.com/wfeldt/libx86emu) to
     invoke the BIOS code required to access VBE.
+  - Currently requires building with `make multiboot_vbe=true`
 - USB 2.0 stack
 - Porting real applications written in Zig and C
   - The applications currently written in Zig are "real", but are using the
