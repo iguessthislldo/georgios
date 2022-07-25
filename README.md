@@ -6,6 +6,10 @@ Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
 making for fun which currently targets i386/IA-32. The purpose of this project
 is to serve as a learning experience.
 
+Work in progress graphics mode:
+
+https://user-images.githubusercontent.com/5941194/180702578-91270793-c91c-4f24-b7e1-f86bc2b48c53.mp4
+
 Georgios is so simplistic right that now the most impressive application is a
 snake clone. This is probably going to be the case until applications can be
 ported.
