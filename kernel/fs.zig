@@ -745,8 +745,18 @@ pub const Submanager = struct {
         }
     }
 
+    fn find_or_create(self: *Submanager, path: []const u8, opts: ResolvePathOpts) Error!*Vnode {
+        return self.manager.resolve_path(path, opts) catch |e| {
+            if (e == Error.FileNotFound) {
+                return self.manager.create_node(path, .{.file = true}, opts);
+            }
+            return e;
+        };
+    }
+
     pub fn open(self: *Submanager, path: []const u8) Error!FileId {
-        const vnode = try self.manager.resolve_path(path, .{.cwd = self.cwd_ptr.*});
+        // TODO: Open options
+        const vnode = try self.find_or_create(path, .{.cwd = self.cwd_ptr.*});
         const id = self.next_file_id;
         self.next_file_id += 1;
         try self.open_files.put(id, vnode);

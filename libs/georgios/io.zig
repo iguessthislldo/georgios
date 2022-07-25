@@ -90,12 +90,7 @@ pub const File = struct {
 
         pub fn seek_impl(file: *File,
                 offset: isize, seek_type: SeekType) FileError!usize {
-            // TODO: Causes Zig to crash:
-            // return georgios.system_calls.file_seek(file.id.?, offset, seek_type);
-            _ = file;
-            _ = offset;
-            _ = seek_type;
-            return FileError.Unsupported;
+            return georgios.system_calls.file_seek(file.id.?, offset, seek_type);
         }
 
         pub fn close_impl(file: *File) georgios.fs.Error!void {
@@ -107,8 +102,6 @@ pub const File = struct {
 
     valid: bool = false,
     id: ?Id = null,
-    set_up_writer: bool = false,
-    _writer: Writer = undefined,
     read_impl: fn(*File, []u8) FileError!usize = default_impl.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = default_impl.write_impl,
     seek_impl: fn(*File, isize, SeekType) FileError!usize = default_impl.seek_impl,
@@ -136,14 +129,14 @@ pub const File = struct {
     /// should never return `FileError.OutOfBounds` or
     /// `FileError.NotEnoughDestination`, but `read_or_error` will. The exact
     /// return values are defined by the file implementation.
-    pub fn read(file: *File, to: []u8) callconv(.Inline) FileError!usize {
+    pub fn read(file: *File, to: []u8) FileError!usize {
         return file.read_impl(file, to);
     }
 
     /// Same as `read`, but returns `FileError.NotEnoughDestination` if an
     /// empty `to` was passed or `FileError.OutOfBounds` if trying to read from
     /// a file that's already reached the end.
-    pub fn read_or_error(file: *File, to: []u8) callconv(.Inline) FileError!usize {
+    pub fn read_or_error(file: *File, to: []u8) FileError!usize {
         if (to.len == 0) {
             return FileError.NotEnoughDestination;
         }
@@ -167,8 +160,8 @@ pub const File = struct {
     /// Same as `write`, but return `FileError.OutOfBounds` if an empty `from`
     /// was passed or `FileError.OutOfBounds` if trying to write to a file
     /// that's already reached the end.
-    pub fn write_or_error(file: *File, from: []const u8) callconv(.Inline) FileError!usize {
-        const result = file.write_impl(file, from);
+    pub fn write_or_error(file: *File, from: []const u8) FileError!usize {
+        const result = try file.write_impl(file, from);
         if (result == 0 and from.len > 0) {
             return FileError.OutOfBounds;
         }
@@ -177,13 +170,12 @@ pub const File = struct {
 
     /// Shift where the file is operating from. Returns the new location if
     /// that's applicable, but if it's not it always returns 0.
-    pub fn seek(file: *File, offset: isize,
-            seek_type: File.SeekType) callconv(.Inline) FileError!usize {
+    pub fn seek(file: *File, offset: isize, seek_type: File.SeekType) FileError!usize {
         return file.seek_impl(file, offset, seek_type);
     }
 
     /// Free resources used by the file.
-    pub fn close(file: *File) callconv(.Inline) georgios.fs.Error!void {
+    pub fn close(file: *File) georgios.fs.Error!void {
         defer file.valid = false;
         file.close_impl(file) catch |e| return e;
     }
@@ -213,17 +205,11 @@ pub const File = struct {
         return FileError.OutOfBounds;
     }
 
-    pub fn get_writer(self: *File) *Writer {
-        if (!self.set_up_writer) {
-            self._writer = Writer{.context = self};
-            self.set_up_writer = true;
-        }
-        return &self._writer;
-    }
+    pub const Reader = std.io.Reader(*File, FileError, read);
 
-    // fn writer_write(self: *File, bytes: []const u8) FileError!void {
-    //     _ = try self.write(bytes);
-    // }
+    pub fn reader(file: *File) Reader {
+        return .{ .context = file };
+    }
 };
 
 /// Test for normal situation.

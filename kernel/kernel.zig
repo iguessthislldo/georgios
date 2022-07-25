@@ -52,25 +52,37 @@ pub var console_file = io.File{};
 pub var raw_block_store: ?*io.BlockStore = null;
 pub var block_store: io.CachedBlockStore = .{};
 pub var builtin_font: BitmapFont = undefined;
+pub var ram_disk: fs.RamDisk = undefined;
 
-pub fn platform_init() !void {
+fn platform_init() !void {
     print.init(&console_file, build_options.debug_log);
     try platform.init();
     quick_debug_ready = true;
 }
 
-pub fn init() !void {
-    try platform_init();
-
-    // Filesystem
+fn get_ext2_root() ?*fs.Vfilesystem {
     if (raw_block_store) |raw| {
         block_store.use_direct = build_options.direct_disk;
         block_store.init(alloc, raw, 128);
         if (fs.get_root(alloc, block_store.block_store)) |root_fs| {
-            filesystem_mgr.init(alloc, root_fs);
+            return root_fs;
         }
     } else {
         print.string(" - No Disk Found\n");
+    }
+    return null;
+}
+
+fn init() !void {
+    try platform_init();
+
+    // Filesystem
+    ram_disk.init(alloc, big_alloc, platform.page_size);
+    const ext2_root = get_ext2_root();
+    const ram_disk_root = &ram_disk.vfs;
+    filesystem_mgr.init(alloc, ext2_root orelse ram_disk_root);
+    if (ext2_root != null) {
+        try filesystem_mgr.mount(ram_disk_root, "/ramdisk");
     }
 }
 
@@ -98,7 +110,7 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
     return process.id;
 }
 
-pub fn run() !void {
+fn run() !void {
     try init();
     if (!build_options.run_rc) {
         return;

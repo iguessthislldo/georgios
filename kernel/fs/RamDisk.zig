@@ -307,7 +307,10 @@ pub const Node = struct {
     }
 
     fn close_impl(vnode: *Vnode) Error!void {
-        _ = vnode;
+        const self = @fieldParentPtr(Node, "vnode", vnode);
+        if (self.page_file) |*pf| {
+            pf.pos = 0;
+        }
     }
 
     pub fn done(self: *Node) Error!void {

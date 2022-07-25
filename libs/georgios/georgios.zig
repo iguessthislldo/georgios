@@ -38,7 +38,6 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     _ = trace;
     var buffer: [128]u8 = undefined;
     var ts = utils.ToString{.buffer = buffer[0..]};
-    ts.string("\x1bc") catch unreachable;
     ts.string(proc_info.name) catch unreachable;
     ts.string(" panicked: ") catch unreachable;
     ts.string(msg) catch unreachable;
