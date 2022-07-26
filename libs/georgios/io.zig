@@ -233,8 +233,8 @@ test "File.generic_seek" {
     try generic_seek_subtest(.FromEnd, 4);
 
     // We should be able to go to max_usize.
-    const max_usize = utils.max_of_int(usize);
-    const max_isize = utils.max_of_int(isize);
+    const max_usize: usize = std.math.maxInt(usize);
+    const max_isize: isize = std.math.maxInt(isize);
     const max_isize_as_usize = @bitCast(usize, max_isize);
     try std.testing.expectEqual(max_usize,
         max_isize_as_usize + max_isize_as_usize + 1); // Just a sanity check
@@ -290,7 +290,7 @@ pub const BufferFile = struct {
 
     pub fn write(file: *File, from: []const u8) FileError!usize {
         const self = @fieldParentPtr(Self, "file", file);
-        const write_size = utils.min(usize, from.len, self.buffer.len - self.position);
+        const write_size = @minimum(from.len, self.buffer.len - self.position);
         if (write_size > 0) {
             self.fill_unwritten(self.position);
             const new_position = self.position + write_size;

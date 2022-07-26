@@ -30,7 +30,7 @@ pub const Range = struct {
     }
 
     pub fn to_slice(self: *const Range, comptime Type: type) []Type {
-        return utils.make_slice(Type, self.to_ptr([*]Type), self.size / @sizeOf(Type));
+        return self.to_ptr([*]Type)[0..self.size / @sizeOf(Type)];
     }
 };
 

@@ -48,9 +48,8 @@ pub fn panic(msg: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
 
 pub const ProcessInfo = struct {
     path: []const u8,
-    name: []const u8 = utils.make_const_slice(u8, @intToPtr([*]const u8, 1024), 0),
-    args: []const []const u8 = utils.make_const_slice(
-        []const u8, @intToPtr([*]const []const u8, 1024), 0),
+    name: []const u8 = utils.empty_slice(u8, 1024),
+    args: []const []const u8 = utils.empty_slice([]const u8, 1024),
     kernel_mode: bool = false,
 };
 

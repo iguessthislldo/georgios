@@ -139,7 +139,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
         }
 
         fn size_to_level(size: usize) usize {
-            const target_size = util.max(usize, min_size, util.pow2_round_up(usize, size));
+            const target_size = @maximum(min_size, util.pow2_round_up(usize, size));
             return level_count - util.int_log2(usize, target_size / min_size) - 1;
         }
 

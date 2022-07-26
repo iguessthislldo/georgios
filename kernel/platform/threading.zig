@@ -154,7 +154,7 @@ pub const ThreadImpl = struct {
         // Setup Initial Kernel Mode Stack/Context
         const sp = self.kernelmode_stack.end() - 1;
         self.context = sp;
-        var frame = utils.zero_init(SwitchToFrame);
+        var frame = std.mem.zeroes(SwitchToFrame);
         frame.esp = sp;
         // TODO: Zig Bug? @ptrToInt(&run) results in weird address
         frame.func_return = @ptrToInt(run);

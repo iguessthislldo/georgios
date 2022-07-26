@@ -10,6 +10,7 @@
 //   https://wiki.osdev.org/Segmentation
 
 const builtin = @import("builtin");
+const std = @import("std");
 
 const utils = @import("utils");
 
@@ -160,7 +161,7 @@ fn set(name: []const u8, index: u8, base: u32, limit: u32,
 }
 
 fn set_null_entry(index: u8) void {
-    _ = set("Null", index, 0, 0, utils.zero_init(Access), utils.zero_init(Flags));
+    _ = set("Null", index, 0, 0, std.mem.zeroes(Access), std.mem.zeroes(Flags));
     names[index] = "Null";
 }
 

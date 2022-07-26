@@ -54,7 +54,8 @@ fn get_bit(byte: u8, from_left: usize) bool {
     return (byte >> get_byte_shift(from_left)) & 1 == 1;
 }
 
-name: utils.FixedString(128) = .{}, // FONT_NAME Property
+name_buffer: [128]u8 = undefined,
+name: ?[]const u8 = null, // FONT_NAME Property
 bounds: Bounds = .{}, // FONTBOUNDINGBOX
 glyph_count: u32 = 0, // CHARS
 default_codepoint: u32 = '?', // DEFAULT_CHAR
@@ -475,7 +476,8 @@ pub const Parser = struct {
                     state_info.got += 1;
                     if (streq(kw, "FONT_NAME")) {
                         const name = (try it.next()) orelse return Error.BdfMissingValue;
-                        self.font.name.ts().string_truncate(name);
+                        const l = utils.memory_copy_truncate(&self.font.name_buffer, name);
+                        self.font.name = self.font.name_buffer[0..l];
                     } else if (streq(kw, "DEFAULT_CHAR")) {
                         self.font.default_codepoint = try parse_int_value(&it, u32, 10);
                     }
@@ -677,7 +679,7 @@ test "Bdf" {
     // 3 because we need to be sure the input can be constrained
     try test_parse_font(&allocator, &parser, bdf_text, 3);
 
-    try std.testing.expectEqualStrings(parser.font.name.ts().get(), "The Font Name");
+    try std.testing.expectEqualStrings(parser.font.name.?, "The Font Name");
     try std.testing.expectEqual(parser.font.glyph_count, 1);
     try std.testing.expectEqual(parser.font.bounds.size.x, 6);
     try std.testing.expectEqual(parser.font.bounds.size.y, 9);

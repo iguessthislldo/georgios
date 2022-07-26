@@ -143,8 +143,8 @@ export fn AcpiOsAllocate(size: acpica.Size) ?*anyopaque {
 }
 
 export fn AcpiOsFree(ptr: ?*anyopaque) void {
-    if (ptr != null) {
-        kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
+    if (ptr) |p| {
+        kernel.alloc.free_array(utils.empty_slice(u8, p)) catch {};
     }
 }
 

@@ -75,7 +75,7 @@ pub const BlockStore = struct {
         var src_offset = @intCast(usize, address % self.block_size);
         while (block_address < end_block) {
             var block = Block{.address = block_address};
-            const size = utils.min(usize, @intCast(usize, self.block_size), to.len - dest_offset);
+            const size = @minimum(@intCast(usize, self.block_size), to.len - dest_offset);
             try self.read_block(&block);
             const new_dest_offset = dest_offset + size;
             _ = utils.memory_copy_truncate(

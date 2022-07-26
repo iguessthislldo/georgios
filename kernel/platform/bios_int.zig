@@ -87,8 +87,8 @@ export fn georgios_bios_int_calloc(num: usize, size: usize) ?*anyopaque {
 }
 
 export fn georgios_bios_int_free(ptr: ?*anyopaque) void {
-    if (ptr != null) {
-        kernel.alloc.free_array(utils.make_const_slice(u8, @ptrCast([*]u8, ptr), 0)) catch {};
+    if (ptr) |p| {
+        kernel.alloc.free_array(utils.empty_slice(u8, p)) catch {};
     }
 }
 

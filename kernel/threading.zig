@@ -94,7 +94,7 @@ pub const Process = struct {
                         args_temp[i] = try kernel.memory_mgr.alloc.alloc_array(u8, arg.len);
                         _ = utils.memory_copy_truncate(args_temp[i], arg);
                     } else {
-                        args_temp[i] = utils.make_slice(u8, @intToPtr([*]u8, 1024), 0);
+                        args_temp[i] = @intToPtr([*]u8, 1024)[0..0];
                     }
                 }
                 info.args = args_temp;
