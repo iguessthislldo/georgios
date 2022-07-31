@@ -26,6 +26,7 @@ const MappedList = @import("mapped_list.zig").MappedList;
 const List = @import("list.zig").List;
 
 pub const Error = georgios.fs.Error;
+pub const OpenOpts = georgios.fs.OpenOpts;
 pub const RamDisk = @import("fs/RamDisk.zig");
 pub const Ext2 = @import("fs/Ext2.zig");
 pub const FileId = io.File.Id;
@@ -336,12 +337,14 @@ pub const Path = struct {
     }
 
     pub fn filename(self: *const Path) Error![]u8 {
-        return try self.copy_string(if (self.list.tail) |tail_node| tail_node.value else self.value_if_empty());
+        return try self.copy_string(if (self.list.tail) |tail_node|
+            tail_node.value else self.value_if_empty());
     }
 };
 
 fn assert_path(alloc: *memory.Allocator,
-        prepend: ?[]const u8, path_str: []const u8, expected: []const u8, expected_filename: []const u8) !void {
+        prepend: ?[]const u8, path_str: []const u8, expected: []const u8,
+        expected_filename: []const u8) !void {
     var path = Path{.alloc = alloc};
     try path.init(path_str);
     defer (path.done() catch unreachable);
@@ -562,7 +565,8 @@ pub const ResolvePathOpts = struct {
         return self.cwd orelse "/";
     }
 
-    pub fn get_working_copy(self: *const ResolvePathOpts, default_node_ptr_ptr: **Vnode) ResolvePathOpts {
+    pub fn get_working_copy(self: *const ResolvePathOpts,
+            default_node_ptr_ptr: **Vnode) ResolvePathOpts {
         var ro = self.*;
         if (ro.cwd == null) {
             ro.cwd = "/";
@@ -634,14 +638,17 @@ pub const Manager = struct {
 
     fn resolve_path(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode {
         // See man page path_resolution(7) for reference
-        // TODO: Assert path with trailing slash is a directory
 
         // Get unresolved absolute path
         var path = try self.get_absolute_path(path_str, opts);
         defer (path.done() catch @panic("resolve_path: path.done()"));
 
         // Find node and build resolved path
-        return self.resolve_path_i(&path, opts);
+        const vnode = try self.resolve_path_i(&path, opts);
+        if (path_str.len > 0 and path_str[path_str.len - 1] == '/') {
+            try vnode.assert_directory();
+        }
+        return vnode;
     }
 
     pub fn resolve_directory(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!*Vnode {
@@ -684,6 +691,16 @@ pub const Manager = struct {
         var opts_copy = opts.get_working_copy(&dnp);
         const child_name = try self.resolve_parent_directory(path_str, opts_copy);
         return opts_copy.get_node().create_node(child_name, kind);
+    }
+
+    pub fn resolve_or_create_file(self: *Manager,
+            path: []const u8, opts: ResolvePathOpts) Error!*Vnode {
+        return self.resolve_file(path, opts) catch |e| {
+            if (e == Error.FileNotFound) {
+                return self.create_node(path, .{.file = true}, opts);
+            }
+            return e;
+        };
     }
 
     pub fn unlink(self: *Manager, path_str: []const u8, opts: ResolvePathOpts) Error!void {
@@ -736,27 +753,25 @@ pub const Submanager = struct {
     }
 
     pub fn done(self: *Submanager) void {
-        {
-            var it = self.open_files.iterator();
-            while (it.next()) |kv| {
-                kv.value_ptr.*.close() catch unreachable; // TODO?
-            }
-            self.open_files.deinit();
+        var it = self.open_files.iterator();
+        while (it.next()) |kv| {
+            kv.value_ptr.*.close() catch unreachable; // TODO?
         }
+        self.open_files.deinit();
     }
 
-    fn find_or_create(self: *Submanager, path: []const u8, opts: ResolvePathOpts) Error!*Vnode {
-        return self.manager.resolve_path(path, opts) catch |e| {
-            if (e == Error.FileNotFound) {
-                return self.manager.create_node(path, .{.file = true}, opts);
-            }
-            return e;
-        };
-    }
+    pub fn open(self: *Submanager, path: []const u8, opts: OpenOpts) Error!FileId {
+        try opts.check();
+        var vnode: *Vnode = undefined;
+        const path_opts = ResolvePathOpts{.cwd = self.cwd_ptr.*};
+        if (opts.dir()) {
+            vnode = try self.manager.resolve_directory(path, path_opts);
+        } else if (opts.must_exist()) {
+            vnode = try self.manager.resolve_file(path, path_opts);
+        } else {
+            vnode = try self.manager.resolve_or_create_file(path, path_opts);
+        }
 
-    pub fn open(self: *Submanager, path: []const u8) Error!FileId {
-        // TODO: Open options
-        const vnode = try self.find_or_create(path, .{.cwd = self.cwd_ptr.*});
         const id = self.next_file_id;
         self.next_file_id += 1;
         try self.open_files.put(id, vnode);

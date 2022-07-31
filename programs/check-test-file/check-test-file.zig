@@ -31,7 +31,7 @@ fn streak() !void {
 }
 
 pub fn main() u8 {
-    var file = georgios.fs.open("files/test-file") catch |e| {
+    var file = georgios.fs.open("files/test-file", .{.ReadOnly = .{}}) catch |e| {
         print_string("open error: ");
         print_string(@errorName(e));
         print_string("\nNOTE: test-file has to be generated using scripts/gen-test-file.py\n");

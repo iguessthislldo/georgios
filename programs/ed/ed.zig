@@ -36,7 +36,7 @@ fn write_file() !void {
     if (path == null) {
         try console.print("No path set\n", .{});
     }
-    var file = try georgios.fs.open(path.?);
+    var file = try georgios.fs.open(path.?, .{.Write = .{.truncate = true}});
     defer file.close() catch unreachable;
 
     _ = try file.seek(0, .FromStart);
@@ -51,7 +51,7 @@ fn read_file() !void {
     if (path == null) {
         try console.print("No path set\n", .{});
     }
-    var file = try georgios.fs.open(path.?);
+    var file = try georgios.fs.open(path.?, .{.ReadOnly = .{}});
     defer file.close() catch unreachable;
 
     var reader = file.reader();

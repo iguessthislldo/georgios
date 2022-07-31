@@ -41,7 +41,7 @@ pub fn main() u8 {
     }
 
     // Open image file
-    var file = georgios.fs.open(path.?) catch |e| {
+    var file = georgios.fs.open(path.?, .{.ReadOnly = .{}}) catch |e| {
         print_string("img: open error: ");
         print_string(@errorName(e));
         print_string("\n");

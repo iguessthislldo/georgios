@@ -119,12 +119,15 @@ fn run() !void {
     // try @import("sync.zig").system_tests();
 
     // Read and execute the path in the rc file
-    var file = try filesystem_mgr.resolve_file("/etc/rc", .{});
-    defer file.close() catch @panic("run: file.close");
-    const file_io = try file.get_io_file();
     var rc_buffer: [128]u8 = undefined;
-    var rc_path: []const u8 = rc_buffer[0..try file_io.read(rc_buffer[0..])];
-    rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
+    var rc_path: []const u8 = undefined;
+    {
+        var file = try filesystem_mgr.resolve_file("/etc/rc", .{});
+        defer file.close() catch @panic("run: file.close");
+        const file_io = try file.get_io_file();
+        rc_path = rc_buffer[0..try file_io.read(rc_buffer[0..])];
+        rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
+    }
     const rc_info: georgios.ProcessInfo = .{.path = rc_path};
     const rc_exit_info = try threading_mgr.wait_for_process(try exec(&rc_info));
     print.format("RC: {}\n", .{rc_exit_info});

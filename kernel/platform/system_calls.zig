@@ -144,13 +144,14 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
-        // SYSCALL: file_open(&path: []const u8) georgios.fs.Error!georgios.io.File.Id
+        // SYSCALL: file_open(&path: []const u8, &opts: georgios.fs.OpenOpts) georgios.fs.Error!georgios.io.File.Id
         8 => {
             const ValueOrError = ValueOrErrorT(georgios.io.File.Id, georgios.fs.Error);
             const path = @intToPtr(*[]const u8, arg1);
-            const rv = @intToPtr(*ValueOrError, arg2);
+            const opts = @intToPtr(*georgios.fs.OpenOpts, arg2);
+            const rv = @intToPtr(*ValueOrError, arg3);
             if (kernel.threading_mgr.current_process) |p| {
-                rv.set_value(p.fs_submgr.open(path.*) catch |e| {
+                rv.set_value(p.fs_submgr.open(path.*, opts.*) catch |e| {
                     rv.set_error(e);
                     return;
                 });

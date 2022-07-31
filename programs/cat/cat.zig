@@ -5,7 +5,7 @@ const print_string = system_calls.print_string;
 
 pub fn main() u8 {
     for (georgios.proc_info.args) |arg| {
-        var file = georgios.fs.open(arg) catch |e| {
+        var file = georgios.fs.open(arg, .{.ReadOnly = .{}}) catch |e| {
             print_string("cat: open error: ");
             print_string(@errorName(e));
             print_string("\n");

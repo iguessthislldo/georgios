@@ -9,17 +9,17 @@ pub fn main() u8 {
         path = georgios.proc_info.args[0];
     }
 
-    const dir_file = system_calls.file_open(path) catch |e| {
+    var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
         print_string("ls: open error: ");
         print_string(@errorName(e));
         print_string("\n");
         return 1;
     };
-    defer system_calls.file_close(dir_file) catch unreachable;
+    defer dir_file.close() catch unreachable;
 
     var entry_buffer: [256]u8 = undefined;
     while (true) {
-        const read = system_calls.file_read(dir_file, entry_buffer[0..]) catch |e| {
+        const read = dir_file.read(entry_buffer[0..]) catch |e| {
             print_string("ls: read error: ");
             print_string(@errorName(e));
             print_string("\n");

@@ -22,7 +22,7 @@ fn print_result(filename: []const u8, cksum: *Cksum) !void {
 pub fn main() u8 {
     for (georgios.proc_info.args) |arg| {
         var cksum = georgios.utils.Cksum{};
-        var file = georgios.fs.open(arg) catch |e| {
+        var file = georgios.fs.open(arg, .{.ReadOnly = .{}}) catch |e| {
             print_string("cksum: open error: ");
             print_string(@errorName(e));
             print_string("\n");

@@ -26,6 +26,7 @@ const ErrorCode = enum(u32) {
     DirectoryNotEmpty = 20,
     OutOfSpace = 21,
     FilesystemAlreadyMountedHere = 22,
+    InvalidOpenOpts = 23,
     _,
 };
 
@@ -58,6 +59,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ExecError.DirectoryNotEmpty => ErrorCode.DirectoryNotEmpty,
                     georgios.ExecError.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.ExecError.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
+                    georgios.ExecError.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
                     georgios.ExecError.Unsupported => ErrorCode.Unsupported,
                     georgios.ExecError.Internal => ErrorCode.Internal,
                     georgios.ExecError.InvalidFileId => ErrorCode.InvalidFileId,
@@ -82,6 +84,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.fs.Error.DirectoryNotEmpty => ErrorCode.DirectoryNotEmpty,
                     georgios.fs.Error.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.fs.Error.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
+                    georgios.fs.Error.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
                     georgios.fs.Error.Unsupported => ErrorCode.Unsupported,
                     georgios.fs.Error.Internal => ErrorCode.Internal,
                     georgios.fs.Error.InvalidFileId => ErrorCode.InvalidFileId,
@@ -125,6 +128,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ThreadingOrFsError.DirectoryNotEmpty => ErrorCode.DirectoryNotEmpty,
                     georgios.ThreadingOrFsError.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.ThreadingOrFsError.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
+                    georgios.ThreadingOrFsError.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
                     georgios.ThreadingOrFsError.Unsupported => ErrorCode.Unsupported,
                     georgios.ThreadingOrFsError.Internal => ErrorCode.Internal,
                     georgios.ThreadingOrFsError.InvalidFileId => ErrorCode.InvalidFileId,
@@ -166,6 +170,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .DirectoryNotEmpty => georgios.ExecError.DirectoryNotEmpty,
                         .InvalidFilesystem => georgios.ExecError.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.ExecError.FilesystemAlreadyMountedHere,
+                        .InvalidOpenOpts => georgios.ExecError.InvalidOpenOpts,
                         .Unsupported => georgios.ExecError.Unsupported,
                         .Internal => georgios.ExecError.Internal,
                         .InvalidFileId => georgios.ExecError.InvalidFileId,
@@ -191,6 +196,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .DirectoryNotEmpty => georgios.fs.Error.DirectoryNotEmpty,
                         .InvalidFilesystem => georgios.fs.Error.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.fs.Error.FilesystemAlreadyMountedHere,
+                        .InvalidOpenOpts => georgios.fs.Error.InvalidOpenOpts,
                         .Unsupported => georgios.fs.Error.Unsupported,
                         .Internal => georgios.fs.Error.Internal,
                         .InvalidFileId => georgios.fs.Error.InvalidFileId,
@@ -237,6 +243,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .DirectoryNotEmpty => georgios.ThreadingOrFsError.DirectoryNotEmpty,
                         .InvalidFilesystem => georgios.ThreadingOrFsError.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.ThreadingOrFsError.FilesystemAlreadyMountedHere,
+                        .InvalidOpenOpts => georgios.ThreadingOrFsError.InvalidOpenOpts,
                         .Unsupported => georgios.ThreadingOrFsError.Unsupported,
                         .Internal => georgios.ThreadingOrFsError.Internal,
                         .InvalidFileId => georgios.ThreadingOrFsError.InvalidFileId,
@@ -321,12 +328,13 @@ pub fn print_uint(value: u32, base: u8) callconv(.Inline) void {
         );
 }
 
-pub fn file_open(path: []const u8) callconv(.Inline) georgios.fs.Error!georgios.io.File.Id {
+pub fn file_open(path: []const u8, opts: georgios.fs.OpenOpts) callconv(.Inline) georgios.fs.Error!georgios.io.File.Id {
     var rv: ValueOrError(georgios.io.File.Id, georgios.fs.Error) = undefined;
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 8)),
         [arg1] "{ebx}" (@ptrToInt(&path)),
-        [arg2] "{ecx}" (@ptrToInt(&rv)),
+        [arg2] "{ecx}" (@ptrToInt(&opts)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
         );
     return rv.get();
 }

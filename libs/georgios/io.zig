@@ -100,7 +100,6 @@ pub const File = struct {
 
     const default_impl = if (georgios.is_program) system_call else unsupported;
 
-    valid: bool = false,
     id: ?Id = null,
     read_impl: fn(*File, []u8) FileError!usize = default_impl.read_impl,
     write_impl: fn(*File, []const u8) FileError!usize = default_impl.write_impl,
@@ -176,7 +175,7 @@ pub const File = struct {
 
     /// Free resources used by the file.
     pub fn close(file: *File) georgios.fs.Error!void {
-        defer file.valid = false;
+        defer file.id = null;
         file.close_impl(file) catch |e| return e;
     }
 

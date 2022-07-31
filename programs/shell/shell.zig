@@ -43,7 +43,7 @@ const OurToString = struct {
 
 fn draw_dragon() void {
     if (system_calls.vbe_res()) |res| {
-        var file = georgios.fs.open("/files/dragon.img") catch |e| {
+        var file = georgios.fs.open("/files/dragon.img", .{.ReadOnly = .{}}) catch |e| {
             print_string("shell: open file error: ");
             print_string(@errorName(e));
             print_string("\n");
@@ -77,7 +77,7 @@ fn draw_dragon() void {
 fn read_motd() void {
     draw_dragon();
 
-    var file = georgios.fs.open("/etc/motd") catch |e| {
+    var file = georgios.fs.open("/etc/motd", .{.ReadOnly = .{}}) catch |e| {
         print_string("motd open error: ");
         print_string(@errorName(e));
         print_string("\n");
@@ -108,18 +108,18 @@ fn read_motd() void {
 }
 
 fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 {
-    const dir_file = system_calls.file_open(path) catch |e| {
+    var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
         print_string("check_bin_path open error: ");
         print_string(@errorName(e));
         print_string("\n");
         return null;
     };
-    defer system_calls.file_close(dir_file) catch unreachable;
+    defer dir_file.close() catch unreachable;
     var pos = utils.memory_copy_truncate(buffer[0..], name);
     pos = pos + utils.memory_copy_truncate(buffer[pos..], ".elf");
     var entry_buffer: [256]u8 = undefined;
     while (true) {
-        const read = system_calls.file_read(dir_file, entry_buffer[0..]) catch |e| {
+        const read = dir_file.read(entry_buffer[0..]) catch |e| {
             print_string("check_bin_path read error: ");
             print_string(@errorName(e));
             print_string("\n");

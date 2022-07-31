@@ -61,10 +61,94 @@ pub const fs = struct {
         DirectoryNotEmpty,
         InvalidFilesystem,
         FilesystemAlreadyMountedHere,
+        InvalidOpenOpts,
     } || io.FileError;
 
-    pub fn open(path: []const u8) Error!io.File {
-        return io.File{.valid = true, .id = try system_calls.file_open(path)};
+    pub const OpenOptsKind = enum {
+        ReadOnly,
+        Write,
+    };
+
+    pub const Exist = enum {
+        CreateIfNeeded,
+        MustExist,
+        MustCreate,
+    };
+
+    pub const OpenOpts = union (OpenOptsKind) {
+        ReadOnly: struct {
+            dir: bool = false,
+        },
+        Write: struct {
+            read: bool = false,
+            exist: Exist = .CreateIfNeeded,
+            append: bool = false, // Conflicts with MustCreate and truncate
+            truncate: bool = false, // Conflicts with append
+        },
+
+        pub fn check(self: *const OpenOpts) Error!void {
+            switch (self.*) {
+                .ReadOnly => {},
+                .Write => |w| {
+                    if (w.append and w.truncate or
+                            w.exist == .MustCreate and w.append) {
+                        return Error.InvalidOpenOpts;
+                    }
+                },
+            }
+        }
+
+        pub fn must_exist(self: *const OpenOpts) bool {
+            return switch (self.*) {
+                .ReadOnly => true,
+                .Write => |w| w.exist == .MustExist,
+            };
+        }
+
+        pub fn dir(self: *const OpenOpts) bool {
+            return switch (self.*) {
+                .ReadOnly => |*ropts| ropts.dir,
+                else => false,
+            };
+        }
+
+        pub fn from_fopen_mode(mode: []const u8) Error!OpenOpts {
+            if (mode.len == 0) return Error.InvalidOpenOpts;
+            if (utils.starts_with(mode, "r+")) {
+                return OpenOpts{.Write = .{.read = true}};
+            }
+            if (utils.starts_with(mode, "r")) {
+                return OpenOpts.ReadOnly;
+            }
+            if (utils.starts_with(mode, "w+x")) {
+                return OpenOpts{.Write = .{.truncate = true, .read = true, .exist = .MustCreate}};
+            }
+            if (utils.starts_with(mode, "wx")) {
+                return OpenOpts{.Write = .{.truncate = true, .exist = .MustCreate}};
+            }
+            if (utils.starts_with(mode, "w+")) {
+                return OpenOpts{.Write = .{.truncate = true, .read = true}};
+            }
+            if (utils.starts_with(mode, "w")) {
+                return OpenOpts{.Write = .{.truncate = true}};
+            }
+            if (utils.starts_with(mode, "a+")) {
+                return OpenOpts{.Write = .{.append = true, .read = true}};
+            }
+            if (utils.starts_with(mode, "a")) {
+                return OpenOpts{.Write = .{.append = true}};
+            }
+            return Error.InvalidOpenOpts;
+        }
+    };
+
+    pub fn open(path: []const u8, opts: OpenOpts) Error!io.File {
+        try opts.check();
+        return io.File{.id = try system_calls.file_open(path, opts)};
+    }
+
+    pub fn fopen(path: []const u8, mode: []const u8) Error!io.File {
+        return open(path, try OpenOpts.from_fopen_mode(mode));
     }
 };
 
