@@ -65,7 +65,7 @@ fn found_partition(block_store: *io.BlockStore) !bool {
                 part.end,
             });
             if (part.is_linux()) {
-                // TODO: Acutally see if this the right partition
+                // TODO: Acutally see if this is the right partition
                 print.string("     - Is Linux!\n");
                 root_ext2.offset = part.start * block_store.block_size;
                 return true;
@@ -410,7 +410,44 @@ pub const DirIterator = struct {
     }
 };
 
-// TODO: Seperate Open Context Interface
+pub const Context = struct {
+    vnode: *Vnode,
+    open_opts: OpenOpts,
+    dir_io_it: ?*DirIterator = null,
+
+    get_io_file_impl: fn(*Context) Error!*io.File,
+    close_impl: fn(*Context) void,
+    dir_io: io.File = .{
+        .read_impl = dir_io_read_impl,
+    },
+
+    fn dir_io_read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
+        const self = @fieldParentPtr(Context, "dir_io", io_file);
+        if (self.dir_io_it == null) {
+            self.dir_io_it = self.vnode.dir_iter() catch return io.FileError.Internal;
+        }
+        if (self.dir_io_it.?.next() catch return io.FileError.Internal) |item| {
+            return utils.memory_copy_truncate(to, item.name);
+        }
+        return 0;
+    }
+
+    pub fn get_io_file(self: *Context) Error!*io.File {
+        if (self.vnode.kind.directory) {
+            return &self.dir_io;
+        }
+        return self.get_io_file_impl(self);
+    }
+
+    pub fn close(self:* Context) void {
+        self.vnode.context_closed();
+        if (self.dir_io_it) |dir_it| {
+            dir_it.done();
+        }
+        self.close_impl(self);
+    }
+};
+
 pub const Vnode = struct {
     pub const Kind = struct {
         file: bool = false,
@@ -420,17 +457,12 @@ pub const Vnode = struct {
     fs: *Vfilesystem,
     kind: Kind,
     mounted_here: ?*Vfilesystem = null,
+    context_rc: usize = 0,
 
     get_dir_iter_impl: fn(*Vnode) Error!*DirIterator,
     create_node_impl: fn(*Vnode, []const u8, Kind) Error!*Vnode,
     unlink_impl: fn(*Vnode, []const u8) Error!void,
-    get_io_file_impl: fn(*Vnode) Error!*io.File,
-    close_impl: fn(*Vnode) Error!void,
-    dir_io: io.File = .{
-        .read_impl = dir_io_read_impl,
-        .close_impl = dir_io_close_impl,
-    },
-    dir_io_it: ?*DirIterator = null,
+    open_new_context_impl: fn(*Vnode, OpenOpts) Error!*Context,
 
     pub fn assert_directory(self: *const Vnode) Error!void {
         if (!self.kind.directory) {
@@ -511,35 +543,15 @@ pub const Vnode = struct {
         return (try self.node_with_content()).unlink_i(name);
     }
 
-    fn dir_io_read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
-        const self = @fieldParentPtr(Vnode, "dir_io", io_file);
-        if (self.dir_io_it == null) {
-            self.dir_io_it = self.dir_iter() catch return io.FileError.Internal;
-        }
-        if (self.dir_io_it.?.next() catch return io.FileError.Internal) |item| {
-            return utils.memory_copy_truncate(to, item.name);
-        }
-        return 0;
+    pub fn open_new_context(self: *Vnode, opts: OpenOpts) Error!*Context {
+        self.context_rc += 1;
+        return self.open_new_context_impl(self, opts);
     }
 
-    fn dir_io_close_impl(io_file: *io.File) io.FileError!void {
-        const self = @fieldParentPtr(Vnode, "dir_io", io_file);
-        if (self.dir_io_it) |dir_it| {
-            dir_it.done();
+    pub fn context_closed(self: *Vnode) void {
+        if (self.context_rc > 0) {
+            self.context_rc -%= 1;
         }
-        self.dir_io_it = null;
-    }
-
-    pub fn get_io_file(self: *Vnode) Error!*io.File {
-        if (self.kind.directory) {
-            return &self.dir_io;
-        }
-        return self.get_io_file_impl(self);
-    }
-
-    pub fn close(self: *Vnode) Error!void {
-        try self.dir_io.close();
-        try self.close_impl(self);
     }
 };
 
@@ -737,7 +749,7 @@ pub const Manager = struct {
 };
 
 pub const Submanager = struct {
-    const OpenFiles = std.AutoHashMap(FileId, *Vnode);
+    const OpenFiles = std.AutoHashMap(FileId, *Context);
 
     manager: *Manager,
     open_files: OpenFiles,
@@ -774,31 +786,31 @@ pub const Submanager = struct {
 
         const id = self.next_file_id;
         self.next_file_id += 1;
-        try self.open_files.put(id, vnode);
+        try self.open_files.put(id, try vnode.open_new_context(opts));
         return id;
     }
 
     pub fn close(self: *Submanager, id: FileId) Error!void {
         const kv = self.open_files.fetchRemove(id) orelse return Error.InvalidFileId;
-        try kv.value.close();
+        kv.value.close();
     }
 
     pub fn read(self: *Submanager, id: FileId, to: []u8) io.FileError!usize {
-        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
-        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        const cxt = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = cxt.get_io_file() catch return io.FileError.Unsupported;
         return try io_file.read(to);
     }
 
     pub fn write(self: *Submanager, id: FileId, from: []const u8) io.FileError!usize {
-        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
-        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        const cxt = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = cxt.get_io_file() catch return io.FileError.Unsupported;
         return io_file.write(from);
     }
 
     pub fn seek(self: *Submanager, id: FileId,
             offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
-        const vnode = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
-        const io_file = vnode.get_io_file() catch return io.FileError.Unsupported;
+        const cxt = self.open_files.get(id) orelse return io.FileError.InvalidFileId;
+        const io_file = cxt.get_io_file() catch return io.FileError.Unsupported;
         return io_file.seek(offset, seek_type);
     }
 };

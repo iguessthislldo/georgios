@@ -14,10 +14,12 @@ const MemoryError = memory.MemoryError;
 const io = kernel.io;
 const fs = kernel.fs;
 const DirIterator = fs.DirIterator;
+const Context = fs.Context;
 const ResolvePathOpts = fs.ResolvePathOpts;
 const Vnode = fs.Vnode;
 const Vfilesystem = fs.Vfilesystem;
 const Error = fs.Error;
+const OpenOpts = fs.OpenOpts;
 
 const RamDisk = @This();
 
@@ -62,8 +64,6 @@ const PageFile = struct {
     alloc: *Allocator,
     page_alloc: *Allocator,
     page_size: usize,
-    io_file: io.File,
-    pos: usize = 0,
     total_written: usize = 0,
 
     pub fn new(alloc: *Allocator, page_alloc: *Allocator, page_size: usize) PageFile {
@@ -72,11 +72,6 @@ const PageFile = struct {
             .alloc = alloc,
             .page_alloc = page_alloc,
             .page_size = page_size,
-            .io_file = .{
-                .write_impl = write_impl,
-                .read_impl = read_impl,
-                .seek_impl = seek_impl,
-            },
         };
     }
 
@@ -87,21 +82,21 @@ const PageFile = struct {
         }
     }
 
-    fn get_current_page(self: *PageFile) ?PageView {
+    fn get_page(self: *PageFile, pos: usize) ?PageView {
         var it = self.pages.iterator();
         var return_page: ?*Page = null;
         var seen: usize = 0;
         var seen_before: usize = 0;
         while (it.next()) |page| {
             seen += page.written;
-            if (seen >= self.pos and self.pos < (seen_before + self.page_size)) {
+            if (seen >= pos and pos < (seen_before + self.page_size)) {
                 return_page = page;
                 break;
             }
             seen_before = seen;
         }
         if (return_page) |p| {
-            return PageView{.page = p, .offset = self.pos - seen_before};
+            return PageView{.page = p, .offset = pos - seen_before};
         }
         return null;
     }
@@ -113,87 +108,116 @@ const PageFile = struct {
         return PageView{.page = page, .offset = 0};
     }
 
-    fn get_or_create_current_page(self: *PageFile) MemoryError!PageView {
-        var page = self.get_current_page();
+    fn get_or_create_page(self: *PageFile, pos: usize) MemoryError!PageView {
+        // TODO: This doesn't seem like it would handle the case of wanting to
+        // write in the middle of a file with multiple full pages. It looks
+        // like it would append instead.
+        var page = self.get_page(pos);
         if (page == null or page.?.full()) {
             return try self.append_page();
         }
         return page.?;
     }
 
-    fn write_impl(io_file: *io.File, from: []const u8) io.FileError!usize {
-        const self = @fieldParentPtr(PageFile, "io_file", io_file);
+    fn write_impl(self: *PageFile, pos: *usize, from: []const u8) io.FileError!usize {
         if (from.len == 0) return 0;
         var left: usize = from.len;
         var written: usize = 0;
         while (left > 0) {
-            var page = self.get_or_create_current_page() catch return io.FileError.OutOfSpace;
+            var page = self.get_or_create_page(pos.*) catch return io.FileError.OutOfSpace;
             const prev_page_written = page.page.written;
             const copied = page.copy_from(from[written..]);
             self.total_written = self.total_written - prev_page_written + page.page.written;
             written += copied;
             left -= copied;
-            self.pos += copied;
+            pos.* += copied;
         }
         return written;
     }
 
-    fn read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
-        const self = @fieldParentPtr(PageFile, "io_file", io_file);
+    fn read_impl(self: *PageFile, pos: *usize, to: []u8) io.FileError!usize {
         var left: usize = to.len;
         var read: usize = 0;
         while (left > 0) {
-            var page = self.get_current_page() orelse break;
+            var page = self.get_page(pos.*) orelse break;
             if (page.at_end()) {
                 break;
             }
             const copied = page.copy_to(to[read..]);
             read += copied;
             left -= copied;
-            self.pos += copied;
+            pos.* += copied;
         }
         return read;
     }
 
-    pub fn seek_impl(io_file: *io.File,
+    fn seek_impl(self: *PageFile, pos: *usize,
             offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
-        const self = @fieldParentPtr(PageFile, "io_file", io_file);
         // TODO: limit is null here, is that right?
         const new_pos = try io.File.generic_seek(
-            self.pos, self.total_written, null, offset, seek_type);
-        self.pos = new_pos;
+            pos.*, self.total_written, null, offset, seek_type);
+        pos.* = new_pos;
         return new_pos;
     }
 };
 
-fn basic_test_page_file(file: *io.File) !void {
-    const str1 = "abc123";
-    const len1 = str1.len;
-    try std.testing.expectEqual(len1, try file.write(str1));
+const ContextImpl = struct {
+    alloc: *Allocator,
+    context: Context,
+    page_file: *?PageFile,
+    pos: usize,
 
-    var offset: usize = 0;
-    var read_buffer: [len1]u8 = undefined;
-    while (offset < len1) {
-        try std.testing.expectEqual(offset, try file.seek(@intCast(isize, offset), .FromStart));
-        try std.testing.expectEqual(len1 - offset, try file.read(read_buffer[offset..]));
-        try std.testing.expectEqualStrings(str1[offset..], read_buffer[offset..]);
-        offset += 1;
+    io_file: io.File,
+
+    fn new(alloc: *Allocator, node: *Node, opts: OpenOpts) ContextImpl {
+        return .{
+            .alloc = alloc,
+            .context = .{
+                .vnode = &node.vnode,
+                .open_opts = opts,
+                .get_io_file_impl = get_io_file_impl,
+                .close_impl = close_impl,
+            },
+            .page_file = &node.page_file,
+            .pos = 0,
+            .io_file = .{
+                .write_impl = write_impl,
+                .read_impl = read_impl,
+                .seek_impl = seek_impl,
+                .close_impl = io.File.nop.close_impl,
+            },
+        };
     }
-}
 
-const test_page_size = 4;
+    fn get_io_file_impl(ctx: *Context) Error!*io.File {
+        const self = @fieldParentPtr(ContextImpl, "context", ctx);
+        if (self.page_file.* != null) {
+            return &self.io_file;
+        }
+        return Error.NotAFile;
+    }
 
-test "PageFile" {
-    var alloc: memory.UnitTestAllocator = .{};
-    alloc.init();
-    defer alloc.done();
-    const galloc = &alloc.allocator;
-    var pf = PageFile.new(galloc, galloc, test_page_size);
-    defer pf.done() catch unreachable;
-    const file = &pf.io_file;
+    fn write_impl(io_file: *io.File, from: []const u8) io.FileError!usize {
+        const self = @fieldParentPtr(ContextImpl, "io_file", io_file);
+        return self.page_file.*.?.write_impl(&self.pos, from);
+    }
 
-    try basic_test_page_file(file);
-}
+    fn read_impl(io_file: *io.File, to: []u8) io.FileError!usize {
+        const self = @fieldParentPtr(ContextImpl, "io_file", io_file);
+        return self.page_file.*.?.read_impl(&self.pos, to);
+    }
+
+    fn seek_impl(io_file: *io.File,
+            offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
+        const self = @fieldParentPtr(ContextImpl, "io_file", io_file);
+        return self.page_file.*.?.seek_impl(&self.pos, offset, seek_type);
+    }
+
+    fn close_impl(ctx: *Context) void {
+        const self = @fieldParentPtr(ContextImpl, "context", ctx);
+        self.alloc.free(self) catch unreachable;
+    }
+};
 
 pub const Node = struct {
     const Nodes = std.StringArrayHashMap(*Node);
@@ -243,8 +267,7 @@ pub const Node = struct {
                 .get_dir_iter_impl = get_dir_iter_impl,
                 .create_node_impl = create_node_impl,
                 .unlink_impl = unlink_impl,
-                .get_io_file_impl = get_io_file_impl,
-                .close_impl = close_impl,
+                .open_new_context_impl = open_new_context_impl,
             },
             .parent = parent,
         };
@@ -298,19 +321,12 @@ pub const Node = struct {
         }
     }
 
-    fn get_io_file_impl(vnode: *Vnode) Error!*io.File {
+    fn open_new_context_impl(vnode: *Vnode, opts: OpenOpts) Error!*Context {
         const self = @fieldParentPtr(Node, "vnode", vnode);
-        if (self.page_file) |*page_file| {
-            return &page_file.io_file;
-        }
-        return Error.NotAFile;
-    }
-
-    fn close_impl(vnode: *Vnode) Error!void {
-        const self = @fieldParentPtr(Node, "vnode", vnode);
-        if (self.page_file) |*pf| {
-            pf.pos = 0;
-        }
+        const alloc = self.ram_disk.alloc;
+        var impl = try alloc.alloc(ContextImpl);
+        impl.* = ContextImpl.new(alloc, self, opts);
+        return &impl.context;
     }
 
     pub fn done(self: *Node) Error!void {
@@ -357,6 +373,7 @@ pub fn done(self: *RamDisk) Error!void {
 }
 
 const RamDiskTest = struct {
+    const test_page_size = 4;
     alloc: memory.UnitTestAllocator = .{},
     check_allocs: bool = false,
     rd: RamDisk = undefined,
@@ -410,8 +427,9 @@ test "RamDisk: Files and Directories" {
 
     // Test directory io read
     {
-        const dir_io = try dir.get_io_file();
-        defer dir_io.close() catch unreachable;
+        const ctx = try dir.open_new_context(.{.ReadOnly = .{.dir = true}});
+        defer ctx.close();
+        const dir_io = try ctx.get_io_file();
         var buffer: [16]u8 = undefined;
         var count: usize = 0;
         while (true) {
@@ -446,7 +464,22 @@ test "RamDisk: Write and Read Files" {
     defer t.done();
 
     const a = try t.m.create_node("/a", .{.file = true}, .{});
-    try basic_test_page_file(try a.get_io_file());
+    const ctx = try a.open_new_context(.{.Write = .{.read = true}});
+    defer ctx.close();
+    const file = try ctx.get_io_file();
+
+    const str1 = "abc123";
+    const len1 = str1.len;
+    try std.testing.expectEqual(len1, try file.write(str1));
+
+    var offset: usize = 0;
+    var read_buffer: [len1]u8 = undefined;
+    while (offset < len1) {
+        try std.testing.expectEqual(offset, try file.seek(@intCast(isize, offset), .FromStart));
+        try std.testing.expectEqual(len1 - offset, try file.read(read_buffer[offset..]));
+        try std.testing.expectEqualStrings(str1[offset..], read_buffer[offset..]);
+        offset += 1;
+    }
 }
 
 test "RamDisk: Mount Another Ram Disk" {

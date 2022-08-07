@@ -89,9 +89,10 @@ fn init() !void {
 pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
     const process = try threading_mgr.new_process(info);
     // print.format("exec: {}\n", .{info.path});
-    var file = try filesystem_mgr.resolve_file(info.path, .{});
-    defer file.close() catch @panic("exec: file.close");
-    const file_io = try file.get_io_file();
+    var file_node = try filesystem_mgr.resolve_file(info.path, .{});
+    var file_ctx = try file_node.open_new_context(.{.ReadOnly = .{}});
+    defer file_ctx.close();
+    const file_io = try file_ctx.get_io_file();
     var elf_object = try elf.Object.from_file(alloc, big_alloc, file_io);
     var segments = elf_object.segments.iterator();
     var dynamic_memory_start: usize = 0;
@@ -122,9 +123,10 @@ fn run() !void {
     var rc_buffer: [128]u8 = undefined;
     var rc_path: []const u8 = undefined;
     {
-        var file = try filesystem_mgr.resolve_file("/etc/rc", .{});
-        defer file.close() catch @panic("run: file.close");
-        const file_io = try file.get_io_file();
+        var file_node = try filesystem_mgr.resolve_file("/etc/rc", .{});
+        var file_ctx = try file_node.open_new_context(.{.ReadOnly = .{}});
+        defer file_ctx.close();
+        const file_io = try file_ctx.get_io_file();
         rc_path = rc_buffer[0..try file_io.read(rc_buffer[0..])];
         rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
     }

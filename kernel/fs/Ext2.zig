@@ -20,6 +20,8 @@ const Vnode = fs.Vnode;
 const Vfilesystem = fs.Vfilesystem;
 const DirIterator = fs.DirIterator;
 const Error = fs.Error;
+const Context = fs.Context;
+const OpenOpts = fs.OpenOpts;
 
 const Ext2 = @This();
 
@@ -389,11 +391,6 @@ const Node = struct {
     ext2: *Ext2,
     vnode: Vnode,
     inode: Inode = undefined,
-    io_file: io.File = undefined,
-
-    data_block_iter: DataBlockIterator = undefined,
-    buffer: ?[]u8 = null,
-    position: usize = 0,
 
     fn init(self: *Node, ext2: *Ext2, kind: Vnode.Kind) void {
         self.* = .{
@@ -404,14 +401,7 @@ const Node = struct {
                 .get_dir_iter_impl = DirIteratorImpl.new,
                 .create_node_impl = create_node_impl,
                 .unlink_impl = unlink_impl,
-                .get_io_file_impl = get_io_file_impl,
-                .close_impl = close_impl,
-            },
-            .io_file = .{
-                .read_impl = read,
-                .write_impl = io.File.unsupported.write_impl,
-                .seek_impl = seek,
-                .close_impl = io.File.nop.close_impl,
+                .open_new_context_impl = open_new_context_impl,
             },
         };
     }
@@ -421,13 +411,6 @@ const Node = struct {
             .file = self.inode.is_file(),
             .directory = self.inode.is_directory(),
         };
-        self.data_block_iter = DataBlockIterator{.ext2 = self.ext2, .inode = &self.inode};
-    }
-
-    fn done(self: *Node) Error!void {
-        if (self.buffer) |buffer| {
-            try self.ext2.alloc.free_array(buffer);
-        }
     }
 
     fn create_node_impl(vnode: *Vnode, name: []const u8, kind: Vnode.Kind) Error!*Vnode {
@@ -445,25 +428,52 @@ const Node = struct {
         return Error.Unsupported;
     }
 
-    fn get_io_file_impl(vnode: *Vnode) Error!*io.File {
+    fn open_new_context_impl(vnode: *Vnode, opts: OpenOpts) Error!*Context {
         const self = @fieldParentPtr(Node, "vnode", vnode);
+        const alloc = self.ext2.alloc;
+        var impl = try alloc.alloc(ContextImpl);
+        impl.* = .{
+            .context = .{
+                .vnode = vnode,
+                .open_opts = opts,
+                .get_io_file_impl = ContextImpl.get_io_file_impl,
+                .close_impl = ContextImpl.close_impl,
+            },
+            .node = self,
+            .io_file = .{
+                .read_impl = ContextImpl.read,
+                .write_impl = io.File.unsupported.write_impl,
+                .seek_impl = ContextImpl.seek,
+                .close_impl = io.File.nop.close_impl,
+            },
+            .data_block_iter = DataBlockIterator{.ext2 = self.ext2, .inode = &self.inode},
+        };
+        return &impl.context;
+    }
+};
+
+const ContextImpl = struct {
+    context: Context,
+    node: *Node,
+    io_file: io.File = undefined,
+    data_block_iter: DataBlockIterator = undefined,
+    buffer: ?[]u8 = null,
+    position: usize = 0,
+
+    fn get_io_file_impl(ctx: *Context) Error!*io.File {
+        const self = @fieldParentPtr(ContextImpl, "context", ctx);
         return &self.io_file;
     }
 
-    fn close_impl(vnode: *Vnode) Error!void {
-        const self = @fieldParentPtr(Node, "vnode", vnode);
-        self.position = 0;
-    }
-
     fn read(file: *io.File, to: []u8) io.FileError!usize {
-        const self = @fieldParentPtr(Node, "io_file", file);
+        const self = @fieldParentPtr(ContextImpl, "io_file", file);
         if (self.buffer == null) {
-            self.buffer = try self.ext2.alloc.alloc_array(u8, self.ext2.block_size);
+            self.buffer = try self.node.ext2.alloc.alloc_array(u8, self.node.ext2.block_size);
         }
         var got: usize = 0;
         while (got < to.len) {
             // TODO: See if buffer already has the data we need!!!
-            self.data_block_iter.set_position(self.position / self.ext2.block_size)
+            self.data_block_iter.set_position(self.position / self.node.ext2.block_size)
                     catch |e| {
                 print.format("ERROR: ext2.File.read: set_position: {}\n", .{@errorName(e)});
                 return io.FileError.Internal;
@@ -474,7 +484,7 @@ const Node = struct {
             };
             if (block == null) break;
             const read_size = utils.memory_copy_truncate(
-                to[got..], block.?[self.position % self.ext2.block_size..]);
+                to[got..], block.?[self.position % self.node.ext2.block_size..]);
             if (read_size == 0) break;
             self.position += read_size;
             got += read_size;
@@ -484,10 +494,20 @@ const Node = struct {
 
     fn seek(file: *io.File,
             offset: isize, seek_type: io.File.SeekType) io.FileError!usize {
-        const self = @fieldParentPtr(Node, "io_file", file);
+        const self = @fieldParentPtr(ContextImpl, "io_file", file);
         self.position = try io.File.generic_seek(
-            self.position, self.inode.size, null, offset, seek_type);
+            self.position, self.node.inode.size, null, offset, seek_type);
         return self.position;
+    }
+
+    fn close_impl(ctx: *Context) void {
+        const self = @fieldParentPtr(ContextImpl, "context", ctx);
+        self.position = 0;
+        const alloc = self.node.ext2.alloc;
+        if (self.buffer) |buffer| {
+            alloc.free_array(buffer) catch unreachable;
+        }
+        alloc.free(self) catch unreachable;
     }
 };
 
@@ -587,7 +607,6 @@ pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!v
 fn done(self: *Ext2) void {
     var it = self.node_cache.iterator();
     while (it.next()) |kv| {
-        kv.value_ptr.*.done() catch unreachable;
         self.alloc.free(kv.value_ptr.*) catch unreachable;
     }
     self.node_cache.deinit();
@@ -646,17 +665,27 @@ test "Ext2" {
     try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "lost+found", "dir", "file1"});
     try t.m.assert_directory_has("/dir", &[_][]const u8{".", "..", "file2"});
 
-    const file1 = try t.m.resolve_file("/file1", .{});
-    try test_reading(try file1.get_io_file(),
-        \\Hello this is a file
-        \\
-    );
+    {
+        const file = try t.m.resolve_file("/file1", .{});
+        const file_ctx = try file.open_new_context(.{.ReadOnly = .{}});
+        defer file_ctx.close();
+        const io_file = try file_ctx.get_io_file();
+        try test_reading(io_file,
+            \\Hello this is a file
+            \\
+        );
+    }
 
-    const file2 = try t.m.resolve_file("/dir/file2", .{});
-    try test_reading(try file2.get_io_file(),
-        \\This is another file
-        \\
-    );
+    {
+        const file = try t.m.resolve_file("/dir/file2", .{});
+        const file_ctx = try file.open_new_context(.{.ReadOnly = .{}});
+        defer file_ctx.close();
+        const io_file = try file_ctx.get_io_file();
+        try test_reading(io_file,
+            \\This is another file
+            \\
+        );
+    }
 
     t.reached_end();
 }
