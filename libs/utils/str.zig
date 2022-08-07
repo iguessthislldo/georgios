@@ -90,3 +90,59 @@ pub fn ends_with(what: []const u8, postfix: []const u8) bool {
     }
     return true;
 }
+
+pub const StringWriter = struct {
+    const Writer = std.io.Writer(*StringWriter, std.mem.Allocator.Error, write);
+    const String = std.ArrayList(u8);
+
+    string: String,
+
+    pub fn init(alloc: std.mem.Allocator) StringWriter {
+        return .{.string = String.init(alloc)};
+    }
+
+    pub fn deinit(self: *StringWriter) void {
+        self.string.deinit();
+    }
+
+    fn write(self: *StringWriter, bytes: []const u8) std.mem.Allocator.Error!usize {
+        try self.string.appendSlice(bytes);
+        return bytes.len;
+    }
+
+    pub fn writer(self: *StringWriter) Writer {
+        return .{.context = self};
+    }
+
+    pub fn get(self: *StringWriter) []const u8 {
+        return self.string.toOwnedSlice();
+    }
+};
+
+test "StringWriter" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+
+    var sw = StringWriter.init(alloc);
+
+    const s1 = sw.get();
+    try std.testing.expectEqualStrings("", s1);
+    alloc.free(s1);
+
+    try sw.writer().print("{} Hello {s}\n", .{1, "World"});
+    try sw.writer().print("{} Hello {s}\n", .{2, "again"});
+    const s2 = sw.get();
+    try std.testing.expectEqualStrings(
+        \\1 Hello World
+        \\2 Hello again
+        \\
+        , s2);
+    alloc.free(s2);
+
+    const s3 = sw.get();
+    try std.testing.expectEqualStrings("", s3);
+    alloc.free(s3);
+
+    ta.deinit(.Panic);
+}

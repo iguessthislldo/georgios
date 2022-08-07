@@ -11,4 +11,5 @@ test "utils test root" {
     _ = @import("circular_buffer.zig");
     _ = @import("str.zig");
     _ = @import("packed_array.zig");
+    _ = @import("mem.zig");
 }

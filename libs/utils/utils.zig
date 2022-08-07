@@ -23,6 +23,7 @@ pub const memory_set = mem.memory_set;
 pub const to_bytes = mem.to_bytes;
 pub const to_const_bytes = mem.to_const_bytes;
 pub const empty_slice = mem.empty_slice;
+pub const TestAlloc = mem.TestAlloc;
 
 const str = @import("str.zig");
 pub const isspace = str.isspace;
@@ -36,6 +37,7 @@ pub const nibble_char = str.nibble_char;
 pub const byte_buffer = str.byte_buffer;
 pub const starts_with = str.starts_with;
 pub const ends_with = str.ends_with;
+pub const StringWriter = mem.StringWriter;
 
 pub const Error = error {
     Unknown,

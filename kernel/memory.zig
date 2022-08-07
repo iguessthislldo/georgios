@@ -169,27 +169,23 @@ pub const Allocator = struct {
 pub const UnitTestAllocator = struct {
     const Self = @This();
 
-    const Impl = std.heap.ArenaAllocator;
-
     allocator: Allocator = undefined,
-    impl: Impl = undefined,
-    allocated: usize = undefined,
+    impl: utils.TestAlloc = undefined,
+    alloc: std.mem.Allocator = undefined,
 
     pub fn init(self: *Self) void {
-        self.impl = Impl.init(std.heap.page_allocator);
+        self.impl = .{};
+        self.alloc = self.impl.alloc();
         self.allocator.alloc_impl = Self.alloc;
         self.allocator.free_impl = Self.free;
-        self.allocated = 0;
     }
 
     pub fn done_no_checks(self: *Self) void {
-        self.impl.deinit();
+        self.impl.deinit(.NoPanic);
     }
 
     pub fn done(self: *Self) void {
-        std.testing.expectEqual(@as(usize, 0), self.allocated)
-            catch @panic("outstanding allocations or wrong sizes");
-        self.done_no_checks();
+        self.impl.deinit(.Panic);
     }
 
     pub fn done_check_if(self: *Self, condition: *bool) void {
@@ -202,10 +198,9 @@ pub const UnitTestAllocator = struct {
 
     pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
         const self = @fieldParentPtr(Self, "allocator", allocator);
-        self.allocated += size;
 
         const align_u29 = @truncate(u29, align_to);
-        const rv = self.impl.allocator().allocBytes(align_u29, size,
+        const rv = self.alloc.allocBytes(align_u29, size,
             align_u29, @returnAddress()) catch return AllocError.OutOfMemory;
         // std.debug.print("alloc {x}: {}\n", .{@ptrToInt(rv.ptr), rv.len});
         return rv;
@@ -214,10 +209,7 @@ pub const UnitTestAllocator = struct {
     pub fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
         // std.debug.print("free {x}: {}\n", .{@ptrToInt(value.ptr), value.len});
         const self = @fieldParentPtr(Self, "allocator", allocator);
-        std.testing.expectEqual(true, self.allocated >= value.len)
-            catch @panic("free arg is bigger than allocated sum");
-        self.allocated -= value.len;
-        _ = self.impl.allocator().rawFree(
+        _ = self.alloc.rawFree(
             @intToPtr([*]u8, @ptrToInt(value.ptr))[0..value.len],
             @truncate(u29, aligned_to), @returnAddress());
     }

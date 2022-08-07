@@ -107,3 +107,39 @@ pub fn empty_slice(comptime Type: type, ptr: anytype) callconv(.Inline) []const 
     };
     return rv;
 }
+
+pub const TestAlloc = struct {
+    impl: std.heap.GeneralPurposeAllocator(.{}) = .{},
+    has_deinit: bool = false,
+
+    pub fn alloc(self: *TestAlloc) std.mem.Allocator {
+        return self.impl.allocator();
+    }
+
+    pub const ShouldPanic = enum {
+        Panic,
+        NoPanic,
+    };
+
+    pub fn deinit(self: *TestAlloc, should_panic: ShouldPanic) void {
+        if (!self.has_deinit) {
+            const leaks = self.impl.deinit();
+            if (should_panic == .Panic) {
+                std.testing.expect(!leaks) catch @panic("leak(s) detected");
+            }
+            self.has_deinit = true;
+        }
+    }
+};
+
+test "TestAlloc example usage" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+
+    const int = try alloc.create(u32);
+    int.* = 13;
+    alloc.destroy(int);
+
+    ta.deinit(.Panic);
+}
