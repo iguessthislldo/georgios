@@ -21,7 +21,7 @@ ported.
 - Kernel console that supports UTF-8 (specifically the subset needed for
   [Code page 437](https://en.wikipedia.org/wiki/Code_page_437) subset) and some
   basic ANSI escape codes
-- Support for multilple mounted filesytems:
+- Support for multiple mounted filesystems:
   - Ext2 accessed using an ATA Driver (read only)
   - In-memory filesystem mounted at boot (read/write)
 - Basic preemptive multitasking between processes that can be loaded from ELF
