@@ -134,12 +134,11 @@ pub const TestAlloc = struct {
 
 test "TestAlloc example usage" {
     var ta = utils.TestAlloc{};
-    defer ta.deinit(.NoPanic);
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     const alloc = ta.alloc();
 
     const int = try alloc.create(u32);
     int.* = 13;
     alloc.destroy(int);
-
-    ta.deinit(.Panic);
 }

@@ -356,50 +356,67 @@ pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
     };
 }
 
-pub fn unions_equal(comptime Union: type, a: Union, b: Union) bool {
-    const union_ti = @typeInfo(Union).Union;
-    const Tag = union_ti.tag_type.?;
-    const tag_ti = @typeInfo(Tag).Enum;
-    const kind = @as(Tag, a);
-    if (kind != @as(Tag, b)) {
-        return false;
-    }
-    inline for (tag_ti.fields) |field| {
-        if (kind == @intToEnum(Tag, field.value)) {
-            if (@TypeOf(@field(a, field.name)) == []const u8) {
-                return memory_compare(@field(a, field.name), @field(b, field.name));
-            } else {
-                return @field(a, field.name) == @field(b, field.name);
+pub fn any_equal(a: anytype, b: @TypeOf(a)) bool {
+    const Type = @TypeOf(a);
+    const ti = @typeInfo(Type);
+    return switch (ti) {
+        .Union => |union_ti| {
+            const Tag = union_ti.tag_type.?;
+            const tag_ti = @typeInfo(Tag).Enum;
+            const kind = @as(Tag, a);
+            if (kind != @as(Tag, b)) {
+                return false;
             }
-        }
-    }
-    return false;
+            inline for (tag_ti.fields) |field| {
+                if (kind == @intToEnum(Tag, field.value)) {
+                    return any_equal(@field(a, field.name), @field(b, field.name));
+                }
+            }
+            return false;
+        },
+        .Pointer => |ptr_ti| {
+            if (ptr_ti.size == .Slice and ptr_ti.child == u8) {
+                return memory_compare(a, b);
+            } else {
+                return a == b;
+            }
+        },
+        .Struct => |struct_ti| {
+            inline for (struct_ti.fields) |field| {
+                if (!any_equal(@field(a, field.name), @field(b, field.name))) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        else => {
+            return a == b;
+        },
+    };
 }
 
-const UnionsEqualTestKind = enum {
-    Int,
-    String1,
-    String2,
-    Nil,
-};
-
-const UnionsEqualTestValue = union (UnionsEqualTestKind) {
+const AnyEqualTestValue = union(enum) {
     Int: u32,
     String1: []const u8,
     String2: []const u8,
+    Pair: struct {
+        x: u16,
+        y: u16,
+    },
     Nil: void,
 
-    fn eq(self: UnionsEqualTestValue, other: UnionsEqualTestValue) bool {
-        return unions_equal(UnionsEqualTestValue, self, other);
+    fn eq(self: AnyEqualTestValue, other: AnyEqualTestValue) bool {
+        return any_equal(self, other);
     }
 };
 
-test "unions_equal" {
-    const Value = UnionsEqualTestValue;
+test "any_equal" {
+    const Value = AnyEqualTestValue;
     const int1 = Value{.Int = 1};
     const int2 = Value{.Int = 2};
     const str1 = Value{.String1 = "hello"};
     const str2 = Value{.String2 = "hello"};
+    const pair = Value{.Pair = .{.x = 4, .y = 8}};
     const nil = Value{.Nil = .{}};
     try std.testing.expect(int1.eq(int1));
     try std.testing.expect(!int1.eq(int2));
@@ -408,4 +425,7 @@ test "unions_equal" {
     try std.testing.expect(!str1.eq(str2));
     try std.testing.expect(nil.eq(nil));
     try std.testing.expect(!nil.eq(int1));
+    try std.testing.expect(!pair.eq(int1));
+    try std.testing.expect(!pair.eq(.{.Pair = .{.x = 4, .y = 9}}));
+    try std.testing.expect(pair.eq(.{.Pair = .{.x = 4, .y = 8}}));
 }

@@ -46,7 +46,7 @@ pub fn main() !u8 {
     }
 
     while (true) {
-        try stdout.print("({} free) > ", .{tl.free()});
+        try stdout.print("> ", .{});
         stdin.readUntilDelimiterArrayList(&line_contents, '\n', no_max) catch |e| {
             if (e == error.EndOfStream) {
                 break;

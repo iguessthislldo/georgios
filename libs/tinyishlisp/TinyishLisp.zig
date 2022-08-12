@@ -39,13 +39,16 @@ next_string_key: usize = 0,
 mem: []Expr,
 stack_pointer: usize, // in Expr count
 heap_pointer: usize = 0, // in u8
-nil: Expr = Expr{.Nil = .{}},
-tru: Expr = undefined,
-err: Expr = undefined,
-global_env: Expr = undefined,
+nil: *Expr = undefined,
+tru: *Expr = undefined,
+err: *Expr = undefined,
+global_env: *Expr = undefined,
 builtin_primitives: [gen_builtin_primitives.len]Primitive = undefined,
 extra_primitives: ?[]Primitive = null,
 tokenizer: ?Tokenizer = null,
+gc_head: ?*Expr = null,
+gc_tail: ?*Expr = null,
+gc_root: ?*Expr = null,
 
 pub fn new_barren(mem: []Expr, allocator: Allocator) Self {
     return .{
@@ -58,6 +61,7 @@ pub fn new_barren(mem: []Expr, allocator: Allocator) Self {
 
 pub fn new(mem: []Expr, allocator: Allocator) Error!Self {
     var tl = new_barren(mem, allocator);
+    tl.nil = try tl.make_expr(.Nil);
     tl.tru = try tl.get_atom("#t");
     tl.err = try tl.get_atom("#e");
     tl.global_env = try tl.tack_pair_to_list(tl.tru, tl.tru, tl.nil);
@@ -66,6 +70,7 @@ pub fn new(mem: []Expr, allocator: Allocator) Error!Self {
 }
 
 pub fn done(self: *Self) void {
+    _ = self.collect();
     var it = self.strings.iterator();
     while (it.next()) |kv| {
         self.allocator.free(kv.value_ptr.*);
@@ -85,37 +90,11 @@ pub fn got_zig_error(self: *Self, error_value: Error) Error {
     return error_value;
 }
 
-pub fn got_lisp_error(self: *Self, reason: []const u8) Expr {
+pub fn got_lisp_error(self: *Self, reason: []const u8) *Expr {
     if (self.tokenizer) |*t| {
         t.print_error(reason);
     }
     return self.err;
-}
-
-fn push(self: *Self, e: Expr) Error!usize {
-    const new_sp = self.stack_pointer - 1;
-    try self.check_pointers(self.heap_pointer, new_sp);
-    self.stack_pointer = new_sp;
-    self.mem[self.stack_pointer] = e;
-    return self.stack_pointer;
-}
-
-pub fn free(self: *Self) usize {
-    return self.stack_pointer - (self.heap_pointer / @sizeOf(Expr));
-}
-
-fn gc(self: *Self) void {
-    self.stack_pointer = self.global_env.Cons;
-}
-
-fn make_string(self: *Self, str: []const u8) Error!Expr {
-    try self.strings.put(self.next_string_key, str);
-    defer self.next_string_key += 1;
-    return Expr{.String = self.next_string_key};
-}
-
-fn make_string_copy(self: *Self, str: []const u8) Error!Expr {
-    return self.make_string(try self.allocator.dupe(u8, str));
 }
 
 // Expr =======================================================================
@@ -130,33 +109,38 @@ pub const ExprKind = enum {
     Nil,
 };
 
-pub const Expr = union (ExprKind) {
-    Int: IntType,
-    Atom: []const u8,
-    String: usize, // Key for strings hash map
-    Primitive: usize, // Index in primitives
-    Cons: usize, // Index on stack in mem
-    Closure: usize, // Index on stack in mem
-    Nil: void,
+pub const Expr = struct {
+    pub const Value = union (ExprKind) {
+        Int: IntType,
+        Atom: []const u8,
+        String: usize, // Key for strings hash map
+        Primitive: usize, // Index in primitives
+        Cons: struct {
+            x: *Expr,
+            y: *Expr,
+        },
+        Closure: *Expr,
+        Nil: void,
+    };
 
-    pub fn as_closure(self: Expr) Expr {
-        return switch (self) {
-            ExprKind.Cons => |index| Expr{.Closure = index},
-            ExprKind.Closure => self,
-            else => @panic("Expr.as_closure() called with non list-like"),
-        };
+    value: Value = Value.Nil,
+    gc_marked: bool = false,
+    gc_next: ?*Expr = null,
+
+    pub fn int(value: IntType) Expr {
+        return Expr{.value = .{.Int = value}};
     }
 
-    pub fn as_cons(self: Expr) Expr {
-        return switch (self) {
+    pub fn get_cons(self: *Expr) *Expr {
+        return switch (self.value) {
             ExprKind.Cons => self,
-            ExprKind.Closure => |index| Expr{.Cons = index},
-            else => @panic("Expr.as_cons() called with non list-like"),
+            ExprKind.Closure => |cons_expr| cons_expr,
+            else => @panic("Expr.get_cons() called with non list-like"),
         };
     }
 
-    pub fn get_string(self: Expr, tl: *Self) []const u8 {
-        return switch (self) {
+    pub fn get_string(self: *const Expr, tl: *Self) []const u8 {
+        return switch (self.value) {
             ExprKind.String => |key| blk: {
                 if (tl.strings.get(key)) |str| {
                     break :blk str;
@@ -167,51 +151,52 @@ pub const Expr = union (ExprKind) {
         };
     }
 
-    fn primitive_obj(self: Expr, tl: *Self) Error!*const Primitive {
-        return switch (self) {
+    fn primitive_obj(self: *Expr, tl: *Self) Error!*const Primitive {
+        return switch (self.value) {
             ExprKind.Primitive => |index| try tl.get_primitive(index),
             else => @panic("Expr.primitive_obj() called with non-primitive"),
         };
     }
 
-    fn call_primitive(self: Expr, tl: *Self, args: Expr, env: Expr) Error!Expr {
+    fn call_primitive(self: *Expr, tl: *Self, args: *Expr, env: *Expr) Error!*Expr {
         return (try self.primitive_obj(tl)).rt_func(tl, args, env);
     }
 
-    fn primitive_name(self: Expr, tl: *Self) Error![]const u8 {
+    fn primitive_name(self: *Expr, tl: *Self) Error![]const u8 {
         return (try self.primitive_obj(tl)).name;
     }
 
-    fn not(self: Expr) bool {
-        return @as(ExprKind, self) == .Nil;
+    fn not(self: *const Expr) bool {
+        return @as(ExprKind, self.value) == .Nil;
     }
 
-    fn is_true(self: Expr) bool {
+    fn is_true(self: *const Expr) bool {
         return !self.not();
     }
 
-    fn eq(self: Expr, other: Expr) bool {
-        return utils.unions_equal(Expr, self, other);
+    fn eq(self: *const Expr, other: *const Expr) bool {
+        if (self == other) return true;
+        return utils.any_equal(self.value, other.value);
     }
 };
 
 test "Expr" {
-    const int1 = Expr{.Int = 1};
-    const int2 = Expr{.Int = 2};
-    const str = Expr{.String = 2};
-    const atom = Expr{.Atom = "hello"};
-    const nil = Expr{.Nil = .{}};
-    try std.testing.expect(int1.eq(int1));
-    try std.testing.expect(!int1.eq(int2));
-    try std.testing.expect(!int1.eq(str));
-    try std.testing.expect(str.eq(str));
-    try std.testing.expect(!str.eq(atom));
-    try std.testing.expect(nil.eq(nil));
-    try std.testing.expect(!nil.eq(int1));
+    const int1 = Expr.int(1);
+    const int2 = Expr.int(2);
+    const str = Expr{.value = .{.String = 2}};
+    const atom = Expr{.value = .{.Atom = "hello"}};
+    const nil = Expr{};
+    try std.testing.expect(int1.eq(&int1));
+    try std.testing.expect(!int1.eq(&int2));
+    try std.testing.expect(!int1.eq(&str));
+    try std.testing.expect(str.eq(&str));
+    try std.testing.expect(!str.eq(&atom));
+    try std.testing.expect(nil.eq(&nil));
+    try std.testing.expect(!nil.eq(&int1));
 }
 
-pub fn print_expr(self: *Self, out: *ToString, expr: Expr) Error!void {
-    return switch (expr) {
+pub fn print_expr(self: *Self, out: *ToString, expr: *Expr) Error!void {
+    return switch (expr.value) {
         ExprKind.Int => |value| try out.int(value),
         ExprKind.Atom => |value| try out.string(value),
         ExprKind.String => {
@@ -229,10 +214,10 @@ pub fn print_expr(self: *Self, out: *ToString, expr: Expr) Error!void {
                 try self.print_expr(out, try self.cdr(expr));
             } else {
                 var list_iter = expr;
-                while (try self.iter_list(&list_iter)) |item| {
+                while (try self.next_in_list_iter(&list_iter)) |item| {
                     try self.print_expr(out, item);
                     if (list_iter.is_true()) {
-                        if (@as(ExprKind, list_iter) != .Cons) {
+                        if (@as(ExprKind, list_iter.value) != .Cons) {
                             try out.string(" . ");
                             try self.print_expr(out, list_iter);
                             break;
@@ -243,7 +228,7 @@ pub fn print_expr(self: *Self, out: *ToString, expr: Expr) Error!void {
             }
             try out.char(')');
         },
-        ExprKind.Closure => try self.print_expr(out, expr.as_cons()),
+        ExprKind.Closure => try self.print_expr(out, expr.get_cons()),
         ExprKind.Nil => try out.string("nil"),
     };
 }
@@ -258,11 +243,11 @@ test "print_expr" {
     var tl = try Self.new(&mem, arena.allocator());
     defer tl.done();
 
-    var list = try tl.make_list([_]Expr{
-        .{.Int = 30},
+    var list = try tl.make_list([_]*Expr{
+        try tl.make_int(30),
         tl.nil,
-        .{.Int = -40},
-        try tl.make_list([_]Expr{
+        try tl.make_int(-40),
+        try tl.make_list([_]*Expr{
             try tl.make_string_copy("Hello\n"),
         }),
     });
@@ -272,13 +257,13 @@ test "print_expr" {
 
 var debug_print_buf: [256]u8 = undefined;
 
-fn debug_print(self: *Self, expected: Expr) Error![]const u8 {
+fn debug_print(self: *Self, expected: *Expr) Error![]const u8 {
     var ts = ToString{.buffer = debug_print_buf[0..], .truncate = "..."};
     try self.print_expr(&ts, expected);
     return ts.get();
 }
 
-fn expect_expr(self: *Self, expected: Expr, result: Expr) !void {
+fn expect_expr(self: *Self, expected: *Expr, result: *Expr) !void {
     const are_equal = expected.eq(result);
     if (!are_equal) {
         std.debug.print(
@@ -296,6 +281,67 @@ fn expect_expr(self: *Self, expected: Expr, result: Expr) !void {
             , .{self.debug_print(result)});
     }
     try std.testing.expect(are_equal);
+}
+
+// Garbage Collection =========================================================
+
+fn make_expr(self: *Self, from: Expr.Value) std.mem.Allocator.Error!*Expr {
+    const expr = try self.allocator.create(Expr);
+    expr.* = .{};
+    expr.value = from;
+    if (self.gc_tail) |tail| {
+        tail.gc_next = expr;
+    } else {
+        self.gc_head = expr;
+    }
+    self.gc_tail = expr;
+    return expr;
+}
+
+fn make_string(self: *Self, str: []const u8) Error!*Expr {
+    try self.strings.put(self.next_string_key, str);
+    defer self.next_string_key += 1;
+    return self.make_expr(.{.String = self.next_string_key});
+}
+
+pub fn make_int(self: *Self, value: IntType) Error!*Expr {
+    return self.make_expr(.{.Int = value});
+}
+
+pub fn make_bool(self: *const Self, value: bool) *Expr {
+    return if (value) self.tru else self.nil;
+}
+
+fn make_string_copy(self: *Self, str: []const u8) Error!*Expr {
+    return self.make_string(try self.allocator.dupe(u8, str));
+}
+
+fn collect(self: *Self) usize {
+    var expr_maybe = self.gc_root;
+
+    // Sweep Phase
+    expr_maybe = self.gc_head;
+    var count: usize = 0;
+    while (expr_maybe) |expr| {
+        expr_maybe = expr.gc_next;
+        if (!expr.gc_marked) {
+            self.allocator.destroy(expr);
+            count += 1;
+        }
+    }
+    return count;
+}
+
+test "gc" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    var mem = [_]Expr{undefined} ** 2;
+    var tl = Self.new_barren(&mem, ta.alloc());
+    {
+        _ = try tl.make_expr(.Nil);
+        _ = tl.collect();
+    }
 }
 
 // Primitive Function Support =================================================
@@ -335,21 +381,21 @@ const gen_builtin_primitives = [_]GenPrimitive{
 
 pub const Primitive = struct {
     name: []const u8,
-    rt_func: fn(tl: *Self, args: Expr, env: Expr) Error!Expr,
+    rt_func: fn(tl: *Self, args: *Expr, env: *Expr) Error!*Expr,
 };
 
 // Use comptime info to dynamically setup, check, and pass arguments to
 // primitive functions.
 fn PrimitiveAdaptor(comptime prim: GenPrimitive) type {
     return struct {
-        fn rt_func(tl: *Self, args: Expr, env: Expr) Error!Expr {
+        fn rt_func(tl: *Self, args: *Expr, env: *Expr) Error!*Expr {
             // TODO: assert expresion types and count
             const zfti = @typeInfo(@TypeOf(prim.zig_func)).Fn;
             if (zfti.args.len == 0) {
                 @compileError(prim.name ++ " primitive fn must at least take *TinyishLisp");
             }
-            if (zfti.return_type != Error!Expr) {
-                @compileError(prim.name ++ " primitive fn must return Error!Expr");
+            if (zfti.return_type != Error!*Expr) {
+                @compileError(prim.name ++ " primitive fn must return Error!*Expr");
             }
             var arg_tuple: std.meta.ArgsTuple(@TypeOf(prim.zig_func)) = undefined;
             var args_list = args;
@@ -363,7 +409,7 @@ fn PrimitiveAdaptor(comptime prim: GenPrimitive) type {
                     } else {
                         arg_tuple[0] = tl;
                     }
-                } else if (arg.arg_type.? == Expr) {
+                } else if (arg.arg_type.? == *Expr) {
                     if (i == 1 and prim.pass_env) {
                         arg_tuple[i] = env;
                     } else if (prim.pass_arg_list) {
@@ -396,7 +442,7 @@ fn populate_primitives(self: *Self, comptime gen: []const GenPrimitive,
             .rt_func = PrimitiveAdaptor(gen[i]).rt_func,
         };
         self.global_env = try self.tack_pair_to_list(try self.get_atom(gen[i].name),
-            Expr{.Primitive = index_offset + i}, self.global_env);
+            try self.make_expr(.{.Primitive = index_offset + i}), self.global_env);
         i += 1;
     }
 }
@@ -440,11 +486,11 @@ fn check_pointers(self: *Self, hp: usize, sp: usize) Error!void {
     }
 }
 
-fn get_atom(self: *Self, name: []const u8) Error!Expr {
+fn get_atom(self: *Self, name: []const u8) Error!*Expr {
     var pos: usize = 0;
     while (self.next_atom(&pos)) |str| {
         if (streq(str, name)) {
-            return Expr{.Atom = str};
+            return self.make_expr(.{.Atom = str});
         }
     }
     const end = pos + name.len;
@@ -456,12 +502,16 @@ fn get_atom(self: *Self, name: []const u8) Error!Expr {
     }
     heap[self.heap_pointer] = 0;
     self.heap_pointer += 1;
-    return Expr{.Atom = heap[pos..end]};
+    return self.make_expr(.{.Atom = heap[pos..end]});
 }
 
 test "atom" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 2;
-    var tl = Self.new_barren(&mem, undefined);
+    var tl = Self.new_barren(&mem, ta.alloc());
+    defer tl.done();
 
     // Declare two atoms
     const str1 = "hello";
@@ -477,10 +527,10 @@ test "atom" {
     try std.testing.expectEqualStrings("hello\x00world\x00",
         @ptrCast([*]const u8, tl.mem)[0..tl.heap_pointer]);
     // and is the same as the first hello
-    try std.testing.expectEqual(atom1, atom3);
+    try std.testing.expectEqual(atom1.value, atom3.value);
 
     // Trying to use too much space returns an error
-    try std.testing.expectError(Error.LispOutOfMemory, tl.get_atom("aaaaaaaaaaaaaaaaaa"));
+    try std.testing.expectError(Error.LispOutOfMemory, tl.get_atom("a" ** 28));
     // And the memory is unchanged
     try std.testing.expectEqualStrings("hello\x00world\x00",
         @ptrCast([*]const u8, tl.mem)[0..tl.heap_pointer]);
@@ -489,14 +539,13 @@ test "atom" {
 // List Functions =============================================================
 
 // (cons x y): return the pair (x y)/list
-pub fn cons(self: *Self, x: Expr, y: Expr) Error!Expr {
-    _ = try self.push(x);
-    return Expr{.Cons = try self.push(y)};
+pub fn cons(self: *Self, x: *Expr, y: *Expr) Error!*Expr {
+    return self.make_expr(.{.Cons = .{.x = x, .y = y}});
 }
 
-fn car_cdr(self: *Self, x: Expr, offset: u1) Error!Expr {
-    return switch (x) {
-        ExprKind.Cons => |index| self.mem[index + offset],
+fn car_cdr(self: *Self, x: *Expr, get_x: bool) Error!*Expr {
+    return switch (x.value) {
+        ExprKind.Cons => |*pair| if (get_x) pair.x else pair.y,
         else => blk: {
             if (debug) {
                 std.debug.print("error in car_cdr: {s} is not a list\n",
@@ -508,28 +557,32 @@ fn car_cdr(self: *Self, x: Expr, offset: u1) Error!Expr {
 }
 
 // (car x y): return x
-pub fn car(self: *Self, x: Expr) Error!Expr {
-    return try self.car_cdr(x, 1);
+pub fn car(self: *Self, x: *Expr) Error!*Expr {
+    return try self.car_cdr(x, true);
 }
 
 // (cdr x y): return y
-pub fn cdr(self: *Self, x: Expr) Error!Expr {
-    return try self.car_cdr(x, 0);
+pub fn cdr(self: *Self, x: *Expr) Error!*Expr {
+    return try self.car_cdr(x, false);
 }
 
 test "cons, car, cdr" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 16;
-    var tl = Self.new_barren(&mem, undefined);
+    var tl = Self.new_barren(&mem, ta.alloc());
+    defer tl.done();
 
-    const ten = Expr{.Int = 10};
-    const twenty = Expr{.Int = 20};
+    const ten = try tl.make_int(10);
+    const twenty = try tl.make_int(20);
     const list = try tl.cons(ten, twenty);
 
     try std.testing.expectEqual(ten, try tl.car(list));
     try std.testing.expectEqual(twenty, try tl.cdr(list));
 }
 
-pub fn make_list(self: *Self, items: anytype) Error!Expr {
+pub fn make_list(self: *Self, items: anytype) Error!*Expr {
     var head = self.nil;
     var i = items.len;
     while (i > 0) {
@@ -539,8 +592,8 @@ pub fn make_list(self: *Self, items: anytype) Error!Expr {
     return head;
 }
 
-pub fn iter_list(self: *Self, list_iter: *Expr) Error!?Expr {
-    if (list_iter.not()) {
+pub fn next_in_list_iter(self: *Self, list_iter: **Expr) Error!?*Expr {
+    if (list_iter.*.not()) {
         return null;
     }
     const value = try self.car(list_iter.*);
@@ -549,30 +602,36 @@ pub fn iter_list(self: *Self, list_iter: *Expr) Error!?Expr {
     return value;
 }
 
-test "make_list, iter_list" {
+test "make_list, next_in_list_iter" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 32;
-    var tl = Self.new_barren(&mem, undefined);
-    const items = [_]Expr{.{.Int = 30}, tl.nil, .{.Int = 40}};
+    var tl = Self.new_barren(&mem, ta.alloc());
+    tl.nil = try tl.make_expr(.Nil);
+    defer tl.done();
+
+    const items = [_]*Expr{try tl.make_int(30), try tl.make_expr(.Nil), try tl.make_int(40)};
     var list_iter = try tl.make_list(items);
     for (items) |item| {
-        try std.testing.expect((try tl.iter_list(&list_iter)).?.eq(item));
+        try std.testing.expect((try tl.next_in_list_iter(&list_iter)).?.eq(item));
     }
-    const nul: ?Expr = null;
-    try std.testing.expectEqual(nul, try tl.iter_list(&list_iter));
+    const nul: ?*Expr = null;
+    try std.testing.expectEqual(nul, try tl.next_in_list_iter(&list_iter));
 }
 
 // Tack a pair of "first" and "second" on to "list" and return the new list.
-pub fn tack_pair_to_list(self: *Self, first: Expr, second: Expr, list: Expr) Error!Expr {
+pub fn tack_pair_to_list(self: *Self, first: *Expr, second: *Expr, list: *Expr) Error!*Expr {
     return try self.cons(try self.cons(first, second), list);
 }
 
-// eval and Helpers ===========================================================
+// // eval and Helpers ===========================================================
 
 // Find definition of atom
-fn assoc(self: *Self, atom: Expr, env: Expr) Error!Expr {
+fn assoc(self: *Self, atom: *Expr, env: *Expr) Error!*Expr {
     var list_iter = env;
-    while (try self.iter_list(&list_iter)) |item| {
-        if (@as(ExprKind, item) != .Cons) {
+    while (try self.next_in_list_iter(&list_iter)) |item| {
+        if (@as(ExprKind, item.value) != .Cons) {
             return self.got_zig_error(Error.LispInvalidEnv);
         }
         if (atom.eq(try self.car(item))) {
@@ -583,15 +642,21 @@ fn assoc(self: *Self, atom: Expr, env: Expr) Error!Expr {
 }
 
 test "assoc" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
 
-    try tl.expect_expr(Expr{.Atom = "#t"}, try tl.assoc(try tl.get_atom("#t"), tl.global_env));
-    try tl.expect_expr(Expr{.Primitive = 5}, try tl.assoc(try tl.get_atom("+"), tl.global_env));
+    try tl.expect_expr(try tl.make_expr(.{.Atom = "#t"}),
+        try tl.assoc(try tl.get_atom("#t"), tl.global_env));
+    try tl.expect_expr(try tl.make_expr(.{.Primitive = 5}),
+        try tl.assoc(try tl.get_atom("+"), tl.global_env));
 }
 
-fn bind(self: *Self, vars: Expr, args: Expr, env: Expr) Error!Expr {
-    return switch (vars) {
+fn bind(self: *Self, vars: *Expr, args: *Expr, env: *Expr) Error!*Expr {
+    return switch (vars.value) {
         ExprKind.Nil => env,
         ExprKind.Cons => try self.bind(try self.cdr(vars), try self.cdr(args),
             try self.tack_pair_to_list(try self.car(vars), try self.car(args), env)),
@@ -600,8 +665,8 @@ fn bind(self: *Self, vars: Expr, args: Expr, env: Expr) Error!Expr {
 }
 
 // Eval every item in list "exprs"
-fn evlis(self: *Self, exprs: Expr, env: Expr) Error!Expr {
-    return switch (exprs) {
+fn evlis(self: *Self, exprs: *Expr, env: *Expr) Error!*Expr {
+    return switch (exprs.value) {
         ExprKind.Cons => try self.cons(
             try self.eval(try self.car(exprs), env),
             try self.evlis(try self.cdr(exprs), env)
@@ -611,8 +676,8 @@ fn evlis(self: *Self, exprs: Expr, env: Expr) Error!Expr {
 }
 
 // Run closure
-fn reduce(self: *Self, closure: Expr, args: Expr, env: Expr) Error!Expr {
-    const c = closure.as_cons();
+fn reduce(self: *Self, closure: *Expr, args: *Expr, env: *Expr) Error!*Expr {
+    const c = closure.get_cons();
     return try self.eval(
         try self.cdr(try self.car(c)),
         try self.bind(
@@ -627,8 +692,8 @@ fn reduce(self: *Self, closure: Expr, args: Expr, env: Expr) Error!Expr {
 }
 
 // Run func with args and env
-fn apply(self: *Self, callable: Expr, args: Expr, env: Expr) Error!Expr {
-    return switch (callable) {
+fn apply(self: *Self, callable: *Expr, args: *Expr, env: *Expr) Error!*Expr {
+    return switch (callable.value) {
         ExprKind.Primitive => try callable.call_primitive(self, args, env),
         ExprKind.Closure => try self.reduce(callable, args, env),
         else => blk: {
@@ -641,9 +706,9 @@ fn apply(self: *Self, callable: Expr, args: Expr, env: Expr) Error!Expr {
     };
 }
 
-pub fn eval(self: *Self, val: Expr, env: Expr) Error!Expr {
+pub fn eval(self: *Self, val: *Expr, env: *Expr) Error!*Expr {
     // if (debug) std.debug.print("eval: {s}\n", .{try self.debug_print(val)});
-    const rv = switch (val) {
+    const rv = switch (val.value) {
         ExprKind.Atom => try self.assoc(val, env),
         ExprKind.Cons => try self.apply(
             try self.eval(try self.car(val), env), try self.cdr(val), env),
@@ -654,15 +719,19 @@ pub fn eval(self: *Self, val: Expr, env: Expr) Error!Expr {
 }
 
 test "eval" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
 
-    try tl.expect_expr(Expr{.Int = 6}, try tl.eval(
-        try tl.make_list([_]Expr{
+    try tl.expect_expr(try tl.make_int(6), try tl.eval(
+        try tl.make_list([_]*Expr{
             try tl.get_atom("+"),
-            .{.Int = 1},
-            .{.Int = 2},
-            .{.Int = 3},
+            try tl.make_int(1),
+            try tl.make_int(2),
+            try tl.make_int(3),
         }),
         tl.global_env
     ));
@@ -690,7 +759,7 @@ const Token = union (TokenKind) {
     Dot: void,
 
     fn eq(self: Token, other: Token) bool {
-        return utils.unions_equal(Token, self, other);
+        return utils.any_equal(self, other);
     }
 };
 
@@ -790,7 +859,8 @@ const Tokenizer = struct {
 };
 
 test "Tokenizer" {
-    var t = Tokenizer{.input = "  (x 1( y \"hello\" ' ; This is a comment\n(24 . ab))c) ; comment at end"};
+    var t = Tokenizer{.input =
+        "  (x 1( y \"hello\" ' ; This is a comment\n(24 . ab))c) ; comment at end"};
     try std.testing.expect((try t.must_get()).eq(Token.Open));
     try std.testing.expect((try t.must_get()).eq(Token{.Atom = "x"}));
     try std.testing.expect((try t.must_get()).eq(Token{.IntValue = 1}));
@@ -809,7 +879,7 @@ test "Tokenizer" {
     try std.testing.expectError(Error.LispUnexpectedEndOfFile, t.must_get());
 }
 
-fn parse_list(self: *Self, tokenizer: *Tokenizer) Error!Expr {
+fn parse_list(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
     const token = try tokenizer.must_get();
     return switch (token) {
         TokenKind.Close => self.nil,
@@ -829,55 +899,54 @@ fn parse_list(self: *Self, tokenizer: *Tokenizer) Error!Expr {
     };
 }
 
-fn parse_quote(self: *Self, tokenizer: *Tokenizer) Error!Expr {
+fn parse_quote(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
     return try self.cons(try self.get_atom("quote"),
         try self.cons(try self.must_parse(tokenizer), self.nil));
 }
 
-fn parse_i(self: *Self, tokenizer: *Tokenizer, token: Token) Error!Expr {
+fn parse_i(self: *Self, tokenizer: *Tokenizer, token: Token) Error!*Expr {
     return switch (token) {
         TokenKind.Open => self.parse_list(tokenizer),
         TokenKind.Quote => self.parse_quote(tokenizer),
         TokenKind.Atom => |name| try self.get_atom(name),
-        TokenKind.IntValue => |value| Expr{.Int = value},
+        TokenKind.IntValue => |value| try self.make_int(value),
         TokenKind.String => |value| try self.make_string_copy(value),
         TokenKind.Close => tokenizer.print_zig_error(Error.LispInvalidParens),
         TokenKind.Dot => tokenizer.print_zig_error(Error.LispInvalidSyntax),
     };
 }
 
-fn must_parse(self: *Self, tokenizer: *Tokenizer) Error!Expr {
+fn must_parse(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
     return self.parse_i(tokenizer, try tokenizer.must_get());
 }
 
-fn parse_tokenizer(self: *Self, tokenizer: *Tokenizer) Error!?Expr {
-    var rv: ?Expr = null;
+fn parse_tokenizer(self: *Self, tokenizer: *Tokenizer) Error!?*Expr {
+    var rv: ?*Expr = null;
     if (tokenizer.get()) |t| {
-        defer self.gc();
         rv = try self.eval(try self.parse_i(tokenizer, t), self.global_env);
     }
     return rv;
 }
 
-fn parse_str(self: *Self, input: []const u8) Error!?Expr {
+fn parse_str(self: *Self, input: []const u8) Error!?*Expr {
     var tokenizer = Tokenizer{.input = input};
     return self.parse_tokenizer(&tokenizer);
 }
 
 test "parse_str" {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, arena.allocator());
+    var tl = try Self.new(&mem, ta.alloc());
     defer tl.done();
 
-    try tl.expect_expr(Expr{.Int = 6}, (try tl.parse_str("(+ 1 2 3)")).?);
+    try tl.expect_expr(try tl.make_int(6), (try tl.parse_str("(+ 1 2 3)")).?);
     try std.testing.expectEqualStrings("Hello", (try tl.parse_str("\"Hello\"")).?.get_string(&tl));
 }
 
-pub fn parse_input(self: *Self) Error!?Expr {
-    var rv: ?Expr = null;
+pub fn parse_input(self: *Self) Error!?*Expr {
+    var rv: ?*Expr = null;
     if (self.tokenizer) |*t| {
         rv = try self.parse_tokenizer(t);
     }
@@ -893,8 +962,12 @@ pub fn parse_all_input(self: *Self, input: []const u8,
 }
 
 test "parse_all_input" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
 
     try tl.parse_all_input(
         \\(define a 5)
@@ -904,68 +977,65 @@ test "parse_all_input" {
     );
 
     // Make sure both lists and pairs are parsed correctly
-    try tl.parse_all_input("(define begin (lambda (x . args) (if args (begin . args) x)))\n", null, null);
+    try tl.parse_all_input(
+        "(define begin (lambda (x . args) (if args (begin . args) x)))\n", null, null);
 
-    try tl.expect_expr(Expr{.Int = 18}, (try tl.parse_str("(func a b)")).?);
+    try tl.expect_expr(try tl.make_int(18), (try tl.parse_str("(func a b)")).?);
 }
 
 // Custom Primitive Functions =================================================
 
 var custom_primitive_test_value: i64 = 10;
-fn custom_primitive(self: *Self, value: Expr) Error!Expr {
-    _ = self;
-    defer custom_primitive_test_value = value.Int;
-    return Expr{.Int = custom_primitive_test_value};
+fn custom_primitive(self: *Self, value: *Expr) Error!*Expr {
+    defer custom_primitive_test_value = value.value.Int;
+    return self.make_int(custom_primitive_test_value);
 }
 
 test "custom primitive" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
     const custom = [_]GenPrimitive{
         .{.name = "cp", .zig_func = custom_primitive},
     };
     var custom_primitives: [custom.len]Primitive = undefined;
     try tl.populate_extra_primitives(custom[0..], custom_primitives[0..]);
-    try tl.expect_expr(Expr{.Int = 10}, (try tl.parse_str("(cp 20)")).?);
+
+    try tl.expect_expr(try tl.make_int(10), (try tl.parse_str("(cp 20)")).?);
     try std.testing.expectEqual(@as(i64, 20), custom_primitive_test_value);
 }
 
 // Rest of Primitive Functions ================================================
 
 // (` x): return x
-fn quote(self: *Self, x: Expr) Error!Expr {
+fn quote(self: *Self, x: *Expr) Error!*Expr {
     _ = self;
     return x;
 }
 
-pub fn make_bool(self: *const Self, value: bool) Expr {
-    return if (value) self.tru else self.nil;
-}
-
 // (eq? x y): return tru if x equals y else nil
-pub fn eq(self: *Self, x: Expr, y: Expr) Error!Expr {
+pub fn eq(self: *Self, x: *Expr, y: *Expr) Error!*Expr {
     return self.make_bool(x.eq(y));
 }
 
-pub fn make_closure(self: *Self, args: Expr, func: Expr, env: Expr) Error!Expr {
-    return (try self.tack_pair_to_list(args, func,
-        if (env.eq(self.global_env)) self.nil else env)).as_closure();
-}
-
-pub fn add(self: *Self, args: Expr) Error!Expr {
+pub fn add(self: *Self, args: *Expr) Error!*Expr {
     var expr_kind: ?ExprKind = null;
     var total_string_len: usize = 0;
     {
         var check_iter = args;
-        while (try self.iter_list(&check_iter)) |arg| {
+        while (try self.next_in_list_iter(&check_iter)) |arg| {
             if (expr_kind) |ek| {
-                if (ek != @as(ExprKind, arg)) {
+                if (ek != @as(ExprKind, arg.value)) {
                     return Error.LispInvalidPrimitiveArgKind;
                 }
             } else {
-                expr_kind = @as(ExprKind, arg);
+                expr_kind = @as(ExprKind, arg.value);
             }
-            switch (@as(ExprKind, arg)) {
+            switch (@as(ExprKind, arg.value)) {
                 .String => total_string_len += arg.get_string(self).len,
                 .Int => {},
                 else => return Error.LispInvalidPrimitiveArgKind,
@@ -976,17 +1046,17 @@ pub fn add(self: *Self, args: Expr) Error!Expr {
         switch (ek) {
             ExprKind.Int => {
                 var list_iter = args;
-                var result: IntType = (try self.iter_list(&list_iter)).?.Int;
-                while (try self.iter_list(&list_iter)) |arg| {
-                    result += arg.Int;
+                var result: IntType = (try self.next_in_list_iter(&list_iter)).?.value.Int;
+                while (try self.next_in_list_iter(&list_iter)) |arg| {
+                    result += arg.value.Int;
                 }
-                return Expr{.Int = result};
+                return self.make_int(result);
             },
             ExprKind.String => {
                 var list_iter = args;
                 var result: []u8 = try self.allocator.alloc(u8, total_string_len);
                 var got: usize = 0;
-                while (try self.iter_list(&list_iter)) |arg| {
+                while (try self.next_in_list_iter(&list_iter)) |arg| {
                     const s = arg.get_string(self);
                     for (s) |c| {
                         result[got] = c;
@@ -1002,68 +1072,68 @@ pub fn add(self: *Self, args: Expr) Error!Expr {
 }
 
 test "add" {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, arena.allocator());
+    var tl = try Self.new(&mem, ta.alloc());
     defer tl.done();
 
-    try tl.expect_expr(Expr{.Int = 6}, (try tl.parse_str("(+ 1 2 3)")).?);
+    try tl.expect_expr(try tl.make_int(6), (try tl.parse_str("(+ 1 2 3)")).?);
     try std.testing.expectEqualStrings("Hello world", (
         try tl.parse_str("(+ \"Hello\" \" world\")")).?.get_string(&tl));
 }
 
-pub fn subtract(self: *Self, args: Expr) Error!Expr {
+pub fn subtract(self: *Self, args: *Expr) Error!*Expr {
     var list_iter = args;
-    var result: IntType = (try self.iter_list(&list_iter)).?.Int;
-    while (try self.iter_list(&list_iter)) |arg| {
-        result -= arg.Int;
+    var result: IntType = (try self.next_in_list_iter(&list_iter)).?.value.Int;
+    while (try self.next_in_list_iter(&list_iter)) |arg| {
+        result -= arg.value.Int;
     }
-    return Expr{.Int = result};
+    return self.make_int(result);
 }
 
-pub fn multiply(self: *Self, args: Expr) Error!Expr {
+pub fn multiply(self: *Self, args: *Expr) Error!*Expr {
     var list_iter = args;
-    var result: IntType = (try self.iter_list(&list_iter)).?.Int;
-    while (try self.iter_list(&list_iter)) |arg| {
-        result *= arg.Int;
+    var result: IntType = (try self.next_in_list_iter(&list_iter)).?.value.Int;
+    while (try self.next_in_list_iter(&list_iter)) |arg| {
+        result *= arg.value.Int;
     }
-    return Expr{.Int = result};
+    return self.make_int(result);
 }
 
-pub fn divide(self: *Self, args: Expr) Error!Expr {
+pub fn divide(self: *Self, args: *Expr) Error!*Expr {
     var list_iter = args;
-    var result: IntType = (try self.iter_list(&list_iter)).?.Int;
-    while (try self.iter_list(&list_iter)) |arg| {
-        result = @divFloor(result, arg.Int);
+    var result: IntType = (try self.next_in_list_iter(&list_iter)).?.value.Int;
+    while (try self.next_in_list_iter(&list_iter)) |arg| {
+        result = @divFloor(result, arg.value.Int);
     }
-    return Expr{.Int = result};
+    return self.make_int(result);
 }
 
-pub fn less(self: *Self, x: Expr, y: Expr) Error!Expr {
-    return self.make_bool(x.Int < y.Int);
+pub fn less(self: *Self, x: *Expr, y: *Expr) Error!*Expr {
+    return self.make_bool(x.value.Int < y.value.Int);
 }
 
-pub fn @"or"(self: *Self, x: Expr, y: Expr) Error!Expr {
+pub fn @"or"(self: *Self, x: *Expr, y: *Expr) Error!*Expr {
     return self.make_bool(x.is_true() or y.is_true());
 }
 
-pub fn @"and"(self: *Self, x: Expr, y: Expr) Error!Expr {
+pub fn @"and"(self: *Self, x: *Expr, y: *Expr) Error!*Expr {
     return self.make_bool(x.is_true() and y.is_true());
 }
 
-pub fn @"not"(self: *Self, x: Expr) Error!Expr {
+pub fn @"not"(self: *Self, x: *Expr) Error!*Expr {
     return self.make_bool(x.not());
 }
 
-pub fn cond(self: *Self, env: Expr, args: Expr) Error!Expr {
+pub fn cond(self: *Self, env: *Expr, args: *Expr) Error!*Expr {
     var list_iter = args;
     var rv = self.nil;
-    while (try self.iter_list(&list_iter)) |cond_value| {
+    while (try self.next_in_list_iter(&list_iter)) |cond_value| {
         var cond_value_it = cond_value;
-        const test_cond = (try self.iter_list(&cond_value_it)).?;
-        const return_value = (try self.iter_list(&cond_value_it)).?;
+        const test_cond = (try self.next_in_list_iter(&cond_value_it)).?;
+        const return_value = (try self.next_in_list_iter(&cond_value_it)).?;
         if ((try self.eval(test_cond, env)).is_true()) {
             rv = try self.eval(return_value, env);
         }
@@ -1072,32 +1142,43 @@ pub fn cond(self: *Self, env: Expr, args: Expr) Error!Expr {
 }
 
 test "cond" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
-    try tl.expect_expr(Expr{.Int = 3}, (try tl.parse_str(
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
+    try tl.expect_expr(try tl.make_int(3), (try tl.parse_str(
         "(cond ((eq? 'a 'b) 1) ((< 2 1) 2) (#t 3))")).?);
 }
 
-pub fn @"if"(self: *Self, env: Expr, test_expr: Expr, then_expr: Expr, else_expr: Expr) Error!Expr {
+pub fn @"if"(self: *Self, env: *Expr, test_expr: *Expr,
+        then_expr: *Expr, else_expr: *Expr) Error!*Expr {
     const result_expr = if ((try self.eval(test_expr, env)).is_true()) then_expr else else_expr;
     return try self.eval(result_expr, env);
 }
 
 test "if" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
-    try tl.expect_expr(Expr{.Int = 1}, (try tl.parse_str("(if (eq? 'a 'a) 1 2)")).?);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
+    try tl.expect_expr(try tl.make_int(1), (try tl.parse_str("(if (eq? 'a 'a) 1 2)")).?);
 }
 
 // (let* (a x) (b x) ... (+ a b))
-pub fn leta(self: *Self, env: Expr, args: Expr) Error!Expr {
+pub fn leta(self: *Self, env: *Expr, args: *Expr) Error!*Expr {
     var list_iter = args;
     var this_env = env;
-    while (try self.iter_list(&list_iter)) |arg| {
+    while (try self.next_in_list_iter(&list_iter)) |arg| {
         if (list_iter.is_true()) {
             var var_value_it = arg;
-            const var_expr = (try self.iter_list(&var_value_it)).?;
-            const value_expr = (try self.iter_list(&var_value_it)).?;
+            const var_expr = (try self.next_in_list_iter(&var_value_it)).?;
+            const value_expr = (try self.next_in_list_iter(&var_value_it)).?;
             const value = try self.eval(value_expr, this_env);
             this_env = try self.tack_pair_to_list(var_expr, value, this_env);
         } else {
@@ -1108,31 +1189,48 @@ pub fn leta(self: *Self, env: Expr, args: Expr) Error!Expr {
 }
 
 test "leta" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
-    try tl.expect_expr(Expr{.Int = 12}, (try tl.parse_str("(let* (a 3) (b (* a a)) (+ a b))")).?);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
+    try tl.expect_expr(try tl.make_int(12),
+        (try tl.parse_str("(let* (a 3) (b (* a a)) (+ a b))")).?);
 }
 
 // (lambda args expr)
-pub fn lambda(self: *Self, env: Expr, args: Expr, expr: Expr) Error!Expr {
-    return self.make_closure(args, expr, env);
+pub fn lambda(self: *Self, env: *Expr, args: *Expr, expr: *Expr) Error!*Expr {
+    return self.make_expr(.{.Closure = try self.tack_pair_to_list(args, expr,
+        if (env.eq(self.global_env)) self.nil else env)});
 }
 
 test "lambda" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     var mem = [_]Expr{undefined} ** 254;
-    var tl = try Self.new(&mem, undefined);
-    try tl.expect_expr(Expr{.Int = 9}, (try tl.parse_str("((lambda (x) (* x x)) 3)")).?);
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
+    try tl.expect_expr(try tl.make_int(9), (try tl.parse_str("((lambda (x) (* x x)) 3)")).?);
 }
 
 // (define var expr)
-pub fn define(self: *Self, env: Expr, atom: Expr, expr: Expr) Error!Expr {
+pub fn define(self: *Self, env: *Expr, atom: *Expr, expr: *Expr) Error!*Expr {
     self.global_env = try self.tack_pair_to_list(atom, try self.eval(expr, env), env);
     return atom;
 }
 
 test "define" {
-    var mem = [_]Expr{undefined} ** 128;
-    var tl = try Self.new(&mem, undefined);
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    var mem = [_]Expr{undefined} ** 254;
+    var tl = try Self.new(&mem, ta.alloc());
+    defer tl.done();
+
     _ = try tl.parse_str("(define x 3)");
-    try tl.expect_expr(Expr{.Int = 4}, (try tl.parse_str("(+ 1 x)")).?);
+    try tl.expect_expr(try tl.make_int(4), (try tl.parse_str("(+ 1 x)")).?);
 }

@@ -202,8 +202,6 @@ fn run_command(command: []const u8) bool {
         }
     } else if (streq(command_parts[0], "motd")) {
         read_motd();
-    } else if (streq(command_parts[0], "free")) {
-        try console_writer.print("{}\n", .{tl.free()});
     } else {
         var command_path = command_parts[0];
         var path_buffer: [128]u8 = undefined;
