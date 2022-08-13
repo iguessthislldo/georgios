@@ -17,7 +17,7 @@ pub fn List(comptime Type: type) type {
         tail: ?*Node = null,
         len: usize = 0,
 
-        pub fn remove_node(self: *Self, node_maybe: ?*Node) void {
+        pub fn unlink_node(self: *Self, node_maybe: ?*Node) void {
             if (node_maybe) |node| {
                 if (node.next) |next| {
                     next.prev = node.prev;
@@ -33,6 +33,15 @@ pub fn List(comptime Type: type) type {
                 }
                 self.len -= 1;
             }
+        }
+
+        pub fn destroy_node(self: *Self, node: *Node) void {
+            self.alloc.destroy(node);
+        }
+
+        pub fn remove_node(self: *Self, node: *Node) void {
+            self.unlink_node(node);
+            self.destroy_node(node);
         }
 
         pub fn push_front_node(self: *Self, node: *Node) void {
@@ -56,14 +65,14 @@ pub fn List(comptime Type: type) type {
 
         pub fn pop_front_node(self: *Self) ?*Node {
             const node = self.head;
-            self.remove_node(node);
+            self.unlink_node(node);
             return node;
         }
 
         pub fn pop_front(self: *Self) ?Type {
             if (self.pop_front_node()) |node| {
                 const value = node.value;
-                self.alloc.destroy(node);
+                self.destroy_node(node);
                 return value;
             }
             return null;
@@ -73,7 +82,7 @@ pub fn List(comptime Type: type) type {
             if (self.head == node) {
                 return;
             }
-            self.remove_node(node);
+            self.unlink_node(node);
             self.push_front_node(node);
         }
 
@@ -98,14 +107,14 @@ pub fn List(comptime Type: type) type {
 
         pub fn pop_back_node(self: *Self) ?*Node {
             const node = self.tail;
-            self.remove_node(node);
+            self.unlink_node(node);
             return node;
         }
 
         pub fn pop_back(self: *Self) ?Type {
             if (self.pop_back_node()) |node| {
                 const value = node.value;
-                self.alloc.destroy(node);
+                self.destroy_node(node);
                 return value;
             }
             return null;
@@ -115,7 +124,7 @@ pub fn List(comptime Type: type) type {
             if (self.tail == node) {
                 return;
             }
-            self.remove_node(node);
+            self.unlink_node(node);
             self.push_back_node(node);
         }
 
@@ -138,7 +147,7 @@ pub fn List(comptime Type: type) type {
 
         pub fn clear(self: *Self) void {
             while (self.pop_back_node()) |node| {
-                self.alloc.destroy(node);
+                self.destroy_node(node);
             }
         }
 

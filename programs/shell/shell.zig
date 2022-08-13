@@ -27,7 +27,6 @@ var alloc: std.mem.Allocator = undefined;
 var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
 var tl: TinyishLisp = undefined;
-var tl_mem = [_]TinyishLisp.Expr{undefined} ** (1024);
 
 const console_writer = georgios.get_console_writer();
 
@@ -277,7 +276,7 @@ pub fn main() void {
     alloc = arena.allocator();
     defer arena.deinit();
 
-    tl = TinyishLisp.new(&tl_mem, alloc) catch |e| {
+    tl = TinyishLisp.new(alloc) catch |e| {
         print_string("lisp init failed: ");
         print_string(@errorName(e));
         print_string("\n");

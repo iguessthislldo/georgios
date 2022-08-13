@@ -28,8 +28,7 @@ pub fn main() !u8 {
 
     var stdout_ots = OurToString{.writer = &stdout};
     var stderr_ots = OurToString{.writer = &stderr};
-    var mem = [_]TinyishLisp.Expr{undefined} ** (1024 * 10);
-    var tl = try TinyishLisp.new(&mem, allocator);
+    var tl = try TinyishLisp.new(allocator);
 
     var line_contents = std.ArrayList(u8).init(allocator);
     defer line_contents.deinit();
