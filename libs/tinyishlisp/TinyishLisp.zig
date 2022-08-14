@@ -51,7 +51,11 @@ builtin_primitives: [gen_builtin_primitives.len]Primitive = undefined,
 extra_primitives: ?[]Primitive = null,
 
 // Parsing
-tokenizer: ?Tokenizer = null,
+input: ?[]const u8 = null,
+pos: usize = 0,
+input_name: ?[]const u8 = null,
+lineno: usize = 1,
+error_out: ?*ToString = null,
 
 pub fn new_barren(allocator: Allocator) Self {
     return .{
@@ -84,20 +88,18 @@ pub fn done(self: *Self) void {
 
 pub fn set_input(self: *Self,
         input: []const u8, input_name: ?[]const u8, error_out: ?*ToString) void {
-    self.tokenizer = Tokenizer{.input = input, .input_name = input_name, .error_out = error_out};
+    self.pos = 0;
+    self.input = input;
+    self.input_name = input_name;
+    self.error_out = error_out;
 }
 
 pub fn got_zig_error(self: *Self, error_value: Error) Error {
-    if (self.tokenizer) |*t| {
-        return t.print_zig_error(error_value);
-    }
-    return error_value;
+    return self.print_zig_error(error_value);
 }
 
 pub fn got_lisp_error(self: *Self, reason: []const u8) *Expr {
-    if (self.tokenizer) |*t| {
-        t.print_error(reason);
-    }
+    self.print_error(reason);
     return self.err;
 }
 
@@ -854,16 +856,10 @@ const Token = union (TokenKind) {
     }
 };
 
-const Tokenizer = struct {
-    input: []const u8,
-    pos: usize = 0,
-    input_name: ?[]const u8 = null,
-    lineno: usize = 1,
-    error_out: ?*ToString = null,
-
-    fn get(self: *Tokenizer) ?Token {
-        while (self.pos < self.input.len) {
-            switch (self.input[self.pos]) {
+fn get_token(self: *Self) ?Token {
+    if (self.input) |input| {
+        while (self.pos < input.len) {
+            switch (input[self.pos]) {
                 '\n' => {
                     self.lineno += 1;
                     self.pos += 1;
@@ -872,7 +868,7 @@ const Tokenizer = struct {
                     self.pos += 1;
                 },
                 ';' => {
-                    while (self.pos < self.input.len and self.input[self.pos] != '\n') {
+                    while (self.pos < input.len and input[self.pos] != '\n') {
                         self.pos += 1;
                     }
                 },
@@ -882,9 +878,9 @@ const Tokenizer = struct {
         var token: ?Token = null;
         var start: usize = self.pos;
         var first = true;
-        while (self.pos < self.input.len) {
+        while (self.pos < input.len) {
             var special_token: ?Token = null;
-            switch (self.input[self.pos]) {
+            switch (input[self.pos]) {
                 '(' => special_token = Token.Open,
                 ')' => special_token = Token.Close,
                 '\'' => special_token = Token.Quote,
@@ -896,11 +892,11 @@ const Tokenizer = struct {
                     if (first) {
                         self.pos += 1; // starting quote
                         start = self.pos;
-                        while (self.input[self.pos] != '"') {
+                        while (input[self.pos] != '"') {
                             // TODO: Unexpected newline or eof
                             self.pos += 1;
                         }
-                        token = Token{.String = self.input[start..self.pos]};
+                        token = Token{.String = input[start..self.pos]};
                         self.pos += 1; // ending quote
                     }
                     break;
@@ -917,105 +913,112 @@ const Tokenizer = struct {
             }
             break;
         }
-        const str = self.input[start..self.pos];
+        const str = input[start..self.pos];
         if (token == null and str.len > 0) {
             const int_value: ?IntType = std.fmt.parseInt(IntType, str, 0) catch null;
             token = if (int_value) |iv| Token{.IntValue = iv} else Token{.Atom = str};
         }
         return token;
     }
-
-    fn must_get(self: *Tokenizer) Error!Token {
-        return self.get() orelse self.print_zig_error(Error.LispUnexpectedEndOfFile);
-    }
-
-    fn print_error(self: *Tokenizer, reason: []const u8) void {
-        if (self.error_out) |eo| {
-            eo.string("ERROR on line ") catch unreachable;
-            eo.int(self.lineno) catch unreachable;
-            if (self.input_name) |in| {
-                eo.string(" of ") catch unreachable;
-                eo.string(in) catch unreachable;
-            }
-            eo.string(": ") catch unreachable;
-            eo.string(reason) catch unreachable;
-            eo.char('\n') catch unreachable;
-        }
-    }
-
-    fn print_zig_error(self: *Tokenizer, error_value: Error) Error {
-        self.print_error(@errorName(error_value));
-        return error_value;
-    }
-};
-
-test "Tokenizer" {
-    var t = Tokenizer{.input =
-        "  (x 1( y \"hello\" ' ; This is a comment\n(24 . ab))c) ; comment at end"};
-    try std.testing.expect((try t.must_get()).eq(Token.Open));
-    try std.testing.expect((try t.must_get()).eq(Token{.Atom = "x"}));
-    try std.testing.expect((try t.must_get()).eq(Token{.IntValue = 1}));
-    try std.testing.expect((try t.must_get()).eq(Token.Open));
-    try std.testing.expect((try t.must_get()).eq(Token{.Atom = "y"}));
-    try std.testing.expect((try t.must_get()).eq(Token{.String = "hello"}));
-    try std.testing.expect((try t.must_get()).eq(Token.Quote));
-    try std.testing.expect((try t.must_get()).eq(Token.Open));
-    try std.testing.expect((try t.must_get()).eq(Token{.IntValue = 24}));
-    try std.testing.expect((try t.must_get()).eq(Token.Dot));
-    try std.testing.expect((try t.must_get()).eq(Token{.Atom = "ab"}));
-    try std.testing.expect((try t.must_get()).eq(Token.Close));
-    try std.testing.expect((try t.must_get()).eq(Token.Close));
-    try std.testing.expect((try t.must_get()).eq(Token{.Atom = "c"}));
-    try std.testing.expect((try t.must_get()).eq(Token.Close));
-    try std.testing.expectError(Error.LispUnexpectedEndOfFile, t.must_get());
+    return null;
 }
 
-fn parse_list(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
-    const token = try tokenizer.must_get();
+fn must_get_token(self: *Self) Error!Token {
+    return self.get_token() orelse self.print_zig_error(Error.LispUnexpectedEndOfFile);
+}
+
+fn print_error(self: *Self, reason: []const u8) void {
+    if (self.error_out) |eo| {
+        eo.string("ERROR on line ") catch unreachable;
+        eo.int(self.lineno) catch unreachable;
+        if (self.input_name) |in| {
+            eo.string(" of ") catch unreachable;
+            eo.string(in) catch unreachable;
+        }
+        eo.string(": ") catch unreachable;
+        eo.string(reason) catch unreachable;
+        eo.char('\n') catch unreachable;
+    }
+}
+
+fn print_zig_error(self: *Self, error_value: Error) Error {
+    self.print_error(@errorName(error_value));
+    return error_value;
+}
+
+test "tokenize" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    var tl = Self.new_barren(ta.alloc());
+    defer tl.done();
+
+    tl.input = "  (x 1( y \"hello\" ' ; This is a comment\n(24 . ab))c) ; comment at end";
+
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "x"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 1}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "y"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.String = "hello"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Quote));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 24}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Dot));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "ab"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Close));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Close));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "c"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token.Close));
+    try std.testing.expectError(Error.LispUnexpectedEndOfFile, tl.must_get_token());
+}
+
+fn parse_list(self: *Self) Error!*Expr {
+    const token = try self.must_get_token();
     return switch (token) {
         TokenKind.Close => self.nil,
         TokenKind.Dot => dot_blk: {
-            const second = self.must_parse(tokenizer);
-            const expected_close = try tokenizer.must_get();
+            const second = self.must_parse_token();
+            const expected_close = try self.must_get_token();
             if (@as(TokenKind, expected_close) != .Close) {
-                return tokenizer.print_zig_error(Error.LispInvalidParens);
+                return self.print_zig_error(Error.LispInvalidParens);
             }
             break :dot_blk second;
         },
         else => else_blk: {
-            const first = try self.parse_i(tokenizer, token);
-            const second = try self.parse_list(tokenizer);
+            const first = try self.parse_i(token);
+            const second = try self.parse_list();
             break :else_blk try self.cons(first, second);
         }
     };
 }
 
-fn parse_quote(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
+fn parse_quote(self: *Self) Error!*Expr {
     return try self.cons(try self.get_atom("quote"),
-        try self.cons(try self.must_parse(tokenizer), self.nil));
+        try self.cons(try self.must_parse_token(), self.nil));
 }
 
-fn parse_i(self: *Self, tokenizer: *Tokenizer, token: Token) Error!*Expr {
+fn parse_i(self: *Self, token: Token) Error!*Expr {
     return switch (token) {
-        TokenKind.Open => self.parse_list(tokenizer),
-        TokenKind.Quote => self.parse_quote(tokenizer),
+        TokenKind.Open => self.parse_list(),
+        TokenKind.Quote => self.parse_quote(),
         TokenKind.Atom => |name| try self.make_atom(name, .Copy),
         TokenKind.IntValue => |value| try self.make_int(value),
         TokenKind.String => |value| try self.make_string(value, .Copy),
-        TokenKind.Close => tokenizer.print_zig_error(Error.LispInvalidParens),
-        TokenKind.Dot => tokenizer.print_zig_error(Error.LispInvalidSyntax),
+        TokenKind.Close => self.print_zig_error(Error.LispInvalidParens),
+        TokenKind.Dot => self.print_zig_error(Error.LispInvalidSyntax),
     };
 }
 
-fn must_parse(self: *Self, tokenizer: *Tokenizer) Error!*Expr {
-    return self.parse_i(tokenizer, try tokenizer.must_get());
+fn must_parse_token(self: *Self) Error!*Expr {
+    return self.parse_i(try self.must_get_token());
 }
 
-fn parse_tokenizer(self: *Self, tokenizer: *Tokenizer) Error!?*Expr {
+fn parse_tokenizer(self: *Self) Error!?*Expr {
     var rv: ?*Expr = null;
-    if (tokenizer.get()) |t| {
+    if (self.get_token()) |t| {
         defer _ = self.collect(.Unused);
-        rv = try self.eval(try self.parse_i(tokenizer, t), self.global_env);
+        rv = try self.eval(try self.parse_i(t), self.global_env);
         self.parse_return = rv;
     } else if (self.parse_return != null) {
         self.parse_return = null;
@@ -1025,8 +1028,8 @@ fn parse_tokenizer(self: *Self, tokenizer: *Tokenizer) Error!?*Expr {
 }
 
 fn parse_str(self: *Self, input: []const u8) Error!?*Expr {
-    var tokenizer = Tokenizer{.input = input};
-    return self.parse_tokenizer(&tokenizer);
+    self.set_input(input, null, null);
+    return self.parse_tokenizer();
 }
 
 test "parse_str" {
@@ -1043,9 +1046,7 @@ test "parse_str" {
 
 pub fn parse_input(self: *Self) Error!?*Expr {
     var rv: ?*Expr = null;
-    if (self.tokenizer) |*t| {
-        rv = try self.parse_tokenizer(t);
-    }
+    rv = try self.parse_tokenizer();
     return rv;
 }
 
