@@ -9,7 +9,7 @@ const Allocator = std.mem.Allocator;
 
 const utils = @import("utils");
 const streq = utils.memory_compare;
-const ToString = utils.ToString;
+const GenericWriter = utils.GenericWriter;
 
 const Self = @This();
 
@@ -28,7 +28,7 @@ const Error = error {
     LispInvalidParens,
     LispInvalidSyntax,
     LispInvalidEnv,
-} || utils.Error || std.mem.Allocator.Error;
+} || utils.Error || std.mem.Allocator.Error || GenericWriter.GenericWriterError;
 
 const ExprList = utils.List(Expr);
 const AtomMap = std.StringHashMap(*Expr);
@@ -55,7 +55,8 @@ input: ?[]const u8 = null,
 pos: usize = 0,
 input_name: ?[]const u8 = null,
 lineno: usize = 1,
-error_out: ?*ToString = null,
+out: ?*GenericWriter.Writer = null,
+error_out: ?*GenericWriter.Writer = null,
 
 pub fn new_barren(allocator: Allocator) Self {
     return .{
@@ -86,12 +87,10 @@ pub fn done(self: *Self) void {
     self.gc_keep.deinit();
 }
 
-pub fn set_input(self: *Self,
-        input: []const u8, input_name: ?[]const u8, error_out: ?*ToString) void {
+pub fn set_input(self: *Self, input: []const u8, input_name: ?[]const u8) void {
     self.pos = 0;
     self.input = input;
     self.input_name = input_name;
-    self.error_out = error_out;
 }
 
 pub fn got_zig_error(self: *Self, error_value: Error) Error {
@@ -168,30 +167,30 @@ pub const Expr = struct {
         };
     }
 
-    fn primitive_obj(self: *Expr, tl: *Self) Error!*const Primitive {
+    pub fn primitive_obj(self: *Expr, tl: *Self) Error!*const Primitive {
         return switch (self.value) {
             ExprKind.Primitive => |index| try tl.get_primitive(index),
             else => @panic("Expr.primitive_obj() called with non-primitive"),
         };
     }
 
-    fn call_primitive(self: *Expr, tl: *Self, args: *Expr, env: *Expr) Error!*Expr {
+    pub fn call_primitive(self: *Expr, tl: *Self, args: *Expr, env: *Expr) Error!*Expr {
         return (try self.primitive_obj(tl)).rt_func(tl, args, env);
     }
 
-    fn primitive_name(self: *Expr, tl: *Self) Error![]const u8 {
+    pub fn primitive_name(self: *Expr, tl: *Self) Error![]const u8 {
         return (try self.primitive_obj(tl)).name;
     }
 
-    fn not(self: *const Expr) bool {
+    pub fn not(self: *const Expr) bool {
         return @as(ExprKind, self.value) == .Nil;
     }
 
-    fn is_true(self: *const Expr) bool {
+    pub fn is_true(self: *const Expr) bool {
         return !self.not();
     }
 
-    fn eq(self: *const Expr, other: *const Expr) bool {
+    pub fn eq(self: *const Expr, other: *const Expr) bool {
         if (self == other) return true;
         return utils.any_equal(self.value, other.value);
     }
@@ -210,94 +209,6 @@ test "Expr" {
     try std.testing.expect(!str.eq(&atom));
     try std.testing.expect(nil.eq(&nil));
     try std.testing.expect(!nil.eq(&int1));
-}
-
-pub fn print_expr(self: *Self, out: *ToString, expr: *Expr) Error!void {
-    return switch (expr.value) {
-        ExprKind.Int => |value| try out.int(value),
-        ExprKind.Atom => |value| self.print_expr(out, value),
-        ExprKind.String => {
-            try out.std_writer().print("\"{}\"", .{std.zig.fmtEscapes(expr.get_string())});
-        },
-        ExprKind.Primitive => {
-            try out.char('#');
-            try out.string(try expr.primitive_name(self));
-        },
-        ExprKind.Cons => {
-            try out.char('(');
-            if (print_raw_list) {
-                try self.print_expr(out, try self.car(expr));
-                try out.string(" . ");
-                try self.print_expr(out, try self.cdr(expr));
-            } else {
-                var list_iter = expr;
-                while (try self.next_in_list_iter(&list_iter)) |item| {
-                    try self.print_expr(out, item);
-                    if (list_iter.is_true()) {
-                        if (@as(ExprKind, list_iter.value) != .Cons) {
-                            try out.string(" . ");
-                            try self.print_expr(out, list_iter);
-                            break;
-                        }
-                        try out.char(' ');
-                    }
-                }
-            }
-            try out.char(')');
-        },
-        ExprKind.Closure => try self.print_expr(out, expr.get_cons()),
-        ExprKind.Nil => try out.string("nil"),
-    };
-}
-
-test "print_expr" {
-    var ta = utils.TestAlloc{};
-    defer ta.deinit(.Panic);
-    errdefer ta.deinit(.NoPanic);
-    var tl = try Self.new(ta.alloc());
-    defer tl.done();
-
-    var buf: [128]u8 = undefined;
-    var ts = ToString{.buffer = buf[0..], .truncate = "..."};
-
-    var list = try tl.make_list([_]*Expr{
-        try tl.make_int(30),
-        tl.nil,
-        try tl.make_int(-40),
-        try tl.make_list([_]*Expr{
-            try tl.make_string("Hello\n", .NoCopy),
-        }),
-    });
-    try tl.print_expr(&ts, list);
-    try std.testing.expectEqualStrings("(30 nil -40 (\"Hello\\n\"))", ts.get());
-}
-
-var debug_print_buf: [256]u8 = undefined;
-
-fn debug_print(self: *Self, expected: *Expr) Error![]const u8 {
-    var ts = ToString{.buffer = debug_print_buf[0..], .truncate = "..."};
-    try self.print_expr(&ts, expected);
-    return ts.get();
-}
-
-fn expect_expr(self: *Self, expected: *Expr, result: *Expr) !void {
-    const are_equal = expected.eq(result);
-    if (!are_equal) {
-        std.debug.print(
-            \\
-            \\Expected this expression: =====================================================
-            \\{s}
-            \\
-            , .{self.debug_print(expected)});
-
-        std.debug.print(
-            \\But found this: ===============================================================
-            \\{s}
-            \\===============================================================================
-            \\
-            , .{self.debug_print(result)});
-    }
-    try std.testing.expect(are_equal);
 }
 
 // Garbage Collection =========================================================
@@ -536,6 +447,7 @@ const gen_builtin_primitives = [_]GenPrimitive{
         .preeval_args = false, .pass_env = true, .pass_arg_list = true},
     .{.name = "lambda", .zig_func = lambda, .preeval_args = false, .pass_env = true},
     .{.name = "define", .zig_func = define, .preeval_args = false, .pass_env = true},
+    .{.name = "print", .zig_func = print, .pass_arg_list = true},
 };
 
 pub const Primitive = struct {
@@ -720,7 +632,138 @@ pub fn tack_pair_to_list(self: *Self, first: *Expr, second: *Expr, list: *Expr) 
     return try self.cons(try self.cons(first, second), list);
 }
 
-// // eval and Helpers ===========================================================
+// print_expr =================================================================
+
+const PrintKind = enum {
+    Repr,
+    RawRepr,
+    Display,
+};
+
+// TODO: Remove error hack if https://github.com/ziglang/zig/issues/2971 is fixed
+pub fn print_expr(self: *Self, writer: anytype, expr: *Expr, kind: PrintKind)
+        @typeInfo(@typeInfo(@TypeOf(writer.write)).BoundFn.return_type.?).ErrorUnion.error_set!void {
+    const repr = kind == .Repr or kind == .RawRepr;
+    switch (expr.value) {
+        .Int => |value| try writer.print("{}", .{value}),
+        .Atom => |value| try self.print_expr(writer, value, .Display),
+        .String => |string_value| if (repr) {
+            try writer.print("\"{}\"", .{std.zig.fmtEscapes(string_value.string)});
+        } else {
+            _ = try writer.write(string_value.string);
+        },
+        .Cons => |*pair| {
+            _ = try writer.write("(");
+            if (kind == .RawRepr) {
+                try self.print_expr(writer, pair.x, kind);
+                _ = try writer.write(" . ");
+                try self.print_expr(writer, pair.y, kind);
+            } else {
+                var cons_expr = expr;
+                while (@as(ExprKind, cons_expr.value) == .Cons) {
+                    try self.print_expr(writer, cons_expr.value.Cons.x, kind);
+                    const next_cons_expr = cons_expr.value.Cons.y;
+                    if (next_cons_expr.is_true()) {
+                        if (@as(ExprKind, next_cons_expr.value) != .Cons) {
+                            _ = try writer.write(" . ");
+                            try self.print_expr(writer, next_cons_expr, kind);
+                            break;
+                        }
+                        _ = try writer.write(" ");
+                    }
+                    cons_expr = next_cons_expr;
+                }
+            }
+            _ = try writer.write(")");
+        },
+        .Closure => try self.print_expr(writer, expr.get_cons(), kind),
+        .Primitive => try writer.print("#{s}",
+            .{&(expr.primitive_name(self) catch "(could not get primitive name)")}),
+        .Nil => if (repr) {
+            _ = try writer.write("nil");
+        },
+    }
+}
+
+pub fn print_expr_to_string(self: *Self, expr: *Expr, kind: PrintKind) Error![]const u8 {
+    var string_writer = utils.StringWriter.init(self.allocator);
+    defer string_writer.deinit();
+    try self.print_expr(string_writer.writer(), expr, kind);
+    return string_writer.get();
+}
+
+test "print_expr" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+    var tl = try Self.new(alloc);
+    defer tl.done();
+
+    var list = try tl.make_list([_]*Expr{
+        try tl.make_int(30),
+        tl.nil,
+        try tl.make_int(-40),
+        try tl.make_list([_]*Expr{
+            try tl.make_string("Hello\n", .NoCopy),
+        }),
+    });
+
+    {
+        const str = try tl.print_expr_to_string(list, .Repr);
+        defer alloc.free(str);
+        try std.testing.expectEqualStrings("(30 nil -40 (\"Hello\\n\"))", str);
+    }
+
+    {
+        const str = try tl.print_expr_to_string(list, .RawRepr);
+        defer alloc.free(str);
+        try std.testing.expectEqualStrings(
+            "(30 . (nil . (-40 . ((\"Hello\\n\" . nil) . nil))))", str);
+    }
+
+    {
+        const str = try tl.print_expr_to_string(list, .Display);
+        defer alloc.free(str);
+        // TODO: Better way to display list?
+        try std.testing.expectEqualStrings("(30  -40 (Hello\n))", str);
+    }
+}
+
+const TlExprPair = struct {
+    tl: *Self,
+    expr: *Expr,
+};
+
+fn fmt_expr_impl(pair: TlExprPair, comptime fmt: []const u8, options: std.fmt.FormatOptions,
+        writer: anytype) !void {
+    _ = options;
+    try pair.tl.print_expr(writer, pair.expr,
+        if (fmt.len == 0 or comptime std.mem.eql(u8, fmt, "display")) .Display
+        else if (comptime std.mem.eql(u8, fmt, "repr")) .Repr);
+}
+
+pub fn fmt_expr(self: *Self, expr: *Expr) std.fmt.Formatter(fmt_expr_impl) {
+    return .{.data = .{.tl = self, .expr = expr}};
+}
+
+fn expect_expr(self: *Self, expected: *Expr, result: *Expr) !void {
+    const are_equal = expected.eq(result);
+    if (!are_equal) {
+        std.debug.print(
+            \\
+            \\Expected this expression: =====================================================
+            \\{repr}
+            \\But found this: ===============================================================
+            \\{repr}
+            \\===============================================================================
+            \\
+            , .{self.fmt_expr(expected), self.fmt_expr(result)});
+    }
+    try std.testing.expect(are_equal);
+}
+
+// eval and Helpers ===========================================================
 
 // Find definition of atom
 fn assoc(self: *Self, atom: *Expr, env: *Expr) Error!*Expr {
@@ -890,14 +933,14 @@ fn get_token(self: *Self) ?Token {
                 },
                 '"' => {
                     if (first) {
-                        self.pos += 1; // starting quote
                         start = self.pos;
+                        self.pos += 1; // starting quote
                         while (input[self.pos] != '"') {
                             // TODO: Unexpected newline or eof
                             self.pos += 1;
                         }
-                        token = Token{.String = input[start..self.pos]};
                         self.pos += 1; // ending quote
+                        token = Token{.String = input[start..self.pos]};
                     }
                     break;
                 },
@@ -929,15 +972,11 @@ fn must_get_token(self: *Self) Error!Token {
 
 fn print_error(self: *Self, reason: []const u8) void {
     if (self.error_out) |eo| {
-        eo.string("ERROR on line ") catch unreachable;
-        eo.int(self.lineno) catch unreachable;
+        eo.print("ERROR on line {}", .{self.lineno}) catch unreachable;
         if (self.input_name) |in| {
-            eo.string(" of ") catch unreachable;
-            eo.string(in) catch unreachable;
+            eo.print(" of {s}", .{in}) catch unreachable;
         }
-        eo.string(": ") catch unreachable;
-        eo.string(reason) catch unreachable;
-        eo.char('\n') catch unreachable;
+        eo.print(": {s}\n", .{reason}) catch unreachable;
     }
 }
 
@@ -960,7 +999,7 @@ test "tokenize" {
     try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 1}));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "y"}));
-    try std.testing.expect((try tl.must_get_token()).eq(Token{.String = "hello"}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.String = "\"hello\""}));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Quote));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 24}));
@@ -1004,7 +1043,15 @@ fn parse_i(self: *Self, token: Token) Error!*Expr {
         TokenKind.Quote => self.parse_quote(),
         TokenKind.Atom => |name| try self.make_atom(name, .Copy),
         TokenKind.IntValue => |value| try self.make_int(value),
-        TokenKind.String => |value| try self.make_string(value, .Copy),
+        TokenKind.String => |literal| blk: {
+            var buf = std.ArrayList(u8).init(self.allocator);
+            defer buf.deinit();
+            switch (try std.zig.string_literal.parseAppend(&buf, literal)) {
+                .success => {},
+                else => return Error.LispInvalidSyntax,
+            }
+            break :blk try self.make_string(buf.toOwnedSlice(), .PassOwnership);
+        },
         TokenKind.Close => self.print_zig_error(Error.LispInvalidParens),
         TokenKind.Dot => self.print_zig_error(Error.LispInvalidSyntax),
     };
@@ -1028,7 +1075,7 @@ fn parse_tokenizer(self: *Self) Error!?*Expr {
 }
 
 fn parse_str(self: *Self, input: []const u8) Error!?*Expr {
-    self.set_input(input, null, null);
+    self.set_input(input, null);
     return self.parse_tokenizer();
 }
 
@@ -1050,9 +1097,8 @@ pub fn parse_input(self: *Self) Error!?*Expr {
     return rv;
 }
 
-pub fn parse_all_input(self: *Self, input: []const u8,
-        input_name: ?[]const u8, error_out: ?*ToString) Error!void {
-    self.set_input(input, input_name, error_out);
+pub fn parse_all_input(self: *Self, input: []const u8, input_name: ?[]const u8) Error!void {
+    self.set_input(input, input_name);
     while (try self.parse_input()) |e| {
         _ = e;
     }
@@ -1069,12 +1115,12 @@ test "parse_all_input" {
         \\(define a 5)
         \\(define b 3)
         \\(define func (lambda (x y) (+ (* x y) y)))
-        , null , null
+        , null
     );
 
     // Make sure both lists and pairs are parsed correctly
     try tl.parse_all_input(
-        "(define begin (lambda (x . args) (if args (begin . args) x)))\n", null, null);
+        "(define begin (lambda (x . args) (if args (begin . args) x)))\n", null);
 
     const n = try tl.keep_expr(try tl.make_int(18));
     try tl.expect_expr(n, (try tl.parse_str("(func a b)")).?);
@@ -1340,4 +1386,14 @@ test "define" {
     _ = try tl.parse_str("(define \"y\" 3)");
     const n = try tl.keep_expr(try tl.make_int(4));
     try tl.expect_expr(n, (try tl.parse_str("(+ x y)")).?);
+}
+
+pub fn print(self: *Self, args: *Expr) Error!*Expr {
+    if (self.out) |out| {
+        var check_iter = args;
+        while (try self.next_in_list_iter(&check_iter)) |arg| {
+            try self.print_expr(out, arg, .Display);
+        }
+    }
+    return self.nil;
 }

@@ -28,17 +28,9 @@ var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
 var tl: TinyishLisp = undefined;
 
-const console_writer = georgios.get_console_writer();
-
-const OurToString = struct {
-    ts: utils.ToString = .{.ext_func = ts_print_str},
-
-    fn ts_print_str(ts: *utils.ToString, s: []const u8) void {
-        const self = @fieldParentPtr(OurToString, "ts", ts);
-        _ = self;
-        print_string(s);
-    }
-};
+var console = georgios.get_console_writer();
+var generic_console_impl = utils.GenericWriterImpl(georgios.ConsoleWriter.Writer){};
+var generic_console: utils.GenericWriter.Writer = undefined;
 
 fn draw_dragon() void {
     if (system_calls.vbe_res()) |res| {
@@ -244,8 +236,7 @@ fn run_command(command: []const u8) bool {
 }
 
 fn run_lisp(command: []const u8) void {
-    var ots = OurToString{};
-    tl.set_input(command, null, &ots.ts);
+    tl.set_input(command, null);
     while (true) {
         const expr_maybe = tl.parse_input() catch |err| {
             print_string("Interpreter error: ");
@@ -254,20 +245,16 @@ fn run_lisp(command: []const u8) void {
             break;
         };
         if (expr_maybe) |expr| {
-            tl.print_expr(&ots.ts, expr) catch |err| {
-                print_string("Could not print expression error: ");
-                print_string(@errorName(err));
-                print_string("\n");
-                break;
-            };
-            print_string("\n");
+            if (expr.is_true()) {
+                console.print("{}\n", .{tl.fmt_expr(expr)}) catch unreachable;
+            }
         } else {
             break;
         }
     }
 }
 
-pub fn main() void {
+pub fn main() !void {
     if (system_calls.get_process_id() == 0) {
         read_motd();
     }
@@ -276,12 +263,12 @@ pub fn main() void {
     alloc = arena.allocator();
     defer arena.deinit();
 
-    tl = TinyishLisp.new(alloc) catch |e| {
-        print_string("lisp init failed: ");
-        print_string(@errorName(e));
-        print_string("\n");
-        return;
-    };
+    generic_console_impl.init(&console);
+    generic_console = generic_console_impl.writer();
+
+    tl = try TinyishLisp.new(alloc);
+    tl.out = &generic_console;
+    tl.error_out = &generic_console;
 
     var got: usize = 0;
     var running = true;

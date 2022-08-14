@@ -36,12 +36,15 @@ pub const PageAllocator = struct {
     fn resize(self: *PageAllocator, buf: []u8, buf_align: u29, new_len: usize, len_align: u29,
             ret_addr: usize) ?usize {
         _ = self;
-        _ = buf;
         _ = buf_align;
-        _ = new_len;
         _ = len_align;
         _ = ret_addr;
-        @panic("PageAllocator.resize called!");
+        // TODO
+        if (new_len <= buf.len) {
+            return new_len;
+        } else {
+            return null;
+        }
     }
 
     fn free(self: *PageAllocator, buf: []u8, buf_align: u29, ret_addr: usize) void {

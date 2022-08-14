@@ -121,7 +121,8 @@ pub const StringWriter = struct {
 
 test "StringWriter" {
     var ta = utils.TestAlloc{};
-    defer ta.deinit(.NoPanic);
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
     const alloc = ta.alloc();
 
     var sw = StringWriter.init(alloc);
@@ -145,4 +146,32 @@ test "StringWriter" {
     alloc.free(s3);
 
     ta.deinit(.Panic);
+}
+
+pub const StringReader = struct {
+    const Error = error{};
+    const Reader = std.io.Reader(*StringReader, Error, read);
+
+    string: []const u8,
+    pos: usize = 0,
+
+    fn read(self: *StringReader, bytes: []u8) Error!usize {
+        const len = utils.memory_copy_truncate(bytes, self.string[self.pos..]);
+        self.pos += len;
+        return len;
+    }
+
+    pub fn reader(self: *StringReader) Reader {
+        return .{.context = self};
+    }
+};
+
+test "StringReader" {
+    var sr = StringReader{.string = "Hello World!"};
+    var reader = sr.reader();
+
+    var buffer: [6]u8 = undefined;
+    try std.testing.expectEqualStrings("Hello ", buffer[0..try reader.read(buffer[0..])]);
+    try std.testing.expectEqualStrings("World!", buffer[0..try reader.read(buffer[0..])]);
+    try std.testing.expectEqualStrings("", buffer[0..try reader.read(buffer[0..])]);
 }

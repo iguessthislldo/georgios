@@ -37,7 +37,8 @@ pub const nibble_char = str.nibble_char;
 pub const byte_buffer = str.byte_buffer;
 pub const starts_with = str.starts_with;
 pub const ends_with = str.ends_with;
-pub const StringWriter = mem.StringWriter;
+pub const StringWriter = str.StringWriter;
+pub const StringReader = str.StringReader;
 
 pub const Error = error {
     Unknown,
@@ -428,4 +429,146 @@ test "any_equal" {
     try std.testing.expect(!pair.eq(int1));
     try std.testing.expect(!pair.eq(.{.Pair = .{.x = 4, .y = 9}}));
     try std.testing.expect(pair.eq(.{.Pair = .{.x = 4, .y = 8}}));
+}
+
+pub const GenericWriter = struct {
+    pub const GenericWriterError = error {
+        GenericWriterError,
+    };
+
+    impl: *anyopaque,
+    write_fn_impl: fn(impl: *anyopaque, bytes: []const u8) GenericWriterError!usize,
+
+    fn write_fn(self: *GenericWriter, bytes: []const u8) GenericWriterError!usize {
+        return self.write_fn_impl(self.impl, bytes);
+    }
+
+    pub const Writer = std.io.Writer(*GenericWriter, GenericWriterError, write_fn);
+
+    pub fn writer(self: *GenericWriter) Writer {
+        return .{.context = self};
+    }
+};
+
+pub fn GenericWriterImpl(comptime RealWriter: type) type {
+    return struct {
+        const Self = @This();
+
+        const GenericWriterError = GenericWriter.GenericWriterError;
+
+        real_writer: *RealWriter = undefined,
+        generic_writer: GenericWriter = undefined,
+
+        fn write_fn_impl(impl: *anyopaque, bytes: []const u8) GenericWriterError!usize {
+            const self = @ptrCast(*Self, @alignCast(@alignOf(Self), impl));
+            return self.real_writer.write(bytes) catch GenericWriterError.GenericWriterError;
+        }
+
+        pub fn init(self: *Self, real_writer: *RealWriter) void {
+            self.* = .{
+                .real_writer = real_writer,
+                .generic_writer = .{
+                    .impl = @ptrCast(*anyopaque, self),
+                    .write_fn_impl = write_fn_impl,
+                },
+            };
+        }
+
+        pub fn writer(self: *Self) GenericWriter.Writer {
+            return self.generic_writer.writer();
+        }
+    };
+}
+
+test "GenericWriter" {
+    var ta = TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+
+    var sw = StringWriter.init(alloc);
+    var real_writer = sw.writer();
+    var generic_writer_impl = GenericWriterImpl(@TypeOf(real_writer)){};
+    generic_writer_impl.init(&real_writer);
+    const generic_writer = generic_writer_impl.writer();
+
+    try generic_writer.print("{} Hello {s}\n", .{1, "World"});
+    try generic_writer.print("{} Hello {s}\n", .{2, "again"});
+
+    const string = sw.get();
+    try std.testing.expectEqualStrings(
+        \\1 Hello World
+        \\2 Hello again
+        \\
+        , string);
+    alloc.free(string);
+}
+
+pub const GenericReader = struct {
+    pub const GenericReaderError = error {
+        GenericReaderError,
+    };
+
+    impl: *anyopaque,
+    read_fn_impl: fn(impl: *anyopaque, bytes: []u8) GenericReaderError!usize,
+
+    fn read_fn(self: *GenericReader, bytes: []u8) GenericReaderError!usize {
+        return self.read_fn_impl(self.impl, bytes);
+    }
+
+    pub const Reader = std.io.Reader(*GenericReader, GenericReaderError, read_fn);
+
+    pub fn reader(self: *GenericReader) Reader {
+        return .{.context = self};
+    }
+};
+
+pub fn GenericReaderImpl(comptime RealReader: type) type {
+    return struct {
+        const Self = @This();
+
+        const GenericReaderError = GenericReader.GenericReaderError;
+
+        real_reader: *RealReader = undefined,
+        generic_reader: GenericReader = undefined,
+
+        fn read_fn_impl(impl: *anyopaque, bytes: []u8) GenericReaderError!usize {
+            const self = @ptrCast(*Self, @alignCast(@alignOf(RealReader), impl));
+            return self.real_reader.read(bytes) catch GenericReaderError.GenericReaderError;
+        }
+
+        pub fn init(self: *Self, real_reader: *RealReader) void {
+            self.* = .{
+                .real_reader = real_reader,
+                .generic_reader = .{
+                    .impl = @ptrCast(*anyopaque, self),
+                    .read_fn_impl = read_fn_impl,
+                },
+            };
+        }
+
+        pub fn reader(self: *Self) GenericReader.Reader {
+            return self.generic_reader.reader();
+        }
+    };
+}
+
+test "GenericReader" {
+    var ta = TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+
+    var sr = StringReader{.string = "Hello world!"};
+    var real_reader = sr.reader();
+    var generic_reader_impl = GenericReaderImpl(@TypeOf(real_reader)){};
+    generic_reader_impl.init(&real_reader);
+    const generic_reader = generic_reader_impl.reader();
+
+    var store = std.ArrayList(u8).init(alloc);
+    defer store.deinit();
+    try generic_reader.readAllArrayList(&store, 16);
+    const result = store.toOwnedSlice();
+    defer alloc.free(result);
+    try std.testing.expectEqualStrings("Hello world!", result);
 }
