@@ -282,7 +282,12 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
             const address = @ptrToInt(value.ptr);
             const block = @intToPtr(FreeBlock.Ptr, address);
-            if (value.len > 0) {
+            // TODO: This will issue a false positive if the allocated size
+            // does not equal the size passed to free somewhat intentionally.
+            // For example using std.ArrayList can have some extra capacity in
+            // the allocation and freeing the result of toOwnedSlice can have a
+            // different size from the original allocation.
+            if (value.len > 0 and false) {
                 const level = size_to_level(value.len);
                 const index = self.get_index(level, block);
                 const id = unique_id(level, index);

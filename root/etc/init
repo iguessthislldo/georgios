@@ -1,0 +1,3 @@
+#!/bin/shell.elf
+(run "motd")
+(draw_dragon)

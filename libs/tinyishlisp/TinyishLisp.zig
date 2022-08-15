@@ -18,13 +18,10 @@ const IntType = i64;
 const debug = false;
 const print_raw_list = false;
 
-const Error = error {
-    LispOutOfMemory,
+pub const Error = error {
     LispInvalidPrimitiveIndex,
-    LispInvalidPrimitiveArgKind,
-    LispInvalidPrimitiveArgValue,
     LispInvalidPrimitiveArgCount,
-    LispUnexpectedEndOfFile,
+    LispUnexpectedEndOfInput,
     LispInvalidParens,
     LispInvalidSyntax,
     LispInvalidEnv,
@@ -97,10 +94,33 @@ pub fn got_zig_error(self: *Self, error_value: Error) Error {
     return self.print_zig_error(error_value);
 }
 
-pub fn got_lisp_error(self: *Self, reason: []const u8) *Expr {
-    self.print_error(reason);
+pub fn got_lisp_error(self: *Self, reason: []const u8, expr: ?*Expr) *Expr {
+    self.print_error(reason, expr);
     return self.err;
 }
+
+const TestTl = struct {
+    var stderr = std.io.getStdErr().writer();
+
+    ta: utils.TestAlloc = .{},
+    tl: Self = undefined,
+    generic_stderr_impl: utils.GenericWriterImpl(@TypeOf(stderr)) = .{},
+    generic_stderr: utils.GenericWriter.Writer = undefined,
+
+    fn init(self: *TestTl) Error!void {
+        errdefer self.ta.deinit(.NoPanic);
+        self.tl = try Self.new(self.ta.alloc());
+
+        self.generic_stderr_impl.init(&stderr);
+        self.generic_stderr = self.generic_stderr_impl.writer();
+        self.tl.error_out = &self.generic_stderr;
+    }
+
+    fn done(self: *TestTl) void {
+        self.tl.done();
+        self.ta.deinit(.Panic);
+    }
+};
 
 // Expr =======================================================================
 
@@ -151,6 +171,11 @@ pub const Expr = struct {
         return Expr{.value = .{.Int = value}};
     }
 
+    pub fn get_int(self: *const Expr, comptime As: type) ?As {
+        return if (@as(ExprKind, self.value) != .Int) null else
+            std.math.cast(As, self.value.Int) catch null;
+    }
+
     pub fn get_cons(self: *Expr) *Expr {
         return switch (self.value) {
             ExprKind.Cons => self,
@@ -159,11 +184,11 @@ pub const Expr = struct {
         };
     }
 
-    pub fn get_string(self: *const Expr) []const u8 {
+    pub fn get_string(self: *const Expr) ?[]const u8 {
         return switch (self.value) {
             ExprKind.String => |string_value| string_value.string,
             ExprKind.Atom => |string_expr| string_expr.get_string(),
-            else => @panic("Expr.get_string() called on non-string-like"),
+            else => null,
         };
     }
 
@@ -211,9 +236,16 @@ test "Expr" {
     try std.testing.expect(!nil.eq(&int1));
 }
 
+pub fn get_string(self: *Self, expr: *Expr) []const u8 {
+    if (expr.get_string()) |str| return str;
+    const msg = "TinyishLisp.get_string called on non-string-like";
+    self.print_error(msg, expr);
+    @panic(msg);
+}
+
 // Garbage Collection =========================================================
 
-fn make_expr(self: *Self, from: Expr.Value) std.mem.Allocator.Error!*Expr {
+pub fn make_expr(self: *Self, from: Expr.Value) std.mem.Allocator.Error!*Expr {
     try self.gc_owned.push_back(.{
         .value = from,
         .owner = .{.Gc = .{}},
@@ -221,12 +253,12 @@ fn make_expr(self: *Self, from: Expr.Value) std.mem.Allocator.Error!*Expr {
     return &self.gc_owned.tail.?.value;
 }
 
-fn keep_expr(self: *Self, expr: *Expr) Error!*Expr {
+pub fn keep_expr(self: *Self, expr: *Expr) Error!*Expr {
     try self.gc_keep.putNoClobber(expr, .{});
     return expr;
 }
 
-fn discard_expr(self: *Self, expr: *Expr) void {
+pub fn discard_expr(self: *Self, expr: *Expr) void {
     _ = self.gc_keep.remove(expr);
 }
 
@@ -244,7 +276,7 @@ const StringManage = enum {
     Copy, // Copy string, free when done
 };
 
-fn make_string(self: *Self, str: []const u8, manage: StringManage) Error!*Expr {
+pub fn make_string(self: *Self, str: []const u8, manage: StringManage) Error!*Expr {
     var string: []const u8 = str;
     var gc_owned = true;
     switch (manage) {
@@ -255,7 +287,7 @@ fn make_string(self: *Self, str: []const u8, manage: StringManage) Error!*Expr {
     return self.make_expr(.{.String = .{.string = string, .gc_owned = gc_owned}});
 }
 
-fn make_atom(self: *Self, name: []const u8, manage: StringManage) Error!*Expr {
+pub fn make_atom(self: *Self, name: []const u8, manage: StringManage) Error!*Expr {
     if (self.atoms.get(name)) |atom| {
         if (manage == .PassOwnership) {
             @panic("make_atom: passed existing name with passing ownership");
@@ -266,7 +298,7 @@ fn make_atom(self: *Self, name: []const u8, manage: StringManage) Error!*Expr {
     errdefer _ = self.unmake_expr(atom, .All);
     const string = try self.make_string(name, manage);
     errdefer _ = self.unmake_expr(string, .All);
-    try self.atoms.putNoClobber(string.get_string(), atom);
+    try self.atoms.putNoClobber(self.get_string(string), atom);
     atom.value.Atom = string;
     return atom;
 }
@@ -325,7 +357,7 @@ fn unmake_expr(self: *Self, expr: *Expr, kind: CollectKind) bool {
                         }
                     },
                     .Atom => |string_expr| {
-                        _ = self.atoms.remove(string_expr.get_string());
+                        _ = self.atoms.remove(self.get_string(string_expr));
                     },
                     else => {},
                 }
@@ -448,6 +480,8 @@ const gen_builtin_primitives = [_]GenPrimitive{
     .{.name = "lambda", .zig_func = lambda, .preeval_args = false, .pass_env = true},
     .{.name = "define", .zig_func = define, .preeval_args = false, .pass_env = true},
     .{.name = "print", .zig_func = print, .pass_arg_list = true},
+    .{.name = "progn", .zig_func = progn,
+        .preeval_args = false, .pass_env = true, .pass_arg_list = true},
 };
 
 pub const Primitive = struct {
@@ -548,13 +582,7 @@ fn car_cdr(self: *Self, x: *Expr, get_x: bool) Error!*Expr {
     return switch (x.value) {
         ExprKind.Cons => |*pair| if (get_x) pair.x else pair.y,
         else => blk: {
-            if (debug) {
-                std.debug.print("error in {s}: {s} is not a list\n", .{
-                    if (get_x) &"car" else &"cdr",
-                    try self.debug_print(x)
-                });
-            }
-            break :blk self.got_lisp_error("value passed to cdr or car isn't a list");
+            break :blk self.got_lisp_error("value passed to cdr or car isn't a list", x);
         }
     };
 }
@@ -590,6 +618,16 @@ pub fn make_list(self: *Self, items: anytype) Error!*Expr {
     while (i > 0) {
         i -= 1;
         head = try self.cons(items[i], head);
+    }
+    return head;
+}
+
+pub fn make_string_list(self: *Self, items: anytype, manage: StringManage) Error!*Expr {
+    var head = self.nil;
+    var i = items.len;
+    while (i > 0) {
+        i -= 1;
+        head = try self.cons(try self.make_string(items[i], manage), head);
     }
     return head;
 }
@@ -834,11 +872,7 @@ fn apply(self: *Self, callable: *Expr, args: *Expr, env: *Expr) Error!*Expr {
         ExprKind.Primitive => try callable.call_primitive(self, args, env),
         ExprKind.Closure => try self.reduce(callable, args, env),
         else => blk: {
-            if (debug) {
-                std.debug.print("error in apply: {s} is not callable\n",
-                    .{try self.debug_print(callable)});
-            }
-            break :blk self.got_lisp_error("value passed to apply isn't callable");
+            break :blk self.got_lisp_error("value passed to apply isn't callable", callable);
         }
     };
 }
@@ -899,7 +933,7 @@ const Token = union (TokenKind) {
     }
 };
 
-fn get_token(self: *Self) ?Token {
+fn get_token(self: *Self) Error!?Token {
     if (self.input) |input| {
         while (self.pos < input.len) {
             switch (input[self.pos]) {
@@ -935,8 +969,22 @@ fn get_token(self: *Self) ?Token {
                     if (first) {
                         start = self.pos;
                         self.pos += 1; // starting quote
-                        while (input[self.pos] != '"') {
-                            // TODO: Unexpected newline or eof
+                        var escaped = false;
+                        while (true) {
+                            if (self.pos >= input.len) return Error.LispInvalidSyntax;
+                            const c = input[self.pos];
+                            switch (c) {
+                                '\n' => return Error.LispInvalidSyntax,
+                                '\\' => escaped = !escaped,
+                                '"' => if (escaped) {
+                                    escaped = false;
+                                } else {
+                                    break;
+                                },
+                                else => if (escaped) {
+                                    escaped = false;
+                                },
+                            }
                             self.pos += 1;
                         }
                         self.pos += 1; // ending quote
@@ -967,21 +1015,24 @@ fn get_token(self: *Self) ?Token {
 }
 
 fn must_get_token(self: *Self) Error!Token {
-    return self.get_token() orelse self.print_zig_error(Error.LispUnexpectedEndOfFile);
+    return (try self.get_token()) orelse self.print_zig_error(Error.LispUnexpectedEndOfInput);
 }
 
-fn print_error(self: *Self, reason: []const u8) void {
+fn print_error(self: *Self, reason: []const u8, expr: ?*Expr) void {
     if (self.error_out) |eo| {
         eo.print("ERROR on line {}", .{self.lineno}) catch unreachable;
         if (self.input_name) |in| {
             eo.print(" of {s}", .{in}) catch unreachable;
         }
         eo.print(": {s}\n", .{reason}) catch unreachable;
+        if (expr) |e| {
+            eo.print("Problem is with: {repr}\n", .{self.fmt_expr(e)}) catch unreachable;
+        }
     }
 }
 
 fn print_zig_error(self: *Self, error_value: Error) Error {
-    self.print_error(@errorName(error_value));
+    self.print_error(@errorName(error_value), null);
     return error_value;
 }
 
@@ -992,14 +1043,14 @@ test "tokenize" {
     var tl = Self.new_barren(ta.alloc());
     defer tl.done();
 
-    tl.input = "  (x 1( y \"hello\" ' ; This is a comment\n(24 . ab))c) ; comment at end";
+    tl.input = "  (x 1( y \"hello\\\"\" ' ; This is a comment\n(24 . ab))c) ; comment at end";
 
     try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "x"}));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 1}));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "y"}));
-    try std.testing.expect((try tl.must_get_token()).eq(Token{.String = "\"hello\""}));
+    try std.testing.expect((try tl.must_get_token()).eq(Token{.String = "\"hello\\\"\""}));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Quote));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Open));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.IntValue = 24}));
@@ -1009,7 +1060,7 @@ test "tokenize" {
     try std.testing.expect((try tl.must_get_token()).eq(Token.Close));
     try std.testing.expect((try tl.must_get_token()).eq(Token{.Atom = "c"}));
     try std.testing.expect((try tl.must_get_token()).eq(Token.Close));
-    try std.testing.expectError(Error.LispUnexpectedEndOfFile, tl.must_get_token());
+    try std.testing.expectError(Error.LispUnexpectedEndOfInput, tl.must_get_token());
 }
 
 fn parse_list(self: *Self) Error!*Expr {
@@ -1063,7 +1114,7 @@ fn must_parse_token(self: *Self) Error!*Expr {
 
 fn parse_tokenizer(self: *Self) Error!?*Expr {
     var rv: ?*Expr = null;
-    if (self.get_token()) |t| {
+    if (try self.get_token()) |t| {
         defer _ = self.collect(.Unused);
         rv = try self.eval(try self.parse_i(t), self.global_env);
         self.parse_return = rv;
@@ -1088,7 +1139,7 @@ test "parse_str" {
 
     const n = try tl.keep_expr(try tl.make_int(6));
     try tl.expect_expr(n, (try tl.parse_str("(+ 1 2 3)")).?);
-    try std.testing.expectEqualStrings("Hello", (try tl.parse_str("\"Hello\"")).?.get_string());
+    try std.testing.expectEqualStrings("Hello", (try tl.parse_str("\"Hello\"")).?.get_string().?);
 }
 
 pub fn parse_input(self: *Self) Error!?*Expr {
@@ -1099,6 +1150,17 @@ pub fn parse_input(self: *Self) Error!?*Expr {
 
 pub fn parse_all_input(self: *Self, input: []const u8, input_name: ?[]const u8) Error!void {
     self.set_input(input, input_name);
+    if (utils.starts_with(input, "#!")) {
+        // Skip over shebang line
+        while (true) {
+            self.pos += 1;
+            if (self.pos >= input.len) break;
+            if (input[self.pos] == '\n') {
+                self.pos += 1;
+                break;
+            }
+        }
+    }
     while (try self.parse_input()) |e| {
         _ = e;
     }
@@ -1111,7 +1173,10 @@ test "parse_all_input" {
     var tl = try Self.new(ta.alloc());
     defer tl.done();
 
+    try tl.parse_all_input("#!", null);
+
     try tl.parse_all_input(
+        \\#!This isn't lisp
         \\(define a 5)
         \\(define b 3)
         \\(define func (lambda (x y) (+ (* x y) y)))
@@ -1174,18 +1239,17 @@ pub fn add(self: *Self, args: *Expr) Error!*Expr {
             if (expr_kind) |ek| {
                 const kind = @as(ExprKind, arg.value);
                 if (ek != kind) {
-                    if (debug) {
-                        std.debug.print("error: expected kind {}, but got kind {}\n", .{ek, kind});
-                    }
-                    return Error.LispInvalidPrimitiveArgKind;
+                    return self.got_lisp_error("inconsistent arg types in +, expected int", arg);
                 }
             } else {
                 expr_kind = @as(ExprKind, arg.value);
             }
             switch (@as(ExprKind, arg.value)) {
-                .String => total_string_len += arg.get_string().len,
+                .String => total_string_len += arg.get_string().?.len,
                 .Int => {},
-                else => return Error.LispInvalidPrimitiveArgKind,
+                else => {
+                    return self.got_lisp_error("inconsistent arg types in +, expected int", arg);
+                }
             }
         }
     }
@@ -1204,7 +1268,7 @@ pub fn add(self: *Self, args: *Expr) Error!*Expr {
                 var result: []u8 = try self.allocator.alloc(u8, total_string_len);
                 var got: usize = 0;
                 while (try self.next_in_list_iter(&list_iter)) |arg| {
-                    const s = arg.get_string();
+                    const s = arg.get_string().?;
                     for (s) |c| {
                         result[got] = c;
                         got += 1;
@@ -1228,7 +1292,7 @@ test "add" {
     const n = try tl.keep_expr(try tl.make_int(6));
     try tl.expect_expr(n, (try tl.parse_str("(+ 1 2 3)")).?);
     try std.testing.expectEqualStrings("Hello world", (
-        try tl.parse_str("(+ \"Hello\" \" world\")")).?.get_string());
+        try tl.parse_str("(+ \"Hello\" \" world\")")).?.get_string().?);
 }
 
 pub fn subtract(self: *Self, args: *Expr) Error!*Expr {
@@ -1366,10 +1430,10 @@ test "lambda" {
 pub fn define(self: *Self, env: *Expr, atom: *Expr, expr: *Expr) Error!*Expr {
     var use_atom = atom;
     if (@as(ExprKind, use_atom.value) == .String) {
-        use_atom = try self.make_atom(use_atom.get_string(), .Copy);
+        use_atom = try self.make_atom(use_atom.get_string().?, .Copy);
     }
     if (@as(ExprKind, use_atom.value) != .Atom) {
-        return self.got_lisp_error("define got non-atom");
+        return self.got_lisp_error("define got non-atom", use_atom);
     }
     self.global_env = try self.tack_pair_to_list(use_atom, try self.eval(expr, env), env);
     return use_atom;
@@ -1396,4 +1460,39 @@ pub fn print(self: *Self, args: *Expr) Error!*Expr {
         }
     }
     return self.nil;
+}
+
+// (progn statement ... return_value)
+// Eval every statement in args, discarding the result from each except the
+// last one, which is returned.
+pub fn progn(self: *Self, init_env: *Expr, statements: *Expr) Error!*Expr {
+    var env = init_env;
+    var result = self.nil;
+    if (statements != self.err) { // TODO: Handle getting an error better here and elsewhere
+        var iter = statements;
+        while (try self.next_in_list_iter(&iter)) |statement| {
+            result = try self.eval(statement, env);
+            env = self.global_env;
+        }
+    }
+    return result;
+}
+
+test "progn" {
+    var ttl = TestTl{};
+    try ttl.init();
+    errdefer ttl.ta.deinit(.NoPanic);
+    defer ttl.done();
+
+    try ttl.tl.expect_expr(ttl.tl.nil, (try ttl.tl.parse_str("(progn ())")).?);
+    try ttl.tl.parse_all_input(
+        \\(define z (progn
+        \\  (define x 1)
+        \\  (define y (+ x 1))
+        \\  ((lambda () y))
+        \\))
+        , null
+    );
+    const two = try ttl.tl.keep_expr(try ttl.tl.make_int(2));
+    try ttl.tl.expect_expr(two, (try ttl.tl.parse_str("z")).?);
 }

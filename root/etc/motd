@@ -1,6 +1,0 @@
-Welcome to Georgios!
-Try the "hello", "ls", "shell", or "snake" programs.
-Within the shell you can try the "cd", "pwd", "sleep",
-"motd", or "reset" commands.
-Type Ctrl-D or "exit" to exit the current shell.
-Exiting the last shell powers down the system.

@@ -304,6 +304,8 @@ pub const ProcessImpl = struct {
             // ProcessInfo
             thread.usermode_stack_ptr -= utils.align_up(
                 @sizeOf(georgios.ProcessInfo), @alignOf(georgios.ProcessInfo));
+            thread.usermode_stack_ptr =
+                utils.align_down(thread.usermode_stack_ptr, @alignOf(usize));
             pmem.page_directory_memory_copy(
                 self.page_directory, thread.usermode_stack_ptr,
                 utils.to_const_bytes(&info)) catch unreachable;

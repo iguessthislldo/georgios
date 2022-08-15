@@ -148,12 +148,15 @@ pub const Allocator = struct {
     fn std_resize(self: *Allocator, buf: []u8, buf_align: u29, new_len: usize, len_align: u29,
             ret_addr: usize) ?usize {
         _ = self;
-        _ = buf;
         _ = buf_align;
-        _ = new_len;
         _ = len_align;
         _ = ret_addr;
-        @panic("Allocator.std_resize called!");
+        // TODO
+        if (new_len <= buf.len) {
+            return new_len;
+        } else {
+            return null;
+        }
     }
 
     fn std_free(self: *Allocator, buf: []u8, buf_align: u29, ret_addr: usize) void {

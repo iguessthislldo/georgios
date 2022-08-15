@@ -190,8 +190,10 @@ pub const ConsoleWriter = struct {
         _ = self;
         if (is_program) {
             system_calls.print_string(bytes);
-        } else {
+        } else if (is_kernel) {
             root.kernel.print.string(bytes);
+        } else {
+            @compileError("ConsoleWriter doesn't support this yet");
         }
         return bytes.len;
     }

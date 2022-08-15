@@ -12,6 +12,8 @@ pub const FileError = error {
     Internal,
     InvalidFileId,
     OutOfSpace,
+    StreamTooLong,
+    EndOfStream,
 } || georgios.BasicError;
 
 /// File IO Interface
@@ -125,7 +127,7 @@ pub const File = struct {
     /// Tries to read as much as possible into the `to` slice and will return
     /// the amount read, which may be less than `to.len`. Can return 0 if the
     /// `to` slice is zero or the end of the file has been reached already. It
-    /// should never return `FileError.OutOfBounds` or
+    /// should never return `FileError.EndOfStream` or
     /// `FileError.NotEnoughDestination`, but `read_or_error` will. The exact
     /// return values are defined by the file implementation.
     pub fn read(file: *File, to: []u8) FileError!usize {
@@ -133,7 +135,7 @@ pub const File = struct {
     }
 
     /// Same as `read`, but returns `FileError.NotEnoughDestination` if an
-    /// empty `to` was passed or `FileError.OutOfBounds` if trying to read from
+    /// empty `to` was passed or `FileError.EndOfStream` if trying to read from
     /// a file that's already reached the end.
     pub fn read_or_error(file: *File, to: []u8) FileError!usize {
         if (to.len == 0) {
@@ -141,7 +143,7 @@ pub const File = struct {
         }
         const result = try file.read_impl(file, to);
         if (result == 0) {
-            return FileError.OutOfBounds;
+            return FileError.EndOfStream;
         }
         return result;
     }
@@ -150,19 +152,19 @@ pub const File = struct {
     /// written, which may be less than `from.len`. As with `read` this can be
     /// 0 if the file has a limit of what can be written and that limit was
     /// already reached. Also like `read` this should never return
-    /// `FileError.OutOfBounds`, but `write_or_error` can. The exact return
+    /// `FileError.EndOfStream`, but `write_or_error` can. The exact return
     /// values are defined by the file implementation.
     pub fn write(file: *File, from: []const u8) FileError!usize {
         return file.write_impl(file, from);
     }
 
-    /// Same as `write`, but return `FileError.OutOfBounds` if an empty `from`
-    /// was passed or `FileError.OutOfBounds` if trying to write to a file
+    /// Same as `write`, but return `FileError.EndOfStream` if an empty `from`
+    /// was passed or `FileError.EndOfStream` if trying to write to a file
     /// that's already reached the end.
     pub fn write_or_error(file: *File, from: []const u8) FileError!usize {
         const result = try file.write_impl(file, from);
         if (result == 0 and from.len > 0) {
-            return FileError.OutOfBounds;
+            return FileError.EndOfStream;
         }
         return result;
     }
@@ -187,7 +189,7 @@ pub const File = struct {
     ///    start by being negative.
     ///  - If `limit` is non-null, then the stream position can't go past it.
     /// The result is returned unless it's invalid, then
-    /// `FileError.OutOfBounds` is returned.
+    /// `FileError.EndOfStream` is returned.
     pub fn generic_seek(position: usize, end: usize, limit: ?usize,
             offset: isize, seek_type: SeekType) FileError!usize {
         const from: usize = switch (seek_type) {
@@ -197,11 +199,11 @@ pub const File = struct {
         };
         if (utils.add_isize_to_usize(from, offset)) |result| {
             if (result != position and limit != null and result >= limit.?) {
-                return FileError.OutOfBounds;
+                return FileError.EndOfStream;
             }
             return result;
         }
-        return FileError.OutOfBounds;
+        return FileError.EndOfStream;
     }
 
     pub const Reader = std.io.Reader(*File, FileError, read);
@@ -217,11 +219,11 @@ fn generic_seek_subtest(seek_type: File.SeekType, expected_from: usize) !void {
         try File.generic_seek(1, 4, null, 0, seek_type));
     try std.testing.expectEqual(expected_from + 5,
         try File.generic_seek(1, 4, null, 5, seek_type));
-    try std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.EndOfStream,
         File.generic_seek(1, 4, 4, 5, seek_type));
-    try std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.EndOfStream,
         File.generic_seek(1, 4, 4, -5, seek_type));
-    try std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.EndOfStream,
         File.generic_seek(1, 4, 4, -5, seek_type));
 }
 
@@ -240,9 +242,9 @@ test "File.generic_seek" {
     try std.testing.expectEqual(max_usize,
         try File.generic_seek(max_isize_as_usize + 1, 4, null, max_isize, .FromHere));
     // However we shouldn't be able to go to past max_usize.
-    try std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.EndOfStream,
         File.generic_seek(max_usize, 4, null, 5, .FromHere));
-    try std.testing.expectError(FileError.OutOfBounds,
+    try std.testing.expectError(FileError.EndOfStream,
         File.generic_seek(max_usize, 4, 4, 5, .FromHere));
 }
 

@@ -47,11 +47,11 @@ const ProgramHeader = packed struct {
     address_align: u32, // p_align
 };
 
+const Magic = [4]u8;
+pub const expected_magic: Magic = [_]u8 {0x7f, 'E', 'L', 'F'};
+
 // TODO: Create Seperate 32 and 64 bit Versions ([ui]size -> [ui]32, [ui]64)
 const Header = packed struct {
-    const Magic = [4]u8;
-    const expected_magic: Magic = [_]u8 {0x7f, 'E', 'L', 'F'};
-
     pub const Class = enum(u8) {
         Invalid = 0, // ELFCLASSNONE
         Is32 = 1, // ELFCLASS32

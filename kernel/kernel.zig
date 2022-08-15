@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
+const no_max = std.math.maxInt(usize);
 
 const utils = @import("utils");
 const georgios = @import("georgios");
@@ -86,9 +87,14 @@ fn init() !void {
     }
 }
 
-pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Process.Id {
+const ExecError = georgios.ExecError;
+
+pub fn exec_elf(info: *const georgios.ProcessInfo) ExecError!threading.Process.Id {
     const process = try threading_mgr.new_process(info);
-    // print.format("exec: {}\n", .{info.path});
+    // print.format("exec: {} {} args:\n", .{info.path, info.args.len});
+    // for (info.args) |arg| {
+    //     print.format("- {}\n", .{arg});
+    // }
     var file_node = try filesystem_mgr.resolve_file(info.path, .{});
     var file_ctx = try file_node.open_new_context(.{.ReadOnly = .{}});
     defer file_ctx.close();
@@ -111,6 +117,56 @@ pub fn exec(info: *const georgios.ProcessInfo) georgios.ExecError!threading.Proc
     return process.id;
 }
 
+const shell = "/bin/shell.elf";
+
+pub fn exec(info: *const georgios.ProcessInfo) ExecError!threading.Process.Id {
+    const std_alloc = alloc.std_allocator();
+
+    var shebang_info: ?georgios.ProcessInfo = null;
+    defer {
+        if (shebang_info) |*si| {
+            std_alloc.free(si.path);
+            std_alloc.free(si.args);
+        }
+    }
+
+    // Check for #! or ELF magic
+    {
+        var file_node = try filesystem_mgr.resolve_file(info.path, .{});
+        var file_ctx = try file_node.open_new_context(.{.ReadOnly = .{}});
+        defer file_ctx.close();
+        const file_io = try file_ctx.get_io_file();
+        const shebang = "#!";
+
+        var buffer: [@maximum(shebang.len, elf.expected_magic.len)]u8 = undefined;
+        const bytes = buffer[0..try file_io.read(buffer[0..])];
+        if (utils.starts_with(bytes, shebang[0..])) {
+            // Get program from shebang
+            var al = std.ArrayList(u8).init(std_alloc);
+            defer al.deinit();
+            _ = try file_io.seek(shebang.len, .FromStart);
+            try file_io.reader().readUntilDelimiterArrayList(&al, '\n', no_max);
+
+            // Make new args with original path at start
+            const new_args = try std_alloc.alloc([]const u8, info.args.len + 1);
+            new_args[0] = info.path;
+            for (info.args) |arg, i| {
+                new_args[i + 1] = arg;
+            }
+            shebang_info = .{
+                .path = al.toOwnedSlice(),
+                .name = info.name,
+                .args = new_args,
+                .kernel_mode = info.kernel_mode,
+            };
+        } else if (!utils.starts_with(bytes, elf.expected_magic[0..])) {
+            return ExecError.InvalidElfFile;
+        }
+    }
+
+    return exec_elf(if (shebang_info) |*si| si else info);
+}
+
 fn run() !void {
     try init();
     if (!build_options.run_rc) {
@@ -119,20 +175,9 @@ fn run() !void {
     print.string("\x1bc"); // Reset Console
     // try @import("sync.zig").system_tests();
 
-    // Read and execute the path in the rc file
-    var rc_buffer: [128]u8 = undefined;
-    var rc_path: []const u8 = undefined;
-    {
-        var file_node = try filesystem_mgr.resolve_file("/etc/rc", .{});
-        var file_ctx = try file_node.open_new_context(.{.ReadOnly = .{}});
-        defer file_ctx.close();
-        const file_io = try file_ctx.get_io_file();
-        rc_path = rc_buffer[0..try file_io.read(rc_buffer[0..])];
-        rc_path = rc_path[0..utils.stripped_string_size(rc_path)];
-    }
-    const rc_info: georgios.ProcessInfo = .{.path = rc_path};
-    const rc_exit_info = try threading_mgr.wait_for_process(try exec(&rc_info));
-    print.format("RC: {}\n", .{rc_exit_info});
+    const init_info: georgios.ProcessInfo = .{.path = "/etc/init"};
+    const init_exit_info = try threading_mgr.wait_for_process(try exec(&init_info));
+    print.format("INIT: {}\n", .{init_exit_info});
 }
 
 var quick_debug_ready = false;
