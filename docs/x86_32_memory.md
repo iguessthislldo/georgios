@@ -28,5 +28,5 @@
 
 ## Resources
 
-- http://ethv.net/workshops/osdev/notes/notes-2
+- https://ethv.net/workshops/osdev/notes/notes-2.html
     - Used linked list described there for the physical memory allocator.

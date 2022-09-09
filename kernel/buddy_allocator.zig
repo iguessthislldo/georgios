@@ -8,15 +8,15 @@
 //   https://en.wikipedia.org/wiki/Buddy_memory_allocation
 //
 // TODO: Make Resizable
-// TODO: Space optimize allocations that are smaller then FreeBlock, maybe by
-// lumping them together in shared blocks?
+
+const std = @import("std");
 
 const memory = @import("memory.zig");
 const Allocator = memory.Allocator;
 const MemoryError = memory.MemoryError;
 const AllocError = memory.AllocError;
 const FreeError = memory.FreeError;
-const util = @import("utils");
+const utils = @import("utils");
 const print = @import("print.zig");
 
 const BlockStatus = enum(u2) {
@@ -28,10 +28,8 @@ const BlockStatus = enum(u2) {
 
 const Error = error {
     WrongBlockStatus,
-    InternalError,
-    RequestedSizeTooSmall,
-    RequestedSizeTooLarge,
-} || util.Error;
+    CantReserveAlreadyUsed,
+} || utils.Error;
 
 const FreeBlock = struct {
     const ConstPtr = *allowzero const FreeBlock;
@@ -39,27 +37,35 @@ const FreeBlock = struct {
     prev: ?Ptr,
     next: ?Ptr,
 };
-const min_size: usize = @sizeOf(FreeBlock);
+const free_block_size: usize = @sizeOf(FreeBlock);
 
-pub fn BuddyAllocator(max_size_arg: usize) type {
+const FreeBlockKind = enum {
+    InSelf,
+    InManagedArea,
+};
+
+pub fn MinBuddyAllocator(max_size_arg: usize) type {
+    return BuddyAllocator(max_size_arg, free_block_size, .InManagedArea);
+}
+
+// max_size_arg is the size of the managed area and therefore the size of the
+// largest possible allocation. min_size is the size of the smallest posible.
+// allocation kind is where to store the free block list.
+pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind) type {
+    if (kind == .InManagedArea and min_size < free_block_size) {
+        @panic("With InManagedArea BuddyAllocator min_size must be >= free_block_size");
+    }
     return struct {
         const Self = @This();
 
         pub const max_size: usize = max_size_arg;
 
         const max_level_block_count = max_size / min_size;
-        const level_count: usize = util.int_log2(usize, max_level_block_count) + 1;
-        const unique_block_count: usize = level_block_count(level_count);
+        const level_count: usize = utils.int_log2(usize, max_level_block_count) + 1;
+        const unique_block_count: usize = level_block_count(level_count) - 1;
 
         const FreeBlocks = struct {
-            lists: [level_count]?FreeBlock.Ptr = undefined,
-
-            pub fn init(self: *FreeBlocks, start: usize) void {
-                for (self.lists) |*ptr| {
-                    ptr.* = null;
-                }
-                self.push(0, @intToPtr(FreeBlock.Ptr, start)) catch unreachable;
-            }
+            lists: [level_count]?FreeBlock.Ptr = .{null} ** level_count,
 
             pub fn get(self: *FreeBlocks, level: usize) Error!?FreeBlock.Ptr {
                 if (level >= level_count) {
@@ -108,15 +114,62 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                     next.prev = block.prev;
                 }
             }
+
+            fn dump_status(ba: *const Self, level: usize, index: usize) u8 {
+                return switch (ba.block_statuses.get(unique_id(level, index)) catch unreachable) {
+                    .Invalid => 'I',
+                    .Split => 'S',
+                    .Free => 'F',
+                    .Used => 'U',
+                };
+            }
+
+            fn dump(self: *FreeBlocks, ba: *const Self) void {
+                var level: usize = 0;
+                while (level < level_count) {
+                    // Overview
+                    {
+                        std.debug.print("|", .{});
+                        const space = (level_to_block_size(level) / min_size - 1) * 2;
+                        const count = level_block_count(level);
+                        var index: usize = 0;
+                        while (index < count) {
+                            std.debug.print("{c}", .{dump_status(ba, level, index)});
+                            var i: usize = 0;
+                            while (i < space) {
+                                std.debug.print(" ", .{});
+                                i += 1;
+                            }
+                            std.debug.print("|", .{});
+                            index += 1;
+                        }
+                    }
+
+                    // List
+                    std.debug.print(" L{} ", .{level});
+                    var block_maybe = self.lists[level];
+                    while (block_maybe) |block| {
+                        const index = ba.block_to_index(level, block);
+                        std.debug.print("-> [{}({c})]", .{index, dump_status(ba, level, index)});
+                        block_maybe = block.next;
+                    }
+                    std.debug.print("\n", .{});
+                    level += 1;
+                }
+            }
         };
+
+        const FreeBlocksInSelf = if (kind == .InSelf) [max_level_block_count]FreeBlock else void;
+        pub const area_align: u29 = if (kind == .InManagedArea) @sizeOf(FreeBlock) else 1;
+        pub const Area = []align(area_align) u8;
 
         allocator: Allocator = undefined,
         start: usize = undefined,
         free_blocks: FreeBlocks = undefined,
-        block_statuses: util.PackedArray(
-            BlockStatus, unique_block_count) = undefined,
+        free_blocks_in_self: FreeBlocksInSelf = undefined,
+        block_statuses: utils.PackedArray(BlockStatus, unique_block_count) = undefined,
 
-        pub fn init(self: *Self, area: []u8) Error!void {
+        pub fn init(self: *Self, area: Area) Error!void {
             self.allocator = Allocator{
                 .alloc_impl = alloc,
                 .free_impl = free,
@@ -125,37 +178,76 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 return Error.NotEnoughDestination;
             }
             self.start = @ptrToInt(area.ptr);
-            self.free_blocks.init(self.start);
+            self.free_blocks = .{};
+            self.free_blocks.push(0, self.index_to_block(0, 0)) catch unreachable;
             self.block_statuses.reset();
             self.block_statuses.set(0, .Free) catch unreachable;
         }
 
         fn level_block_count(level: usize) usize {
-            return (@as(usize, 1) << @truncate(util.UsizeLog2Type, level)) - 1;
+            return @as(usize, 1) << @truncate(utils.UsizeLog2Type, level);
         }
 
         fn level_to_block_size(level: usize) usize {
-            return max_size >> @truncate(util.UsizeLog2Type, level);
+            return max_size >> @truncate(utils.UsizeLog2Type, level);
         }
 
         fn size_to_level(size: usize) usize {
-            const target_size = @maximum(min_size, util.pow2_round_up(usize, size));
-            return level_count - util.int_log2(usize, target_size / min_size) - 1;
+            const target_size = @maximum(min_size, utils.pow2_round_up(usize, size));
+            return level_count - utils.int_log2(usize, target_size / min_size) - 1;
         }
 
         fn unique_id(level: usize, index: usize) usize {
-            return level_block_count(level) + index;
+            return level_block_count(level) + index - 1;
         }
 
-        fn get_index(self: *const Self, level: usize,
-                address: FreeBlock.ConstPtr) usize {
-            return (@ptrToInt(address) - self.start) / level_to_block_size(level);
+        fn get_level_index(input_index: usize, level: usize, to_max: bool) usize {
+            const shift = @intCast(utils.UsizeLog2Type, level_count - 1 - level);
+            return if (to_max) input_index << shift else input_index >> shift;
         }
 
-        fn get_pointer(self: *const Self, level: usize,
-                index: usize) FreeBlock.Ptr {
-            return @intToPtr(FreeBlock.Ptr,
-                self.start + index * level_to_block_size(level));
+        fn in_self_offset(block: usize, start: usize) usize {
+            return (block - start) / free_block_size;
+        }
+
+        fn block_to_index(self: *const Self, level: usize, block: FreeBlock.ConstPtr) usize {
+            const b = @ptrToInt(block);
+            const rv = switch (kind) {
+                .InManagedArea => (b - self.start) / level_to_block_size(level),
+                .InSelf => get_level_index(
+                    in_self_offset(b, @ptrToInt(&self.free_blocks_in_self[0])), level, false),
+            };
+            return rv;
+        }
+
+        fn get_address(self: *Self, level: usize, index: usize) usize {
+            return self.start + index * level_to_block_size(level);
+        }
+
+        fn get_block_raw(self: *Self, raw: usize) FreeBlock.Ptr {
+            return switch (kind) {
+                .InManagedArea => @intToPtr(FreeBlock.Ptr, raw),
+                .InSelf => @ptrCast(FreeBlock.Ptr, &self.free_blocks_in_self[raw]),
+            };
+        }
+
+        fn index_to_block(self: *Self, level: usize, index: usize) FreeBlock.Ptr {
+            return self.get_block_raw(switch (kind) {
+                .InManagedArea => self.get_address(level, index),
+                .InSelf => get_level_index(index, level, true),
+            });
+        }
+
+        fn address_to_block(self: *Self, address: usize) FreeBlock.Ptr {
+            return self.get_block_raw(switch (kind) {
+                .InManagedArea => blk: {
+                    if (address % free_block_size != 0) {
+                        @panic("address_to_block address isn't aligned to FreeBlock");
+                    }
+                    break :blk address;
+                },
+                .InSelf => in_self_offset(address, self.start),
+            });
         }
 
         fn get_buddy_index(index: usize) usize {
@@ -176,11 +268,11 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             const this_unique_id = try self.assert_unique_id(
                 level, index, .Free);
 
-            const this_ptr = self.get_pointer(level, index);
+            const this_ptr = self.index_to_block(level, index);
             const new_level: usize = level + 1;
             const new_index = index << 1;
             const buddy_index = new_index + 1;
-            const buddy_ptr = self.get_pointer(new_level, buddy_index);
+            const buddy_ptr = self.index_to_block(new_level, buddy_index);
 
             // Update Free Blocks
             self.free_blocks.remove_block(level, this_ptr);
@@ -193,6 +285,24 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 unique_id(new_level, new_index), BlockStatus.Free);
             try self.block_statuses.set(
                 unique_id(new_level, buddy_index), BlockStatus.Free);
+        }
+
+        pub fn addr_in_range(self: *const Self, addr: usize) bool {
+            return addr >= self.start and addr < (self.start + max_size);
+        }
+
+        pub fn slice_in_range(self: *const Self, range: []u8) bool {
+            const addr = @ptrToInt(range.ptr);
+            return self.addr_in_range(addr) and
+                !(range.len > 1 and !self.addr_in_range(addr + range.len - 1));
+        }
+
+        fn reserve_block(self: *Self, level: usize, block: FreeBlock.Ptr) usize {
+            self.free_blocks.remove_block(level, block);
+            const index = self.block_to_index(level, block);
+            const id = unique_id(level, index);
+            self.block_statuses.set(id, .Used) catch unreachable;
+            return index;
         }
 
         pub fn alloc(allocator: *Allocator, size: usize, align_to: usize) AllocError![]u8 {
@@ -208,11 +318,11 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
 
             // Figure out how many (if any) levels we need to split a block in
             // to get a free block in our target level.
-            var address_maybe: ?FreeBlock.Ptr = null;
+            var block: FreeBlock.Ptr = undefined;
             var level = target_level;
             while (true) {
-                address_maybe = self.free_blocks.get(level) catch unreachable;
-                if (address_maybe != null) {
+                if (self.free_blocks.get(level) catch unreachable) |b| {
+                    block = b;
                     break;
                 }
                 if (level == 0) {
@@ -224,24 +334,22 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             // If we need to split blocks, do that
             var split_level = level;
             while (split_level != target_level) {
-                self.split(split_level,
-                    self.get_index(split_level, address_maybe.?))
-                    catch unreachable;
+                self.split(split_level, self.block_to_index(split_level, block)) catch unreachable;
                 split_level += 1;
-                address_maybe = self.free_blocks.get(split_level) catch unreachable;
-                if (address_maybe == null) {
-                    unreachable;
-                }
+                block = (self.free_blocks.get(split_level) catch unreachable).?;
             }
 
             // Reserve it
-            const address = address_maybe.?;
-            self.free_blocks.remove_block(target_level, address);
-            const index = self.get_index(target_level, address);
-            const id = unique_id(target_level, index);
-            self.block_statuses.set(id, .Used) catch unreachable;
+            const index = self.reserve_block(target_level, block);
 
-            return @ptrCast([*]u8, address)[0..size];
+            const result = switch (kind) {
+                .InManagedArea => @ptrCast([*]u8, block),
+                .InSelf => @intToPtr([*]u8, self.get_address(target_level, index)),
+            }[0..size];
+            if (!self.slice_in_range(result)) {
+                @panic("invalid alloc address");
+            }
+            return result;
         }
 
         fn merge(self: *Self, level: usize, index: usize) Error!void {
@@ -259,19 +367,37 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             const new_unique_id = try self.assert_unique_id(new_level, new_index, .Split);
 
             // Remove pointers to the old blocks
-            const this_ptr = self.get_pointer(level, index);
-            const buddy_ptr = self.get_pointer(level, buddy_index);
+            const this_ptr = self.index_to_block(level, index);
+            const buddy_ptr = self.index_to_block(level, buddy_index);
             self.free_blocks.remove_block(level, this_ptr);
             self.free_blocks.remove_block(level, buddy_ptr);
 
             // Push New Block into List
-            try self.free_blocks.push(new_level, self.get_pointer(new_level, new_index));
+            try self.free_blocks.push(new_level, self.index_to_block(new_level, new_index));
 
             // Set New Statuses
             try self.block_statuses.set(this_unique_id, .Invalid);
             try self.block_statuses.set(buddy_unique_id, .Invalid);
             try self.block_statuses.set(new_unique_id, .Free);
         }
+
+        const BlockStatusIter = struct {
+            ba: *Self,
+            block: FreeBlock.Ptr,
+            level: usize = level_count,
+            index: usize = undefined,
+            id: ?usize = null,
+
+            fn next(self: *BlockStatusIter) ?BlockStatus {
+                if (self.level == 0) return null;
+                self.level -= 1;
+                self.index = self.ba.block_to_index(self.level, self.block);
+                self.block = self.ba.index_to_block(self.level, self.index); // Allow parent shift
+                const id = unique_id(self.level, self.index);
+                self.id = id;
+                return self.ba.block_statuses.get(id) catch unreachable;
+            }
+        };
 
         fn free(allocator: *Allocator, value: []const u8, aligned_to: usize) FreeError!void {
             _ = aligned_to;
@@ -281,7 +407,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             if (value.len > max_size) return FreeError.InvalidFree;
 
             const address = @ptrToInt(value.ptr);
-            const block = @intToPtr(FreeBlock.Ptr, address);
+            const block = self.address_to_block(address);
             // TODO: This will issue a false positive if the allocated size
             // does not equal the size passed to free somewhat intentionally.
             // For example using std.ArrayList can have some extra capacity in
@@ -289,7 +415,7 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             // different size from the original allocation.
             if (value.len > 0 and false) {
                 const level = size_to_level(value.len);
-                const index = self.get_index(level, block);
+                const index = self.block_to_index(level, block);
                 const id = unique_id(level, index);
                 const status = self.block_statuses.get(id) catch unreachable;
                 if (status != .Used) {
@@ -303,27 +429,15 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
             // free where we don't get the size.
 
             // Find the level
-            var level = level_count - 1;
-            var id_maybe: ?usize = null;
-            var index: usize = undefined;
-            while (id_maybe == null) {
-                index = self.get_index(level, block);
-                if (self.assert_unique_id(level, index, .Used)) |i| {
-                    id_maybe = i;
-                } else |e| switch (e) {
-                    Error.WrongBlockStatus => {
-                        if (level == 0) {
-                            break;
-                        }
-                        level -= 1;
-                    },
-                    else => unreachable,
+            var iter = BlockStatusIter{.ba = self, .block = block};
+            while (iter.next()) |status| {
+                if (status == .Used) {
+                    break;
                 }
             }
-            if (id_maybe == null) {
-                return FreeError.InvalidFree;
-            }
-            const id = id_maybe.?;
+            const id = iter.id orelse return FreeError.InvalidFree;
+            var level = iter.level;
+            var index = iter.index;
 
             // Insert Block into List and Mark as Free
             self.free_blocks.push(level, block) catch unreachable;
@@ -344,82 +458,267 @@ pub fn BuddyAllocator(max_size_arg: usize) type {
                 level -= 1;
             }
         }
+
+        const AlignedRange = struct {
+            ptr: usize,
+            len: usize,
+
+            fn end(self: *const AlignedRange) usize {
+                return self.ptr + self.len;
+            }
+        };
+
+        fn aligned_range(range: []u8) AlignedRange {
+            const as_int = @ptrToInt(range.ptr);
+            return switch (kind) {
+                .InManagedArea => blk: {
+                    const aligned = utils.align_down(as_int, free_block_size);
+                    break :blk .{.ptr = aligned, .len = range.len + (as_int - aligned)};
+                },
+                .InSelf => .{.ptr = as_int, .len = range.len},
+            };
+        }
+
+        fn block_is_free(self: *Self, address: usize, iter_ptr: ?*BlockStatusIter) ?usize {
+            const block = self.address_to_block(address);
+            var iter = BlockStatusIter{.ba = self, .block = block};
+            defer if (iter_ptr) |ptr| {
+                ptr.* = iter;
+            };
+
+            while (iter.next()) |status| {
+                switch (status) {
+                    .Free => return address + level_to_block_size(iter.level),
+                    .Invalid => {},
+                    else => break,
+                }
+            }
+            return null;
+        }
+
+        pub fn is_free(self: *Self, range: []u8) bool {
+            if (!self.slice_in_range(range)) {
+                @panic("is_free got a range that's outside managed area!");
+            }
+            const aligned = aligned_range(range);
+            var address = aligned.ptr;
+            while (self.block_is_free(address, null)) |next| {
+                if (next >= aligned.end()) {
+                    return true;
+                }
+                address = next;
+            }
+            return false;
+        }
+
+        pub fn reserve(self: *Self, to_reserve: []u8) Error!void {
+            if (!self.is_free(to_reserve)) return Error.CantReserveAlreadyUsed;
+            const aligned = aligned_range(to_reserve);
+            var block_start = aligned.ptr;
+            var iter: BlockStatusIter = undefined;
+            while (self.block_is_free(block_start, &iter)) |next| {
+                var level = iter.level;
+                var index = iter.index;
+                block_start = self.get_address(level, index);
+                if (block_start >= aligned.end()) {
+                    break;
+                }
+                while (true) {
+                    const block_size = level_to_block_size(level);
+                    const range_end = aligned.ptr + aligned.len;
+                    const middle = block_start + block_size / 2;
+                    var split_right = false;
+                    var split_left = false;
+                    if (aligned.ptr >= middle) {
+                        split_right = true;
+                    }
+                    if (range_end < middle) {
+                        split_left = true;
+                    }
+                    if ((split_right or split_left) and level < (level_count - 1)) {
+                        self.split(level, index) catch unreachable;
+                        level += 1;
+                        index = index * 2;
+                        if (split_right) index += 1;
+                        block_start = self.get_address(level, index);
+                    } else {
+                        break;
+                    }
+                }
+
+                _ = self.reserve_block(level, self.index_to_block(level, index));
+
+                if (next >= self.start + max_size) {
+                    break;
+                }
+                block_start = next;
+            }
+        }
+
+        pub fn dump(self: *Self) void {
+            std.debug.print("Blocks : Free Lists " ++
+                "============================================================\n", .{});
+            self.free_blocks.dump(self);
+            std.debug.print(
+                \\Memory ========================================================================
+                \\{}
+                \\===============================================================================
+                \\
+                ,
+                .{utils.fmt_dump_hex(@intToPtr([*]const u8, self.start)[0..max_size])});
+        }
     };
 }
 
-const List = @import("list.zig").List;
-const AllocList = List([]u8);
-fn test_helper(
-        a: *Allocator, al: *AllocList, size: usize, fill: u8) MemoryError!void {
-    const s = try a.alloc_array(u8, size);
-    for (s) |*e| e.* = fill;
-    try al.push_front(s);
+const any_byte: u8 = 0x00;
+fn expect_mem(expected: []const u8, actual: []const u8) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    var fail = false;
+    for (expected) |e, i| {
+        if (e != any_byte and e != actual[i]) {
+            fail = true;
+            break;
+        }
+    }
+    if (fail) {
+        std.debug.print(
+            \\Expected ======================================================================
+            \\NOTE: 0x{x} matches any byte
+            \\{}
+            \\Actual ========================================================================
+            \\{}
+            \\===============================================================================
+            \\
+            ,
+            .{any_byte, utils.fmt_dump_hex(expected), utils.fmt_dump_hex(actual)});
+        try std.testing.expect(false);
+    }
 }
-test "BuddyAllocator" {
-    const std = @import("std");
 
-    const ptr_size = util.int_bit_size(usize);
+fn TestHelper(comptime kind: FreeBlockKind, total_size: usize) type {
+    return struct {
+        const Th = @This();
+        const Ba = BuddyAllocator(total_size, free_block_size, kind);
+        const in_self = kind == .InSelf;
+
+        ba: Ba = .{},
+        a: *Allocator = undefined,
+        m: [total_size]u8 align(Ba.area_align) = undefined,
+
+        fn init(self: *Th) !void {
+            try self.ba.init(self.m[0..]);
+            self.a = &self.ba.allocator;
+        }
+
+        fn assert_is_free(self: *Th, size: usize, at: usize, assert_free: bool) !void {
+            // std.debug.print("assert_is_free {}@{} == {}\n", .{size, at, assert_free});
+            try std.testing.expectEqual(assert_free, self.ba.is_free(
+                @intToPtr([*]align(Ba.area_align) u8, self.ba.start)[at..at + size]));
+        }
+
+        fn alloc(self: *Th, size: usize, at: usize, fill: u8) ![]u8 {
+            // std.debug.print(
+            //     \\ALLOC #########################################################################
+            //     \\Size: {} @ {} fill: {x}
+            //     \\ BEFORE:
+            //     \\
+            //     ,
+            //     .{size, at, fill});
+            // self.ba.dump();
+            try self.assert_is_free(size, at, true);
+            const s = try self.ba.allocator.alloc_array(u8, size);
+            for (s) |*e| e.* = fill;
+            try self.assert_is_free(size, at, false);
+            // std.debug.print(
+            //     \\ALLOC AFTER ###################################################################
+            //     \\
+            //     , .{});
+            // self.ba.dump();
+            return s;
+        }
+    };
+}
+
+fn buddy_allocator_test(comptime kind: FreeBlockKind) !void {
+    const ptr_size = utils.int_bit_size(usize);
     const free_pointer_size: usize = switch (ptr_size) {
         32 => @as(usize, 8),
         64 => @as(usize, 16),
         else => unreachable,
     };
     try std.testing.expectEqual(free_pointer_size, @sizeOf(?FreeBlock.Ptr));
-    try std.testing.expectEqual(free_pointer_size * 2, min_size);
+    try std.testing.expectEqual(free_pointer_size * 2, free_block_size);
 
-    const size: usize = 128;
-    const ABuddyAllocator = BuddyAllocator(size);
-    const expected_level_count: usize = switch (ptr_size) {
-        32 => @as(usize, 4),
-        64 => @as(usize, 3),
+    const Th = TestHelper(kind, 256);
+    var th = Th{};
+    try th.init();
+    try std.testing.expectEqual(switch (ptr_size) {
+        32 => @as(usize, 5),
+        64 => @as(usize, 4),
         else => unreachable,
-    };
-    try std.testing.expectEqual(
-        expected_level_count, ABuddyAllocator.level_count);
+    }, Th.Ba.level_count);
 
-    var b = ABuddyAllocator{};
-    var m: [size]u8 = undefined;
-    try b.init(m[0..]);
-    const a = &b.allocator;
+    try th.assert_is_free(th.m.len, 0, true);
+    try th.assert_is_free(1, 1, true);
+    const single = 32; // Single Block
+    const ones = try th.alloc(single, 0, 0x11);
+    try th.assert_is_free(th.m.len, 0, false);
+    try th.assert_is_free(th.m.len - single, single, true);
+    try th.assert_is_free(1, 1, false);
 
-    var al_alloc = memory.UnitTestAllocator{};
-    al_alloc.init();
-    defer al_alloc.done();
-    var al = AllocList{.alloc = &al_alloc.allocator};
+    const fours = try th.alloc(single, single, 0x44);
 
-    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x01));
-    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x04));
-    try test_helper(a, &al, @as(usize, 64), @as(u8, 0xff));
-    try std.testing.expectEqualSlices(u8,
-        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff" ++
-        "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
-        m[0..]);
-    try a.free_array((try al.pop_front()).?);
+    const bs_index = 100;
+    const bs = th.m[bs_index..150];
+    try th.assert_is_free(bs.len, bs_index, true);
+    try th.ba.reserve(bs);
+    try th.assert_is_free(32, 64, true); // Before reserved
+    try th.assert_is_free(bs.len, bs_index, false);
+    try th.assert_is_free(96, 160, true); // After reserved
+    for (bs) |*c| c.* = 0xbb;
+    const ones_and_fours = "\x11" ** single ++ "\x44" ** single;
+    const before_bs = [_]u8{any_byte} ** (bs_index - ones_and_fours.len);
+    const after_bs_index = bs_index + bs.len;
+    const after_bs = [_]u8{any_byte} ** (th.m.len - after_bs_index);
+    const bs_and_before = ones_and_fours ++ before_bs ++ "\xbb" ** bs.len;
+    try expect_mem(bs_and_before ++ after_bs, th.m[0..]);
 
-    const byte: u8 = 0xaa;
-    try test_helper(a, &al, @as(usize, 1), byte);
-    try std.testing.expectEqual(byte, m[32 * 2]);
-    try a.free_array((try al.pop_front()).?);
+    const fs_len = 64;
+    const fs_index = 192;
+    const fs = try th.alloc(fs_len, fs_index, 0xff);
+    const before_fs = [_]u8{any_byte} ** (th.m.len - after_bs_index - fs_len);
+    try expect_mem(bs_and_before ++ before_fs ++ "\xff" ** fs_len, th.m[0..]);
 
-    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x88));
-    try test_helper(a, &al, @as(usize, 32), @as(u8, 0x77));
-    try std.testing.expectEqualSlices(u8,
-        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-        "\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01" ++
-        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-        "\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04\x04" ++
-        "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
-        "\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88\x88" ++
-        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77" ++
-        "\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77\x77",
-        m[0..]);
-    while (try al.pop_front()) |slice| {
-        try a.free_array(slice);
+    const fives = try th.alloc(single, th.m.len - fs_len - single, 0x55);
+    const sixes = try th.alloc(single, ones_and_fours.len, 0x66);
+
+    try th.assert_is_free(fs_len, fs_index, false);
+    try th.a.free_array(fs);
+    try th.assert_is_free(fs_len, fs_index, true);
+
+    {
+        const byte: u8 = 0xaa;
+        const as = try th.alloc(1, fs_index, byte);
+        try std.testing.expectEqual(byte, th.m[fs_index]);
+        try th.a.free_array(as);
     }
+
+    const eights = try th.alloc(single, fs_index, 0x88);
+    const sevens = try th.alloc(single, fs_index + single, 0x77);
+    try expect_mem(bs_and_before ++ before_fs ++ "\x88" ** single ++ "\x77" ** single, th.m[0..]);
+
+    try th.a.free_array(sevens);
+    try th.a.free_array(ones);
+    try th.a.free_array(eights);
+    try th.a.free_array(sixes);
+    try th.a.free_array(fours);
+    try th.a.free_array(fives);
+}
+
+test "BuddyAllocator.InManagedArea" {
+    try buddy_allocator_test(.InManagedArea);
+}
+
+test "BuddyAllocator.InSelf" {
+    try buddy_allocator_test(.InSelf);
 }

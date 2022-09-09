@@ -175,3 +175,74 @@ test "StringReader" {
     try std.testing.expectEqualStrings("World!", buffer[0..try reader.read(buffer[0..])]);
     try std.testing.expectEqualStrings("", buffer[0..try reader.read(buffer[0..])]);
 }
+
+fn fmt_dump_hex_impl(bytes: []const u8, comptime fmt: []const u8,
+        options: std.fmt.FormatOptions, writer: anytype) !void {
+    _ = fmt;
+    _ = options;
+
+    // Print hex data like this:
+    //                        VV group_sep
+    // 00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F
+    // ^^ Byte ^ byte_sep  Group^^^^^^^^^^^^^^^^^^^^^^^
+    const group_byte_count = 8;
+    const byte_sep = " ";
+    const group_size =
+        group_byte_count * 2 + // Bytes
+        ((group_byte_count * byte_sep.len) - 1); // byte_sep Between Bytes
+    const group_count = 2;
+    const group_sep = "  ";
+    const buffer_size =
+        group_size * group_count + // Groups
+        (group_count - 1) * group_sep.len + // group_sep Between Groups
+        1; // Newline
+
+    var buffer: [buffer_size]u8 = undefined;
+    var i: usize = 0;
+    var buffer_pos: usize = 0;
+    var byte_i: usize = 0;
+    var group_i: usize = 0;
+    var has_next = i < bytes.len;
+    var print_buffer = false;
+    while (has_next) {
+        const next_i = i + 1;
+        has_next = next_i < bytes.len;
+        print_buffer = !has_next;
+        {
+            const new_pos = buffer_pos + 2;
+            byte_buffer(buffer[buffer_pos..new_pos], bytes[i]);
+            buffer_pos = new_pos;
+        }
+        byte_i += 1;
+        if (byte_i == group_byte_count) {
+            byte_i = 0;
+            group_i += 1;
+            if (group_i == group_count) {
+                group_i = 0;
+                print_buffer = true;
+            } else {
+                for (group_sep[0..group_sep.len]) |b| {
+                    buffer[buffer_pos] = b;
+                    buffer_pos += 1;
+                }
+            }
+        } else if (has_next) {
+            for (byte_sep[0..byte_sep.len]) |b| {
+                buffer[buffer_pos] = b;
+                buffer_pos += 1;
+            }
+        }
+        if (print_buffer) {
+            buffer[buffer_pos] = '\n';
+            buffer_pos += 1;
+            try writer.writeAll(buffer[0..buffer_pos]);
+            buffer_pos = 0;
+            print_buffer = false;
+        }
+        i = next_i;
+    }
+}
+
+pub fn fmt_dump_hex(bytes: []const u8) std.fmt.Formatter(fmt_dump_hex_impl) {
+    return .{.data = bytes};
+}

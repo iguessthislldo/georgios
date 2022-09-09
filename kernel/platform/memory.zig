@@ -1,3 +1,36 @@
+// x86 Memory Management
+//
+// Memory management consistents of frame management and page management.
+// Frames are chunks of real/physical memory that are joined in a
+// linked list when unused:
+//
+//                  +-----+  +-----+
+// next_free_frame->|Frame|->|Frame|->...->null
+//                  +-----+  +-----+
+//
+// Pages are the in-use frames that mapped into the virtual memory that the
+// kernel and programs can directly access. They are accessed by the CPU using
+// a set of strutures the kernel has to set up:
+//
+//        Page Directory   Page Tables  Used Frames
+//       +-------------+  +------+     +----------------+
+// %cr3->|Table 0 Ptr. |->|Page 0|---->|Frame for Page 0|
+//       +-------------+  +------+     +----------------+
+//       |Table 1 Ptr. |  |Page 1|---->|Frame for Page 0|
+//       +-------------+  +------+     +----------------+
+//       |...          |  |...   |     |...             |
+//       +-------------+  +------+     +----------------+
+//
+// NOTE: In Georgios %cr3 is always set to the active_page_directory array.
+// With the exception of kernel space, whole new virtual memory layouts are
+// copied to and from active_page_directory to swap memory, followed by a call
+// to reload_active_page_directory to inform the CPU the page directory
+// changed.
+//
+// For Reference See:
+//   https://wiki.osdev.org/Paging
+//   https://ethv.net/workshops/osdev/notes/notes-2.html
+
 const std = @import("std");
 const sliceAsBytes = std.mem.sliceAsBytes;
 

@@ -5,7 +5,7 @@ const utils = @import("utils");
 
 const kernel = @import("kernel.zig");
 const print = @import("print.zig");
-const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
+const MinBuddyAllocator = @import("buddy_allocator.zig").MinBuddyAllocator;
 
 const platform = @import("platform.zig");
 
@@ -221,7 +221,7 @@ pub const UnitTestAllocator = struct {
 /// Used by the kernel to manage system memory
 pub const Manager = struct {
     const alloc_size = utils.Mi(1);
-    const AllocImplType = BuddyAllocator(alloc_size);
+    const AllocImplType = MinBuddyAllocator(alloc_size);
 
     impl: platform.MemoryMgrImpl = .{},
     free_frame_count: usize = 0,
@@ -280,7 +280,7 @@ pub const Manager = struct {
             total_memory >> 30});
 
         self.alloc_impl = try self.big_alloc.alloc(AllocImplType);
-        try self.alloc_impl.init(try self.big_alloc.alloc([alloc_size]u8));
+        try self.alloc_impl.init(@alignCast(AllocImplType.area_align, try self.big_alloc.alloc([alloc_size]u8)));
         self.alloc = &self.alloc_impl.allocator;
         kernel.alloc = self.alloc;
         kernel.big_alloc = self.big_alloc;

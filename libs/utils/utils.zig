@@ -39,6 +39,7 @@ pub const starts_with = str.starts_with;
 pub const ends_with = str.ends_with;
 pub const StringWriter = str.StringWriter;
 pub const StringReader = str.StringReader;
+pub const fmt_dump_hex = str.fmt_dump_hex;
 
 pub const Error = error {
     Unknown,
@@ -270,7 +271,7 @@ pub fn pow2_round_up(comptime Type: type, value: Type) Type {
         return value;
     } else {
         return @intCast(Type, 1) <<
-            @intCast(IntLog2Type(Type), (int_log2(Type, value - 1) + 1));
+            @intCast(IntLog2Type(Type), int_log2(Type, value - 1) + 1);
     }
 }
 
@@ -287,6 +288,27 @@ test "pow2_round_up" {
     try std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 9));
     try std.testing.expectEqual(@as(u8, 16), pow2_round_up(u8, 16));
     try std.testing.expectEqual(@as(u8, 32), pow2_round_up(u8, 17));
+}
+
+pub fn pow2_round_down(comptime Type: type, value: Type) Type {
+    if (value < 3 or (value & (value - 1)) == 0) return value;
+    return @intCast(Type, 1) <<
+        @intCast(IntLog2Type(Type), int_log2(Type, value - 1));
+}
+
+test "pow2_round_down" {
+    try std.testing.expectEqual(@as(u8, 0), pow2_round_down(u8, 0));
+    try std.testing.expectEqual(@as(u8, 1), pow2_round_down(u8, 1));
+    try std.testing.expectEqual(@as(u8, 2), pow2_round_down(u8, 2));
+    try std.testing.expectEqual(@as(u8, 2), pow2_round_down(u8, 3));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_down(u8, 4));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_down(u8, 5));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_down(u8, 6));
+    try std.testing.expectEqual(@as(u8, 4), pow2_round_down(u8, 7));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_down(u8, 8));
+    try std.testing.expectEqual(@as(u8, 8), pow2_round_down(u8, 9));
+    try std.testing.expectEqual(@as(u8, 16), pow2_round_down(u8, 16));
+    try std.testing.expectEqual(@as(u8, 16), pow2_round_down(u8, 17));
 }
 
 /// Simple Pseudo-random number generator
