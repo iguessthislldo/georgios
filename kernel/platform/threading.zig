@@ -284,12 +284,13 @@ pub const ProcessImpl = struct {
             var info = self.process.info.?;
 
             // ProcessInfo path and name
+            const name = if (info.name.len > 0) info.name else info.path;
             info.path = self.copy_string_to_user_stack(thread, info.path);
-            info.name = self.copy_string_to_user_stack(thread, info.name);
+            info.name = self.copy_string_to_user_stack(thread, name);
 
             // ProcessInfo.args
             thread.usermode_stack_ptr = utils.align_down(thread.usermode_stack_ptr -
-                @sizeOf([]const u8) * info.args.len, @sizeOf([]const u8));
+                @sizeOf([]const u8) * info.args.len, @alignOf([]const u8));
             const args_array = thread.usermode_stack_ptr;
             var arg_slice_ptr = args_array;
             for (info.args) |arg| {

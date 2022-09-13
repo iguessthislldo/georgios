@@ -193,7 +193,8 @@ pub const ConsoleWriter = struct {
         } else if (is_kernel) {
             root.kernel.print.string(bytes);
         } else {
-            @compileError("ConsoleWriter doesn't support this yet");
+            @compileError("ConsoleWriter doesn't know what to do here. " ++
+                "is_program and is_kernel are both false");
         }
         return bytes.len;
     }

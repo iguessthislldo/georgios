@@ -288,7 +288,7 @@ pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind)
         }
 
         pub fn addr_in_range(self: *const Self, addr: usize) bool {
-            return addr >= self.start and addr < (self.start + max_size);
+            return addr >= self.start and addr <= (self.start - 1 + max_size);
         }
 
         pub fn slice_in_range(self: *const Self, range: []u8) bool {
@@ -479,7 +479,12 @@ pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind)
             };
         }
 
-        fn block_is_free(self: *Self, address: usize, iter_ptr: ?*BlockStatusIter) ?usize {
+        const BlockIsFreeRv = union(enum) {
+            Next: usize,
+            Last: void,
+        };
+
+        fn block_is_free(self: *Self, address: usize, iter_ptr: ?*BlockStatusIter) ?BlockIsFreeRv {
             const block = self.address_to_block(address);
             var iter = BlockStatusIter{.ba = self, .block = block};
             defer if (iter_ptr) |ptr| {
@@ -488,7 +493,14 @@ pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind)
 
             while (iter.next()) |status| {
                 switch (status) {
-                    .Free => return address + level_to_block_size(iter.level),
+                    .Free => {
+                        const bs = level_to_block_size(iter.level);
+                        var next: usize = undefined;
+                        if (@addWithOverflow(usize, address, bs, &next)) {
+                            return BlockIsFreeRv.Last;
+                        }
+                        return BlockIsFreeRv{.Next = address +% bs};
+                    },
                     .Invalid => {},
                     else => break,
                 }
@@ -503,10 +515,13 @@ pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind)
             const aligned = aligned_range(range);
             var address = aligned.ptr;
             while (self.block_is_free(address, null)) |next| {
-                if (next >= aligned.end()) {
-                    return true;
+                switch (next) {
+                    .Next => |n| {
+                        if (n >= aligned.end()) return true;
+                        address = n;
+                    },
+                    .Last => return true,
                 }
-                address = next;
             }
             return false;
         }
@@ -548,10 +563,15 @@ pub fn BuddyAllocator(max_size_arg: usize, min_size: usize, kind: FreeBlockKind)
 
                 _ = self.reserve_block(level, self.index_to_block(level, index));
 
-                if (next >= self.start + max_size) {
-                    break;
+                switch (next) {
+                    .Next => |n| {
+                        if (n >= self.start + max_size) {
+                            break;
+                        }
+                        block_start = n;
+                    },
+                    .Last => break,
                 }
-                block_start = next;
             }
         }
 

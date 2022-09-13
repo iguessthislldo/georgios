@@ -34,6 +34,7 @@
 const std = @import("std");
 const sliceAsBytes = std.mem.sliceAsBytes;
 
+const georgios = @import("georgios");
 const utils = @import("utils");
 
 const kernel = @import("root").kernel;
@@ -43,6 +44,7 @@ const AllocError = memory.AllocError;
 const FreeError = memory.FreeError;
 const Range = memory.Range;
 const print = kernel.print;
+const BuddyAllocator = @import("../buddy_allocator.zig").BuddyAllocator;
 
 const platform = @import("platform.zig");
 
@@ -160,7 +162,7 @@ const FrameAccessSlot = struct {
 ///
 /// This involves reserving a FrameAccessSlot using a FrameAccess object for
 /// the type to map. There can only be one FrameAccess using a slot at a time
-/// or else there will be a panic.  See below for the slot objects.
+/// or else there will be a panic. See below for the slot objects.
 fn FrameAccess(comptime Type: type) type {
     const Traits = @typeInfo(Type);
     comptime var slice_len: ?comptime_int = null;
@@ -212,11 +214,10 @@ fn FrameAccess(comptime Type: type) type {
 }
 
 var pmem_frame_access_slot: FrameAccessSlot = .{.i = 0};
-var page_table_frame_access_slot: FrameAccessSlot = .{.i = 2};
-var page_frame_access_slot: FrameAccessSlot = .{.i = 1};
+var page_table_frame_access_slot: FrameAccessSlot = .{.i = 1};
+var page_frame_access_slot: FrameAccessSlot = .{.i = 2};
 // NOTE: More cannot be added unless room is made in the linking script by
 // adjusting .low_force_space_begin_align to make _REAL_LOW_END increase.
-
 
 /// Add Frame Groups to Our Memory Map from Multiboot Memory Map
 pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
@@ -243,11 +244,6 @@ pub fn process_multiboot2_mmap(map: *RealMemoryMap, tag: *const Range) void {
     }
 }
 
-/// Kernel Memory System Platform Implementation
-///
-/// Physical Memory Allocation is based on
-/// http://ethv.net/workshops/osdev/notes/notes-2
-/// When a physical frame isn't being used it is part of a linked list.
 pub const ManagerImpl = struct {
     const FreeFramePtr = ?usize;
     const FreeFramePtrAccess = FrameAccess(FreeFramePtr);
@@ -265,10 +261,16 @@ pub const ManagerImpl = struct {
         return PageAccess.new(&page_frame_access_slot, frame);
     }
 
+    const kernel_space_size = utils.Gi(1);
+    const kernel_space_start = 0xc0000000;
+    const kernel_space = @intToPtr([*]u8, kernel_space_start)[0..kernel_space_size];
+    const KernelSpacePageAlloc = BuddyAllocator(kernel_space_size, page_size, .InSelf);
+
     parent: *memory.Manager = undefined,
     next_free_frame: FreeFramePtr = null,
     kernel_tables_index_start: usize = 0,
     start_of_virtual_space: usize = 0,
+    kernel_space_page_alloc: KernelSpacePageAlloc = undefined,
     page_allocator: memory.Allocator = undefined,
 
     pub fn init(self: *ManagerImpl, parent: *memory.Manager, memory_map: *RealMemoryMap) void {
@@ -300,6 +302,11 @@ pub const ManagerImpl = struct {
         self.start_of_virtual_space = utils.align_up(
             @ptrToInt(kernel_page_tables.ptr) + kernel_page_tables.len * table_size,
             table_pages_size);
+        self.kernel_space_page_alloc.init(kernel_space) catch
+            @panic("failed to init kernel page allocator");
+        const range = kernel_space[0..self.start_of_virtual_space - kernel_space_start];
+        self.kernel_space_page_alloc.reserve(range) catch
+            @panic("failed to reserve space in kernel page allocator");
     }
 
     pub fn push_frame(self: *ManagerImpl, frame: usize) void {
@@ -325,57 +332,194 @@ pub const ManagerImpl = struct {
         return AllocError.OutOfMemory;
     }
 
-    pub fn get_unused_kernel_space(self: *ManagerImpl, requested_size: usize) AllocError!Range {
-        // print.format("get_unused_kernel_space {:x}\n", requested_size);
-        const start = self.start_of_virtual_space;
-        const dir_index_start = get_directory_index(start);
-        const table_index_start = get_table_index(start);
-        var rv = Range{.size = utils.align_up(requested_size, page_size)};
-        var range = Range{};
-        var dir_index: usize = dir_index_start;
-        while (dir_index < tables_per_directory) {
-            // print.format(" - Table {:x}\n", dir_index);
-            const dir_offset = dir_index * table_pages_size;
-            const dir_entry = active_page_directory[dir_index];
-            if (!table_is_present(dir_entry)) {
-                if (range.size == 0) {
-                    range.start = dir_offset;
-                }
-                range.size += table_pages_size;
-                if (range.size >= rv.size) {
-                    rv.start = range.start;
-                    return rv;
-                }
-                dir_index += 1;
-                continue;
-            }
-            const access = access_page_table(get_table_address(active_page_directory[dir_index]));
-            defer access.done();
-            const table = access.get();
-            var table_index: usize =
-                if (dir_index == dir_index_start) table_index_start else 0;
-            while (table_index < pages_per_table) {
-                // print.format(" - Page {:x}\n", table_index);
-                if (page_is_present(table[table_index])) {
-                    if (range.size > 0) {
-                        range.size = 0;
-                        range.start = 0;
-                    }
-                } else {
-                    if (range.size == 0) {
-                        range.start = dir_offset + table_index * page_size;
-                    }
-                    range.size += page_size;
-                    if (range.size >= rv.size) {
-                        rv.start = range.start;
-                        return rv;
-                    }
-                }
-                table_index += 1;
-            }
-            dir_index += 1;
+    const PageIter = struct {
+        mgr: *ManagerImpl,
+        page_directory: []u32,
+        virtual_range: Range,
+        offset: usize,
+        user: bool,
+        dir_index: usize,
+        table_index: usize,
+        left: usize,
+        initial_call: bool = true,
+        changed_table: bool = undefined,
+
+        fn new(mgr: *ManagerImpl, page_directory: []u32,
+                virtual_range: Range, align_to_page_size: bool, user: bool) PageIter {
+            return .{
+                .mgr = mgr,
+                .page_directory = page_directory,
+                .virtual_range = virtual_range,
+                .offset = virtual_range.start % page_size,
+                .user = user,
+                .dir_index = get_directory_index(virtual_range.start),
+                .table_index = get_table_index(virtual_range.start),
+                .left = if (align_to_page_size) utils.align_up(virtual_range.size, page_size)
+                    else virtual_range.size,
+            };
         }
-        return AllocError.OutOfMemory;
+
+        fn address(self: *PageIter) usize {
+            return get_address(self.dir_index, self.table_index);
+        }
+
+        fn iter(self: *PageIter) ?*PageIter {
+            if (self.left == 0 or self.dir_index >= tables_per_directory) return null;
+            if (self.initial_call) {
+                self.initial_call = false;
+                self.changed_table = true;
+            } else {
+                self.left -= @minimum(page_size, self.left);
+                self.table_index += 1;
+                self.offset = 0;
+                self.changed_table = self.table_index >= pages_per_table;
+                if (self.changed_table) {
+                    self.table_index = 0;
+                    self.dir_index += 1;
+                }
+                if (self.left == 0 or self.dir_index >= tables_per_directory) return null;
+            }
+
+            return self;
+        }
+
+        fn no_table(self: *PageIter) bool {
+            return !table_is_present(self.page_directory[self.dir_index]);
+        }
+
+        fn ensure_table(self: *PageIter) AllocError!void {
+            if (self.changed_table and self.no_table()) {
+                try self.mgr.new_page_table(self.page_directory, self.dir_index, self.user);
+            }
+        }
+
+        fn get_table_access(self: *PageIter) TableAccess {
+            return access_page_table(get_table_address(self.page_directory[self.dir_index]));
+        }
+
+        fn map_to_i(self: *PageIter, table_entry: *u32, physical_address: usize) void {
+            set_entry(table_entry, physical_address, self.user);
+            if (&self.page_directory[0] == &active_page_directory[0]) {
+                invalidate_page(self.address());
+            }
+        }
+
+        fn ensure_page(self: *PageIter) AllocError!void {
+            try self.ensure_table();
+
+            const table_access = self.get_table_access();
+            defer table_access.done();
+            const table = table_access.get();
+
+            if (page_is_guard_page(table[self.table_index])) {
+                @panic("ensure_page: page is guard page!");
+            }
+
+            const table_entry = &table[self.table_index];
+            if (!page_is_present(table_entry.*)) {
+                self.map_to_i(table_entry, try self.mgr.pop_frame());
+            }
+        }
+
+        fn map_to(self: *PageIter, physical_address: usize) AllocError!void {
+            try self.ensure_table();
+
+            const table_access = self.get_table_access();
+            defer table_access.done();
+            const table = table_access.get();
+
+            if (page_is_guard_page(table[self.table_index])) {
+                @panic("map_to: page is guard page!");
+            }
+
+            if (page_is_present(table[self.table_index])) {
+                @panic("map_to: page already present!");
+            }
+
+            self.map_to_i(&table[self.table_index], physical_address);
+        }
+
+        fn access(self: *PageIter) PageAccess {
+            const table_access = self.get_table_access();
+            defer table_access.done();
+            const table = table_access.get();
+            return access_page(get_page_address(table[self.table_index]));
+        }
+    };
+
+    // TODO: Read/Write and Any Other Options
+    pub fn mark_virtual_memory_present(self: *ManagerImpl,
+            page_directory: []u32, range: Range, user: bool) AllocError!void {
+        var page_iter = PageIter.new(self, page_directory, range, true, user);
+        while (page_iter.iter()) |page| {
+            try page.map_to(try self.pop_frame());
+        }
+    }
+
+    // TODO
+    fn mark_virtual_memory_absent(self: *ManagerImpl, range: Range) void {
+        _ = self;
+        _ = range;
+    }
+
+    pub fn map(self: *ManagerImpl, virtual_range: Range, physical_start: usize,
+            user: bool) AllocError!void {
+        var page_iter = PageIter.new(self, active_page_directory[0..], virtual_range, true, user);
+        var physical_address = physical_start;
+        while (page_iter.iter()) |page| {
+            try page.map_to(physical_address);
+            physical_address +%= page_size;
+        }
+    }
+
+    pub fn page_directory_memory_dump(self: *ManagerImpl, page_directory: []u32,
+            address: usize, len: usize) void {
+        const range = Range{.start = address, .size = len};
+        var page_iter = PageIter.new(self, page_directory, range, false, true);
+        while (page_iter.iter()) |page| {
+            const access = page.access();
+            defer access.done();
+            const page_data = access.get()[page.offset..];
+            try georgios.get_console_writer().print("{}", .{utils.fmt_dump_hex(page_data)});
+        }
+    }
+
+    pub fn page_directory_memory_copy(self: *ManagerImpl, page_directory: []u32,
+            address: usize, data: []const u8) AllocError!void {
+        // print.format("page_directory_memory_copy: {} b to {:a}\n", .{data.len, address});
+        const range = Range{.start = address, .size = data.len};
+        var page_iter = PageIter.new(self, page_directory, range, false, true);
+        var data_left = data;
+        while (page_iter.iter()) |page| {
+            try page.ensure_page();
+            const access = page.access();
+            defer access.done();
+            const copy_to = access.get()[page.offset..];
+            const copied = utils.memory_copy_truncate(copy_to, data_left);
+            data_left = data_left[copied..];
+        }
+
+        if (data_left.len > 0) {
+            @panic("page_directory_memory_copy: data_left.len > 0");
+        }
+    }
+
+    pub fn page_directory_memory_set(self: *ManagerImpl, page_directory: []u32,
+            address: usize, byte: u8, len: usize) AllocError!void {
+        // print.format("page_directory_memory_set: {} b at {:a}\n", .{len, address});
+        const range = Range{.start = address, .size = len};
+        var page_iter = PageIter.new(self, page_directory, range, false, true);
+        while (page_iter.iter()) |page| {
+            try page.ensure_page();
+            const access = page.access();
+            defer access.done();
+            utils.memory_set(access.get()[page.offset..], byte);
+        }
+    }
+
+    pub fn get_unused_kernel_space(self: *ManagerImpl, requested_size: usize) AllocError!Range {
+        return Range.from_bytes(
+            try self.kernel_space_page_alloc.allocator.alloc_array(u8, requested_size));
     }
 
     pub fn new_page_table(self: *ManagerImpl, page_directory: []u32,
@@ -393,55 +537,6 @@ pub const ManagerImpl = struct {
             i += 1;
         }
         access.done();
-    }
-
-    // TODO: Read/Write and Any Other Options
-    pub fn mark_virtual_memory_present(self: *ManagerImpl,
-            page_directory: []u32, range: Range, user: bool) AllocError!void {
-        // print.format("mark_virtual_memory_present {:a} {:a}\n", .{range.start, range.size});
-        const dir_index_start = get_directory_index(range.start);
-        const table_index_start = get_table_index(range.start);
-        var dir_index: usize = dir_index_start;
-        var marked: usize = 0;
-        while (dir_index < tables_per_directory) {
-            // print.format(" - Table {:x}\n", dir_index);
-            if (!table_is_present(page_directory[dir_index])) {
-                try self.new_page_table(page_directory, dir_index, user);
-            }
-            const access = access_page_table(get_table_address(page_directory[dir_index]));
-            defer access.done();
-            const table = access.get();
-            if (user) {
-                // TODO: Seperate User and Write
-                page_directory[dir_index] |= (0b11 << 1);
-            }
-            var table_index: usize =
-                if (dir_index == dir_index_start) table_index_start else 0;
-            while (table_index < pages_per_table) {
-                // print.format(" - Page {:x} {:x} {:x}\n",
-                //     dir_index, table_index, table[table_index]);
-                if (page_is_present(table[table_index])) {
-                    print.format("{:x}\n", .{get_address(dir_index, table_index)});
-                    @panic("mark_virtual_memory_present: Page already present!");
-                }
-                // TODO: Go through memory.Memory for pop_frame
-                const frame = try self.pop_frame();
-                set_entry(&table[table_index], frame, user);
-                if (&page_directory[0] == &active_page_directory[0]) {
-                    invalidate_page(get_address(dir_index, table_index));
-                }
-                marked += page_size;
-                if (marked >= range.size) return;
-                table_index += 1;
-            }
-            dir_index += 1;
-        }
-    }
-
-    // TODO
-    fn mark_virtual_memory_absent(self: *ManagerImpl, range: Range) void {
-        _ = self;
-        _ = range;
     }
 
     pub fn make_guard_page(self: *ManagerImpl, page_directory: ?[]u32,
@@ -488,131 +583,5 @@ pub const ManagerImpl = struct {
             try self.parent.big_alloc.alloc_array(u32, tables_per_directory);
         _ = utils.memory_set(sliceAsBytes(page_directory[0..]), 0);
         return page_directory;
-    }
-
-    pub fn page_directory_memory_copy(self: *ManagerImpl, page_directory: []u32,
-            address: usize, data: []const u8) AllocError!void {
-        // print.format("page_directory_memory_copy: {} b to {:a}\n", .{data.len, address});
-        const dir_index_start = get_directory_index(address);
-        const table_index_start = get_table_index(address);
-        var dir_index: usize = dir_index_start;
-        var data_left = data;
-        var page_offset = address % page_size;
-        while (data_left.len > 0 and dir_index < tables_per_directory) {
-            if (!table_is_present(page_directory[dir_index])) {
-                try self.new_page_table(page_directory, dir_index, true);
-            }
-            var table_index: usize =
-                if (dir_index == dir_index_start) table_index_start else 0;
-            while (data_left.len > 0 and table_index < pages_per_table) {
-                const table_access = access_page_table(get_table_address(page_directory[dir_index]));
-                defer table_access.done();
-                const table = table_access.get();
-                if (!page_is_present(table[table_index])) {
-                    // TODO: Go through memory.Memory for pop_frame
-                    const frame = try self.pop_frame();
-                    set_entry(&table[table_index], frame, true);
-                    if (&page_directory[0] == &active_page_directory[0]) {
-                        invalidate_page(get_address(dir_index, table_index));
-                    }
-                }
-                const page_access = access_page(get_page_address(table[table_index]));
-                defer page_access.done();
-                const page = page_access.get()[page_offset..];
-                page_offset = 0;
-                const copied = utils.memory_copy_truncate(page, data_left);
-                data_left = data_left[copied..];
-                table_index += 1;
-            }
-            dir_index += 1;
-        }
-
-        if (data_left.len > 0) {
-            @panic("address_space_copy: data_left.len > 0 at end!");
-        }
-    }
-
-    pub fn page_directory_memory_set(self: *ManagerImpl, page_directory: []u32,
-            address: usize, byte: u8, len: usize) AllocError!void {
-        const dir_index_start = get_directory_index(address);
-        const table_index_start = get_table_index(address);
-        var dir_index: usize = dir_index_start;
-        var left = len;
-        var page_offset = address % page_size;
-        while (left > 0 and dir_index < tables_per_directory) {
-            if (!table_is_present(page_directory[dir_index])) {
-                try self.new_page_table(page_directory, dir_index, true);
-            }
-            var table_index: usize =
-                if (dir_index == dir_index_start) table_index_start else 0;
-            while (left > 0 and table_index < pages_per_table) {
-                const table_access = access_page_table(get_table_address(page_directory[dir_index]));
-                defer table_access.done();
-                const table = table_access.get();
-                if (!page_is_present(table[table_index])) {
-                    // TODO: Go through memory.Memory for pop_frame
-                    const frame = try self.pop_frame();
-                    set_entry(&table[table_index], frame, true);
-                    if (&page_directory[0] == &active_page_directory[0]) {
-                        invalidate_page(get_address(dir_index, table_index));
-                    }
-                }
-                const page_access = access_page(get_page_address(table[table_index]));
-                defer page_access.done();
-                var page = page_access.get()[page_offset..];
-                if (page.len > left) {
-                    page.len = left;
-                }
-                page_offset = 0;
-                utils.memory_set(page, byte);
-                left -= page.len;
-                table_index += 1;
-            }
-            dir_index += 1;
-        }
-    }
-
-    // TODO: This page structure iteration code is starting to seem very boiler
-    // plate. Figure out a way to simplify it or else more likely make it
-    // generic.
-
-    // Assumes range address is page aligned.
-    pub fn map_i(self: *ManagerImpl, page_directory: []u32, virtual_range: Range,
-            physical_start: usize, user: bool) AllocError!void {
-        const dir_index_start = get_directory_index(virtual_range.start);
-        const table_index_start = get_table_index(virtual_range.start);
-        var dir_index: usize = dir_index_start;
-        var left = virtual_range.size;
-        var physical_address = physical_start;
-        while (left > 0 and dir_index < tables_per_directory) {
-            if (!table_is_present(page_directory[dir_index])) {
-                try self.new_page_table(page_directory, dir_index, user);
-            }
-            const table_access = access_page_table(get_table_address(page_directory[dir_index]));
-            defer table_access.done();
-            const table = table_access.get();
-            var table_index: usize =
-                if (dir_index == dir_index_start) table_index_start else 0;
-            while (left > 0 and table_index < pages_per_table) {
-                const a = get_address(dir_index, table_index);
-                set_entry(&table[table_index], physical_address, user);
-                if (&page_directory[0] == &active_page_directory[0]) {
-                    invalidate_page(a);
-                }
-                left -= page_size;
-                physical_address += page_size;
-                table_index += 1;
-            }
-            dir_index += 1;
-        }
-
-        if (left > 0) {
-            @panic("map: left > 0 at end!");
-        }
-    }
-
-    pub fn map(self: *ManagerImpl, virtual_range: Range, physical_start: usize,
-            user: bool) AllocError!void {
-        try self.map_i(active_page_directory[0..], virtual_range, physical_start, user);
     }
 };
