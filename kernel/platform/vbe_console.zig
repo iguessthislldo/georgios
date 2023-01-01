@@ -12,22 +12,22 @@ const Box = vbe.Box;
 
 pub fn color_value_from_hex_color(hex_color: HexColor) u32 {
     return switch (hex_color) {
-        HexColor.White => 0x00e8e6e3,
-        HexColor.LightGray => 0x00D0CFCC,
-        HexColor.DarkGray => 0x005E5C64,
-        HexColor.Black => 0x00171421,
-        HexColor.Red => 0x00C01C28,
-        HexColor.Green => 0x0026A269,
-        HexColor.Yellow => 0x00A2734C,
-        HexColor.Blue => 0x0012488B,
-        HexColor.Magenta => 0x00A347BA,
-        HexColor.Cyan => 0x002AA1B3,
-        HexColor.LightRed => 0x00F66151,
-        HexColor.LightGreen => 0x0033DA7A,
-        HexColor.LightYellow => 0x00E9AD0C,
-        HexColor.LightBlue => 0x002A7BDE,
-        HexColor.LightMagenta => 0x00C061CB,
-        HexColor.LightCyan => 0x0033C7DE,
+        HexColor.White => 0xffe8e6e3,
+        HexColor.LightGray => 0xffd0cfcc,
+        HexColor.DarkGray => 0xff5e5c64,
+        HexColor.Black => 0xff171421,
+        HexColor.Red => 0xffc01c28,
+        HexColor.Green => 0xff26a269,
+        HexColor.Yellow => 0xffa2734c,
+        HexColor.Blue => 0xff12488b,
+        HexColor.Magenta => 0xffa347ba,
+        HexColor.Cyan => 0xff2aa1b3,
+        HexColor.LightRed => 0xfff66151,
+        HexColor.LightGreen => 0xff33da7a,
+        HexColor.LightYellow => 0xffe9ad0c,
+        HexColor.LightBlue => 0xff2a7bde,
+        HexColor.LightMagenta => 0xffc061cb,
+        HexColor.LightCyan => 0xff33c7de,
     };
 }
 
@@ -113,7 +113,7 @@ pub fn move_cursor_impl(c: *Console, row: u32, col: u32) void {
     if (show_cursor and false) { // TODO: Finish cursor
         const pos = Box.Pos{.x = col * glyph_width, .y = row * glyph_height};
         const size = font.bdf_font.bounds.size.as(Box.Size.Num);
-        vbe.draw_box(.{.pos = pos, .size = size.minus_int(1)}, 0x0);
+        vbe.draw_box(.{.pos = pos, .size = size.minus_int(1)}, 0xff000000);
         vbe.flush_buffer_area(.{.pos = pos, .size = size});
     }
 }

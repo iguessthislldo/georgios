@@ -9,3 +9,6 @@
         "Exiting the last shell powers down the system.\n"
     )
 )))
+(add_command alpha-test (lambda () (progn
+    (run "img --overlay /files/earthrise.img /files/cheese.img")
+)))

@@ -125,12 +125,18 @@ fn video_memory_offset(x: u32, y: u32) callconv(.Inline) u32 {
     return y * mode.pitch + x * bytes_per_pixel;
 }
 
+fn blend(dest: *u8, color: u8, alpha: u8) callconv(.Inline) void {
+    dest.* = @truncate(u8, (@intCast(u32, color) * alpha +
+        @intCast(u32, dest.*) * (0xff - alpha)) >> 8);
+}
+
 fn draw_pixel(x: u32, y: u32, color: u32) callconv(.Inline) void {
     const offset = video_memory_offset(x, y);
     if (offset + 2 < buffer.len) {
-        buffer[offset] = @truncate(u8, color);
-        buffer[offset + 1] = @truncate(u8, color >> 8);
-        buffer[offset + 2] = @truncate(u8, color >> 16);
+        const alpha = @truncate(u8, color >> 24);
+        blend(&buffer[offset], @truncate(u8, color), alpha);
+        blend(&buffer[offset + 1], @truncate(u8, color >> 8), alpha);
+        blend(&buffer[offset + 2], @truncate(u8, color >> 16), alpha);
         buffer_clean = false;
     }
 }
@@ -138,9 +144,10 @@ fn draw_pixel(x: u32, y: u32, color: u32) callconv(.Inline) void {
 fn draw_pixel_bgr(x: u32, y: u32, color: u32) callconv(.Inline) void {
     const offset = video_memory_offset(x, y);
     if (offset + 2 < buffer.len) {
-        buffer[offset + 2] = @truncate(u8, color);
-        buffer[offset + 1] = @truncate(u8, color >> 8);
-        buffer[offset] = @truncate(u8, color >> 16);
+        const alpha = @truncate(u8, color >> 24);
+        blend(&buffer[offset + 2], @truncate(u8, color), alpha);
+        blend(&buffer[offset + 1], @truncate(u8, color >> 8), alpha);
+        blend(&buffer[offset], @truncate(u8, color >> 16), alpha);
         buffer_clean = false;
     }
 }
