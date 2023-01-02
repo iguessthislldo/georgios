@@ -336,6 +336,10 @@ test "Rand" {
     try std.testing.expectEqual(@as(u64, 11166244414315200793), r.get());
 }
 
+pub fn absolute(x: anytype) @TypeOf(x) {
+    return if (x >= 0) x else -x;
+}
+
 pub fn Point(comptime TheNum: type) type {
     return struct {
         const Self = @This();
@@ -347,6 +351,10 @@ pub fn Point(comptime TheNum: type) type {
 
         pub fn as(self: *const Self, comptime NumType: type) Point(NumType) {
             return .{.x = @as(NumType, self.x), .y = @as(NumType, self.y)};
+        }
+
+        pub fn intCast(self: *const Self, comptime NumType: type) Point(NumType) {
+            return .{.x = @intCast(NumType, self.x), .y = @intCast(NumType, self.y)};
         }
 
         pub fn plus_int(self: *const Self, comptime value: anytype) Self {
@@ -364,10 +372,15 @@ pub fn Point(comptime TheNum: type) type {
         pub fn minus_point(self: *const Self, other: Self) Self {
             return .{.x = self.x - other.x, .y = self.y - other.y};
         }
+
+        pub fn abs(self: *const Self) Self {
+            return .{.x = absolute(self.x), .y = absolute(self.y)};
+        }
     };
 }
 
 pub const U32Point = Point(u32);
+pub const I32Point = Point(i32);
 
 pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
     return struct {

@@ -13,7 +13,8 @@ const print_uint = system_calls.print_uint;
 var console = georgios.get_console_writer();
 var buffer: [2048]u8 align(@alignOf(u64)) = undefined;
 
-fn draw_image(path: []const u8, fullscreen: bool, overlay: bool) u8 {
+fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
+        res: Point, at: ?utils.I32Point) u8 {
     // Open image file
     var file = georgios.fs.open(path, .{.ReadOnly = .{}}) catch |e| {
         print_string("img: open error: ");
@@ -42,7 +43,7 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool) u8 {
             system_calls.print_string("\x1bc");
         }
         system_calls.print_string("Loading Image...");
-    } else {
+    } else if (at == null) {
         // Make sure the image appears between the two prompts, even if the
         // console scrolls.
         const prev_cur_y = glyph_size.y * cur_pos.y;
@@ -55,6 +56,14 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool) u8 {
         }
         system_calls.get_vbe_console_info(&last_scroll_count, &size, &cur_pos, &glyph_size);
         pos = .{.y = prev_cur_y - last_scroll_count * glyph_size.y};
+    }
+    _ = res;
+    if (at) |at_val| {
+        const abs = at_val.abs().intCast(u32);
+        pos = .{
+            .x = if (at_val.x >= 0) abs.x else (res.x - img_file.size.?.x - abs.x),
+            .y = if (at_val.y >= 0) abs.y else (res.y - img_file.size.?.y - abs.y),
+        };
     }
 
     var exit_status: u8 = 0;
@@ -84,7 +93,6 @@ fn handle_path(alloc: *std.mem.Allocator, images_al: *StrList, path: []const u8)
     var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
         if (e == georgios.fs.Error.NotADirectory) {
             if (utils.ends_with(path, ".img")) {
-                try console.print("IMG: {s}\n", .{path});
                 try images_al.append(try alloc.dupe(u8, path));
             }
         } else {
@@ -114,35 +122,67 @@ fn handle_path(alloc: *std.mem.Allocator, images_al: *StrList, path: []const u8)
     }
 }
 
+fn parse_int_arg(i: usize, what: []const u8) ?i32 {
+    if (i == georgios.proc_info.args.len) {
+        try console.print("img: no argument passed to {s}\n", .{what});
+        return null;
+    }
+    const arg = georgios.proc_info.args[i];
+    return std.fmt.parseInt(i32, arg, 10) catch |e| {
+        try console.print("img: invalid value {s} passed to {s}: {s}\n", .{arg, what, @errorName(e)});
+        return null;
+    };
+}
+
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(georgios.page_allocator);
     var alloc = arena.allocator();
     defer arena.deinit();
-
-    const res = system_calls.vbe_res();
-    if (res == null) {
-        print_string("img requires VBE graphics mode\n");
-        return 1;
-    }
 
     // Parse arguments
     var args_al = StrList.init(alloc);
     defer args_al.deinit();
     var fullscreen = true;
     var overlay = false;
-    for (georgios.proc_info.args) |arg| {
+    var at: ?utils.I32Point = null;
+    var arg_i: usize = 0;
+    var no_vbe = false; // No VBE is okay
+    while (arg_i < georgios.proc_info.args.len) {
+        const arg = georgios.proc_info.args[arg_i];
         if (utils.memory_compare(arg, "--embed")) {
             fullscreen = false;
         } else if (utils.memory_compare(arg, "-e")) {
             fullscreen = false;
         } else if (utils.memory_compare(arg, "--overlay")) {
             overlay = true;
+        } else if (utils.memory_compare(arg, "--at")) {
+            at = utils.I32Point{};
+            arg_i += 1;
+            at.?.x = parse_int_arg(arg_i, "--at X arg") orelse {
+                return 1;
+            };
+            arg_i += 1;
+            at.?.y = parse_int_arg(arg_i, "--at Y arg") orelse {
+                return 1;
+            };
+        } else if (utils.memory_compare(arg, "--no-vbe")) {
+            no_vbe = true;
         } else if (utils.starts_with(arg, "-")) {
             try console.print("img: invalid option: {s}\n", .{arg});
             return 1;
         } else {
             try args_al.append(arg);
         }
+        arg_i += 1;
+    }
+
+    const res = system_calls.vbe_res();
+    if (res == null) {
+        if (no_vbe) {
+            return 0;
+        }
+        print_string("img requires VBE graphics mode\n");
+        return 1;
     }
 
     // Process args for image files
@@ -163,7 +203,7 @@ pub fn main() !u8 {
 
     var i: usize = 0;
     while (i < images.len) {
-        const exit_status = draw_image(images[i], fullscreen, overlay);
+        const exit_status = draw_image(images[i], fullscreen, overlay, res.?, at);
         if (exit_status != 0) {
             return exit_status;
         }

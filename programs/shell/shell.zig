@@ -27,41 +27,12 @@ const no_max = std.math.maxInt(usize);
 
 var alloc: std.mem.Allocator = undefined;
 
-var img_buffer: [2048]u8 align(@alignOf(u64)) = undefined;
-
 var tl: TinyishLisp = undefined;
 var custom_commands: std.StringHashMap(*Expr) = undefined;
 
 var console = georgios.get_console_writer();
 var generic_console_impl = utils.GenericWriterImpl(georgios.ConsoleWriter.Writer){};
 var generic_console: utils.GenericWriter.Writer = undefined;
-
-fn draw_dragon(t: *TinyishLisp) TinyishLisp.Error!*Expr {
-    if (system_calls.vbe_res()) |res| {
-        var file = georgios.fs.open("/files/dragon.img", .{.ReadOnly = .{}}) catch |e| {
-            try console.print("shell: dragon open file error: {s}\n", .{@errorName(e)});
-            return t.err;
-        };
-        var img = georgios.ImgFile{.file = &file, .buffer = img_buffer[0..]};
-        img.parse_header() catch |e| {
-            try console.print("shell: dragon invalid image file: {s}\n", .{@errorName(e)});
-            return t.err;
-        };
-
-        img.draw(.{.x = res.x - img.size.?.x - 10, .y = 10}) catch |e| {
-            try console.print("shell: dragon draw error: {s}\n", .{@errorName(e)});
-            return t.err;
-        };
-        system_calls.vbe_flush_buffer();
-
-        file.close() catch |e| {
-            try console.print("shell: dragon file.close error: {s}\n", .{@errorName(e)});
-            return t.err;
-        };
-    }
-
-    return t.nil;
-}
 
 fn check_bin_path(path: []const u8, name: []const u8, buffer: []u8) ?[]const u8 {
     var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
@@ -239,7 +210,6 @@ const lisp_gen_primitives = [_]TinyishLisp.GenPrimitive{
     .{.name = "run", .zig_func = lisp_run},
     .{.name = "exit", .zig_func = lisp_exit},
     .{.name = "add_command", .zig_func = lisp_add_command, .preeval_args = false},
-    .{.name = "draw_dragon", .zig_func = draw_dragon},
 };
 var lisp_primitives: [lisp_gen_primitives.len]TinyishLisp.Primitive = undefined;
 
