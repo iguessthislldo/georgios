@@ -176,73 +176,263 @@ test "StringReader" {
     try std.testing.expectEqualStrings("", buffer[0..try reader.read(buffer[0..])]);
 }
 
+pub const DumpHexOptions = struct {
+    // Print hex data like this:
+    //                        VV group_sep
+    // 00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f
+    // ^^ Byte ^ byte_sep  Group^^^^^^^^^^^^^^^^^^^^^^^
+
+    byte_sep: []const u8 = " ",
+    group_byte_count: usize = 8,
+    group_count: usize = 2,
+    group_sep: []const u8 = "  ",
+    line_end: []const u8 = "\n",
+    compare_to: ?[]const u8 = null,
+};
+
+fn dump_hex_byte_count(bytes: []const u8, opts: DumpHexOptions, n: usize) usize {
+    return @minimum(opts.group_byte_count * n, bytes.len);
+}
+
+fn dump_hex_group(bytes: []const u8, writer: anytype, opts: DumpHexOptions) !usize {
+    var wrote: usize = 0;
+    if (bytes.len > 0) {
+        const last = bytes.len - 1;
+        for (bytes) |byte, i| {
+            var buffer: [2]u8 = undefined;
+            byte_buffer(buffer[0..], byte);
+            wrote += try writer.write(buffer[0..]);
+            if (i != last) {
+                wrote += try writer.write(opts.byte_sep);
+            }
+        }
+    }
+    return wrote;
+}
+
+fn dump_hex_line(bytes: []const u8, writer: anytype, opts: DumpHexOptions) !usize {
+    var left = bytes;
+    var wrote: usize = 0;
+    if (bytes.len > 0) {
+        const last = opts.group_count - 1;
+        var i: usize = 0;
+        while (i < opts.group_count and left.len > 0) {
+            const byte_count = dump_hex_byte_count(left, opts, 1);
+            const group = left[0..byte_count];
+            wrote += try dump_hex_group(group, writer, opts);
+            left = left[byte_count..];
+            if (i < last and left.len > 0) {
+                wrote += try writer.write(opts.group_sep);
+            }
+            i += 1;
+        }
+    }
+    return wrote;
+}
+
+pub fn dump_hex(bytes: []const u8, writer: anytype, opts: DumpHexOptions) !void {
+    var left = bytes;
+    var compare_to_left = opts.compare_to orelse utils.empty_slice(u8, bytes.ptr);
+    // Should be same length
+    const same_sep = " == ";
+    const not_same_sep = " != ";
+    const group_size =
+        opts.group_byte_count * 2 + // Bytes
+        ((opts.group_byte_count * opts.byte_sep.len) - 1); // byte_sep Between Bytes
+    const line_size =
+        group_size * opts.group_count + // Groups
+        (opts.group_count - 1) * opts.group_sep.len; // group_sep Between Groups
+    while (left.len > 0 or compare_to_left.len > 0) {
+        const byte_count = dump_hex_byte_count(left, opts, opts.group_count);
+        const line = left[0..byte_count];
+        left = left[byte_count..];
+        const wrote = try dump_hex_line(line, writer, opts);
+        if (opts.compare_to != null) {
+            try writer.writeByteNTimes(' ', line_size - wrote);
+            const ct_byte_count = dump_hex_byte_count(compare_to_left, opts, opts.group_count);
+            const ct_line = compare_to_left[0..ct_byte_count];
+            _ = try writer.write(
+                if (utils.memory_compare(line, ct_line)) same_sep else not_same_sep);
+            if (compare_to_left.len > 0) {
+                _ = try dump_hex_line(ct_line, writer, opts);
+                compare_to_left = compare_to_left[ct_byte_count..];
+            }
+        }
+        _ = try writer.write(opts.line_end);
+    }
+}
+
+test "dump_hex" {
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
+
+    var sw = StringWriter.init(alloc);
+    var w = sw.writer();
+
+    const bytes = [_]u8 {
+        0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+        0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+        0xff,
+    };
+
+    {
+        try dump_hex(bytes[0..0], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings("", s);
+    }
+
+    {
+        try dump_hex(bytes[0..1], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings("00\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..8], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings("00 01 02 03 04 05 06 07\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..9], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings("00 01 02 03 04 05 06 07  08\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x10], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x11], w, .{});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\nff\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x10], w, .{.compare_to = bytes[0..8]});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f != 00 01 02 03 04 05 06 07\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x10], w, .{.compare_to = bytes[0..0x10]});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x11], w, .{.compare_to = bytes[0..0x10]});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n" ++
+            "ff                                               != \n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x10], w, .{.compare_to = bytes[0..0x11]});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n" ++
+            "                                                 != ff\n", s);
+    }
+
+    {
+        try dump_hex(bytes[0..0x11], w, .{.compare_to = bytes[0..0x11]});
+        const s = sw.get();
+        defer alloc.free(s);
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n" ++
+            "ff                                               == ff\n", s);
+    }
+
+    {
+        const a = [_]u8 {
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+            0xf0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, // <--
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+        };
+        const b = [_]u8 {
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7,
+            0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf,
+        };
+        try dump_hex(a[0..], w, .{.compare_to = b[0..]});
+        const s = sw.get();
+        defer alloc.free(s);
+
+        try std.testing.expectEqualStrings(
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+                "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n" ++
+            "f0 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f != " ++
+                "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n" ++
+            "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f == " ++
+                "00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f\n", s);
+    }
+
+    ta.deinit(.Panic);
+}
+
 fn fmt_dump_hex_impl(bytes: []const u8, comptime fmt: []const u8,
         options: std.fmt.FormatOptions, writer: anytype) !void {
     _ = fmt;
     _ = options;
-
-    // Print hex data like this:
-    //                        VV group_sep
-    // 00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F
-    // ^^ Byte ^ byte_sep  Group^^^^^^^^^^^^^^^^^^^^^^^
-    const group_byte_count = 8;
-    const byte_sep = " ";
-    const group_size =
-        group_byte_count * 2 + // Bytes
-        ((group_byte_count * byte_sep.len) - 1); // byte_sep Between Bytes
-    const group_count = 2;
-    const group_sep = "  ";
-    const buffer_size =
-        group_size * group_count + // Groups
-        (group_count - 1) * group_sep.len + // group_sep Between Groups
-        1; // Newline
-
-    var buffer: [buffer_size]u8 = undefined;
-    var i: usize = 0;
-    var buffer_pos: usize = 0;
-    var byte_i: usize = 0;
-    var group_i: usize = 0;
-    var has_next = i < bytes.len;
-    var print_buffer = false;
-    while (has_next) {
-        const next_i = i + 1;
-        has_next = next_i < bytes.len;
-        print_buffer = !has_next;
-        {
-            const new_pos = buffer_pos + 2;
-            byte_buffer(buffer[buffer_pos..new_pos], bytes[i]);
-            buffer_pos = new_pos;
-        }
-        byte_i += 1;
-        if (byte_i == group_byte_count) {
-            byte_i = 0;
-            group_i += 1;
-            if (group_i == group_count) {
-                group_i = 0;
-                print_buffer = true;
-            } else {
-                for (group_sep[0..group_sep.len]) |b| {
-                    buffer[buffer_pos] = b;
-                    buffer_pos += 1;
-                }
-            }
-        } else if (has_next) {
-            for (byte_sep[0..byte_sep.len]) |b| {
-                buffer[buffer_pos] = b;
-                buffer_pos += 1;
-            }
-        }
-        if (print_buffer) {
-            buffer[buffer_pos] = '\n';
-            buffer_pos += 1;
-            try writer.writeAll(buffer[0..buffer_pos]);
-            buffer_pos = 0;
-            print_buffer = false;
-        }
-        i = next_i;
-    }
+    try dump_hex(bytes, writer, .{});
 }
 
 pub fn fmt_dump_hex(bytes: []const u8) std.fmt.Formatter(fmt_dump_hex_impl) {
     return .{.data = bytes};
+}
+
+const FmtCompareBytesData = struct {
+    expected: []const u8,
+    actual: []const u8,
+};
+
+fn fmt_compare_bytes_impl(data: FmtCompareBytesData, comptime fmt: []const u8,
+        options: std.fmt.FormatOptions, writer: anytype) !void {
+    _ = fmt;
+    _ = options;
+    try dump_hex(data.expected, writer, .{.compare_to = data.actual, .group_byte_count = 4});
+}
+
+pub fn fmt_compare_bytes(
+        expected: []const u8, actual: []const u8) std.fmt.Formatter(fmt_compare_bytes_impl) {
+    return .{.data = .{.expected = expected, .actual = actual}};
+}
+
+pub fn expect_equal_bytes(expected: []const u8, actual: []const u8) !void {
+    if (!utils.memory_compare(expected, actual)) {
+        std.debug.print("Expected the right side, but got the left:\n{}",
+            .{fmt_compare_bytes(expected, actual)});
+        return error.TestExpectedEqual;
+    }
 }

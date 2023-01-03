@@ -40,6 +40,7 @@ pub const ends_with = str.ends_with;
 pub const StringWriter = str.StringWriter;
 pub const StringReader = str.StringReader;
 pub const fmt_dump_hex = str.fmt_dump_hex;
+pub const expect_equal_bytes = str.expect_equal_bytes;
 
 pub const Error = error {
     Unknown,
