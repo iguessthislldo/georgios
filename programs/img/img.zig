@@ -12,6 +12,7 @@ const print_uint = system_calls.print_uint;
 
 var console = georgios.get_console_writer();
 var buffer: [2048]u8 align(@alignOf(u64)) = undefined;
+var alloc: std.mem.Allocator = undefined;
 
 fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
         res: Point, at: ?utils.I32Point) u8 {
@@ -22,13 +23,32 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
         print_string("\n");
         return 2;
     };
-    var img_file = georgios.ImgFile{.file = &file, .buffer = buffer[0..]};
-    img_file.parse_header() catch |e| {
-        print_string("img: invalid image file: ");
-        print_string(@errorName(e));
-        print_string("\n");
-        return 2;
-    };
+    const reader = file.reader();
+
+    var img_file: georgios.ImgFile = undefined;
+    const BmpFile = utils.Bmp(@TypeOf(file).Reader);
+    var bmp_file: BmpFile = undefined;
+    const is_bmp = utils.ends_with(path, ".bmp");
+    var image_size = utils.U32Point{};
+    if (is_bmp) {
+        bmp_file = .{};
+        bmp_file.read_header(reader) catch |e| {
+            print_string("img: failed to parse BMP header: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return 2;
+        };
+        image_size = bmp_file.image_size_pixels() catch @panic("?");
+    } else {
+        img_file = .{.file = &file, .buffer = buffer[0..]};
+        img_file.parse_header() catch |e| {
+            print_string("img: invalid image file: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return 2;
+        };
+        image_size = img_file.size.?;
+    }
 
     // Figure out where the image is going.
     var last_scroll_count: u32 = undefined;
@@ -47,7 +67,7 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
         // Make sure the image appears between the two prompts, even if the
         // console scrolls.
         const prev_cur_y = glyph_size.y * cur_pos.y;
-        const room = utils.align_up(img_file.size.?.y, glyph_size.y);
+        const room = utils.align_up(image_size.y, glyph_size.y);
         const newlines: usize = room / glyph_size.y;
         var i: usize = 0;
         while (i < newlines) {
@@ -61,19 +81,37 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
     if (at) |at_val| {
         const abs = at_val.abs().intCast(u32);
         pos = .{
-            .x = if (at_val.x >= 0) abs.x else (res.x - img_file.size.?.x - abs.x),
-            .y = if (at_val.y >= 0) abs.y else (res.y - img_file.size.?.y - abs.y),
+            .x = if (at_val.x >= 0) abs.x else (res.x - image_size.x - abs.x),
+            .y = if (at_val.y >= 0) abs.y else (res.y - image_size.y - abs.y),
         };
     }
 
     var exit_status: u8 = 0;
     // Draw the image on the screen
-    img_file.draw(pos) catch |e| {
-        print_string("img: draw: ");
-        print_string(@errorName(e));
-        print_string("\n");
-        exit_status = 3;
-    };
+    if (is_bmp) {
+        const bitmap = alloc.alloc(u8, bmp_file.image_size_bytes() catch @panic("?")) catch |e| {
+            print_string("img: failed to alloc for BMP bitmap: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return 2;
+        };
+        defer alloc.free(bitmap);
+        _ = bmp_file.read_bitmap(reader, bitmap[0..]) catch |e| {
+            print_string("img: failed to read BMP bitmap: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            return 2;
+        };
+        var last = utils.U32Point{};
+        system_calls.vbe_draw_raw_image_chunk(bitmap, image_size.x, pos, &last);
+    } else {
+        img_file.draw(pos) catch |e| {
+            print_string("img: draw: ");
+            print_string(@errorName(e));
+            print_string("\n");
+            exit_status = 3;
+        };
+    }
     system_calls.vbe_flush_buffer();
     file.close() catch |e| {
         print_string("img: file.close error: ");
@@ -87,12 +125,11 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
 
 const StrList = std.ArrayList([]const u8);
 
-fn handle_path(alloc: *std.mem.Allocator, images_al: *StrList, path: []const u8) anyerror!void {
-    _ = alloc;
+fn handle_path(images_al: *StrList, path: []const u8) anyerror!void {
     // Is directory?
     var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
         if (e == georgios.fs.Error.NotADirectory) {
-            if (utils.ends_with(path, ".img")) {
+            if (utils.ends_with(path, ".img") or utils.ends_with(path, ".bmp")) {
                 try images_al.append(try alloc.dupe(u8, path));
             }
         } else {
@@ -109,15 +146,15 @@ fn handle_path(alloc: *std.mem.Allocator, images_al: *StrList, path: []const u8)
         };
         if (read == 0) break;
         const name = name_buffer[0..read];
-        if (utils.ends_with(name, ".img")) {
-            var subpath_al = std.ArrayList(u8).init(alloc.*);
+        if (utils.ends_with(name, ".img") or utils.ends_with(path, ".bmp")) {
+            var subpath_al = std.ArrayList(u8).init(alloc);
             defer subpath_al.deinit();
             try subpath_al.appendSlice(path);
             try subpath_al.append('/');
             try subpath_al.appendSlice(name);
             const subpath = subpath_al.toOwnedSlice();
             defer alloc.free(subpath);
-            try handle_path(alloc, images_al, subpath);
+            try handle_path(images_al, subpath);
         }
     }
 }
@@ -136,7 +173,7 @@ fn parse_int_arg(i: usize, what: []const u8) ?i32 {
 
 pub fn main() !u8 {
     var arena = std.heap.ArenaAllocator.init(georgios.page_allocator);
-    var alloc = arena.allocator();
+    alloc = arena.allocator();
     defer arena.deinit();
 
     // Parse arguments
@@ -188,7 +225,7 @@ pub fn main() !u8 {
     // Process args for image files
     var images_al = std.ArrayList([]const u8).init(alloc);
     for (args_al.items) |arg| {
-        try handle_path(&alloc, &images_al, arg);
+        try handle_path(&images_al, arg);
     }
     const images = images_al.toOwnedSlice();
     defer alloc.free(images);

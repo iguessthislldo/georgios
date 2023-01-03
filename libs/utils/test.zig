@@ -12,4 +12,5 @@ test "utils test root" {
     _ = @import("str.zig");
     _ = @import("packed_array.zig");
     _ = @import("mem.zig");
+    _ = @import("bmp.zig");
 }

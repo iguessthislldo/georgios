@@ -25,7 +25,7 @@ zig_test_re = re.compile(r'^test "(.*)" {$')
 zig_test_roots = set()
 zig_files_with_tests = set()
 for path in get_files():
-    if not path.is_file() or path.suffix in ('.img', '.png', '.gif'):
+    if not path.is_file() or path.suffix in ('.img', '.png', '.gif', '.bmp'):
         continue
     try:
         with path.open() as f:

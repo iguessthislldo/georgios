@@ -1,9 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const unicode = @import("unicode.zig");
-pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
-pub const UnicodeError = unicode.Error;
 pub const AnsiEscProcessor = @import("AnsiEscProcessor.zig");
 pub const Guid = @import("Guid.zig");
 pub const ToString = @import("ToString.zig");
@@ -13,6 +10,11 @@ pub const Bdf = @import("Bdf.zig");
 pub const List = @import("list.zig").List;
 pub const CircularBuffer = @import("circular_buffer.zig").CircularBuffer;
 pub const PackedArray = @import("packed_array.zig").PackedArray;
+pub const Bmp = @import("bmp.zig").Bmp;
+
+const unicode = @import("unicode.zig");
+pub const Utf8ToUtf32 = unicode.Utf8ToUtf32;
+pub const UnicodeError = unicode.Error;
 
 const mem = @import("mem.zig");
 pub const memory_compare = mem.memory_compare;

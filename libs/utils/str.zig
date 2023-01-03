@@ -431,7 +431,7 @@ pub fn fmt_compare_bytes(
 
 pub fn expect_equal_bytes(expected: []const u8, actual: []const u8) !void {
     if (!utils.memory_compare(expected, actual)) {
-        std.debug.print("Expected the right side, but got the left:\n{}",
+        std.debug.print("Expected the left side, but got the right:\n{}",
             .{fmt_compare_bytes(expected, actual)});
         return error.TestExpectedEqual;
     }
