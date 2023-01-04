@@ -141,17 +141,6 @@ fn draw_pixel(x: u32, y: u32, color: u32) callconv(.Inline) void {
     }
 }
 
-fn draw_pixel_bgr(x: u32, y: u32, color: u32) callconv(.Inline) void {
-    const offset = video_memory_offset(x, y);
-    if (offset + 2 < buffer.len) {
-        const alpha = @truncate(u8, color >> 24);
-        blend(&buffer[offset + 2], @truncate(u8, color), alpha);
-        blend(&buffer[offset + 1], @truncate(u8, color >> 8), alpha);
-        blend(&buffer[offset], @truncate(u8, color >> 16), alpha);
-        buffer_clean = false;
-    }
-}
-
 pub fn draw_glyph(font: *const BitmapFont, x: u32, y: u32, codepoint: u32,
         fg_color: u32, bg_color: u32) void {
     const glyph_holder = font.get(codepoint);
@@ -203,7 +192,7 @@ pub fn draw_box(box: Box, color: u32) void {
 pub fn draw_raw_image_chunk(data: []const u8, w: u32, pos: *const U32Point, last: *U32Point) void {
     const pixels = std.mem.bytesAsSlice(u32, data);
     for (pixels) |px| {
-        draw_pixel_bgr(pos.x + last.x, pos.y + last.y, px);
+        draw_pixel(pos.x + last.x, pos.y + last.y, px);
         last.x += 1;
         if (last.x >= w) {
             last.y += 1;

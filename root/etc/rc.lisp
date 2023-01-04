@@ -1,7 +1,7 @@
 #!/bin/shell.elf
 
 (add_command motd (lambda () (progn
-    (run "img --no-vbe --embed --at -10 10 /files/dragon.img")
+    (run "img --no-vbe --embed --at -10 10 /files/dragon.bmp")
     (print
         "Welcome to Georgios!\n"
         "Try the \"hello\", \"ls\", \"shell\", or \"snake\" programs.\n"
@@ -13,5 +13,5 @@
 )))
 
 (add_command alpha-test (lambda () (progn
-    (run "img --overlay /files/earthrise.img /files/cheese.img")
+    (run "img --overlay /files/earthrise.bmp /files/cheese.bmp")
 )))

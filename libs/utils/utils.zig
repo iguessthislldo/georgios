@@ -368,6 +368,14 @@ pub fn Point(comptime TheNum: type) type {
             return .{.x = self.x - value, .y = self.y - value};
         }
 
+        pub fn multiply(self: *const Self, value: anytype) Self {
+            return .{.x = self.x * value, .y = self.y * value};
+        }
+
+        pub fn divide(self: *const Self, value: anytype) Self {
+            return .{.x = self.x / value, .y = self.y / value};
+        }
+
         pub fn plus_point(self: *const Self, other: Self) Self {
             return .{.x = self.x + other.x, .y = self.y + other.y};
         }
@@ -384,6 +392,44 @@ pub fn Point(comptime TheNum: type) type {
 
 pub const U32Point = Point(u32);
 pub const I32Point = Point(i32);
+
+pub fn Point3d(comptime TheNum: type) type {
+    return struct {
+        const Self = @This();
+
+        pub const Num = TheNum;
+
+        x: Num = 0,
+        y: Num = 0,
+        z: Num = 0,
+
+        pub fn as(self: *const Self, comptime NumType: type) Point3d(NumType) {
+            return .{
+                .x = @as(NumType, self.x),
+                .y = @as(NumType, self.y),
+                .z = @as(NumType, self.z)
+            };
+        }
+
+        pub fn plus_int(self: *const Self, value: anytype) Self {
+            return .{.x = self.x + value, .y = self.y + value, .z = self.z + value};
+        }
+
+        pub fn minus_int(self: *const Self, comptime value: anytype) Self {
+            return .{.x = self.x - value, .y = self.y - value, .z = self.z - value};
+        }
+
+        pub fn plus_point(self: *const Self, other: Self) Self {
+            return .{.x = self.x + other.x, .y = self.y + other.y, .z = self.z + other.z};
+        }
+
+        pub fn minus_point(self: *const Self, other: Self) Self {
+            return .{.x = self.x - other.x, .y = self.y - other.y, .z = self.z - other.z};
+        }
+    };
+}
+
+pub const I32Point3d = Point3d(i32);
 
 pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
     return struct {

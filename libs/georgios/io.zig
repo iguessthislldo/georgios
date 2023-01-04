@@ -18,8 +18,6 @@ pub const FileError = error {
 
 /// File IO Interface
 pub const File = struct {
-    pub const Writer = std.io.Writer(*File, FileError, write);
-
     pub const Id = u32;
 
     /// Used for seek()
@@ -206,10 +204,37 @@ pub const File = struct {
         return FileError.EndOfStream;
     }
 
-    pub const Reader = std.io.Reader(*File, FileError, read);
+    // Std I/O Interfaces
+    // TODO: Convert seek to match std i64/u64?
+    fn std_seek_to_impl(file: *File, pos: u64) FileError!void {
+        _ = try file.seek(@intCast(isize, pos), .FromStart);
+    }
+    fn std_seek_by_impl(file: *File, pos: i64) FileError!void {
+        _ = try file.seek(@intCast(isize, pos), .FromHere);
+    }
+    fn std_get_pos_impl(file: *File) FileError!u64 {
+        return @intCast(u64, try file.seek(0, .FromHere));
+    }
+    fn std_get_end_pos_impl(file: *File) FileError!u64 {
+        _ = file;
+        @panic("std_get_end_pos_impl not implemented");
+    }
+    pub const SeekableStream = std.io.SeekableStream(
+        *File, FileError, FileError,
+        std_seek_to_impl, std_seek_by_impl, std_get_pos_impl, std_get_end_pos_impl,
+    );
+    pub fn seekableStream(file: *File) SeekableStream {
+        return .{.context = file};
+    }
 
+    pub const Writer = std.io.Writer(*File, FileError, write);
+    pub fn writer(file: *File) Writer {
+        return .{.context = file};
+    }
+
+    pub const Reader = std.io.Reader(*File, FileError, read);
     pub fn reader(file: *File) Reader {
-        return .{ .context = file };
+        return .{.context = file};
     }
 };
 

@@ -23,32 +23,15 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
         print_string("\n");
         return 2;
     };
-    const reader = file.reader();
 
-    var img_file: georgios.ImgFile = undefined;
-    const BmpFile = utils.Bmp(@TypeOf(file).Reader);
-    var bmp_file: BmpFile = undefined;
-    const is_bmp = utils.ends_with(path, ".bmp");
-    var image_size = utils.U32Point{};
-    if (is_bmp) {
-        bmp_file = .{};
-        bmp_file.read_header(reader) catch |e| {
-            print_string("img: failed to parse BMP header: ");
-            print_string(@errorName(e));
-            print_string("\n");
-            return 2;
-        };
-        image_size = bmp_file.image_size_pixels() catch @panic("?");
-    } else {
-        img_file = .{.file = &file, .buffer = buffer[0..]};
-        img_file.parse_header() catch |e| {
-            print_string("img: invalid image file: ");
-            print_string(@errorName(e));
-            print_string("\n");
-            return 2;
-        };
-        image_size = img_file.size.?;
-    }
+    var bmp_file = utils.Bmp(@TypeOf(file)).init(&file);
+    bmp_file.read_header() catch |e| {
+        print_string("img: failed to parse BMP header: ");
+        print_string(@errorName(e));
+        print_string("\n");
+        return 2;
+    };
+    var image_size = bmp_file.image_size_pixels() catch @panic("?");
 
     // Figure out where the image is going.
     var last_scroll_count: u32 = undefined;
@@ -88,29 +71,10 @@ fn draw_image(path: []const u8, fullscreen: bool, overlay: bool,
 
     var exit_status: u8 = 0;
     // Draw the image on the screen
-    if (is_bmp) {
-        const bitmap = alloc.alloc(u8, bmp_file.image_size_bytes() catch @panic("?")) catch |e| {
-            print_string("img: failed to alloc for BMP bitmap: ");
-            print_string(@errorName(e));
-            print_string("\n");
-            return 2;
-        };
-        defer alloc.free(bitmap);
-        _ = bmp_file.read_bitmap(reader, bitmap[0..]) catch |e| {
-            print_string("img: failed to read BMP bitmap: ");
-            print_string(@errorName(e));
-            print_string("\n");
-            return 2;
-        };
-        var last = utils.U32Point{};
-        system_calls.vbe_draw_raw_image_chunk(bitmap, image_size.x, pos, &last);
-    } else {
-        img_file.draw(pos) catch |e| {
-            print_string("img: draw: ");
-            print_string(@errorName(e));
-            print_string("\n");
-            exit_status = 3;
-        };
+    var last = utils.U32Point{};
+    var bmp_pos: usize = 0;
+    while (bmp_file.read_bitmap(&bmp_pos, buffer[0..]) catch @panic("TODO")) |got| {
+        system_calls.vbe_draw_raw_image_chunk(buffer[0..got], image_size.x, pos, &last);
     }
     system_calls.vbe_flush_buffer();
     file.close() catch |e| {
@@ -129,7 +93,7 @@ fn handle_path(images_al: *StrList, path: []const u8) anyerror!void {
     // Is directory?
     var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
         if (e == georgios.fs.Error.NotADirectory) {
-            if (utils.ends_with(path, ".img") or utils.ends_with(path, ".bmp")) {
+            if (utils.ends_with(path, ".bmp")) {
                 try images_al.append(try alloc.dupe(u8, path));
             }
         } else {
@@ -146,7 +110,7 @@ fn handle_path(images_al: *StrList, path: []const u8) anyerror!void {
         };
         if (read == 0) break;
         const name = name_buffer[0..read];
-        if (utils.ends_with(name, ".img") or utils.ends_with(path, ".bmp")) {
+        if (utils.ends_with(name, ".bmp")) {
             var subpath_al = std.ArrayList(u8).init(alloc);
             defer subpath_al.deinit();
             try subpath_al.appendSlice(path);
