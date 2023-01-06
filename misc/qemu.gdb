@@ -23,9 +23,12 @@ target remote | qemu-system-i386 \
     -soundhw pcspk \
     -usb \
     -device usb-ehci,id=ehci \
-    -drive if=none,id=flashdrive,file=usbdrive.img \
+    -drive if=none,id=flashdrive,file=usbdrive.img,format=raw \
     -device usb-storage,bus=ehci.0,drive=flashdrive \
-    disk.img
+    -drive file=disk.img,format=raw
+
+    # -device usb-mouse,bus=ehci.0 \
+    # -device usb-kbd,bus=ehci.0 \
 
 #    -trace 'vga*' \
 

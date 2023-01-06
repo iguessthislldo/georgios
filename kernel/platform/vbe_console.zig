@@ -1,5 +1,6 @@
 const utils = @import("utils");
 const Point = utils.U32Point;
+const Rect = utils.U32Rect;
 
 const kernel = @import("root").kernel;
 const Console = kernel.Console;
@@ -8,7 +9,6 @@ const BitmapFont = kernel.BitmapFont;
 
 const platform = @import("platform.zig");
 const vbe = platform.vbe;
-const Box = vbe.Box;
 
 pub fn color_value_from_hex_color(hex_color: HexColor) u32 {
     return switch (hex_color) {
@@ -65,7 +65,7 @@ pub fn init(screen_width: u32, screen_height: u32, bitmap_font: *const BitmapFon
     clear_screen_impl(&console);
 }
 
-fn place_impl_no_flush(c: *Console, utf32_value: u32, row: u32, col: u32) Box {
+fn place_impl_no_flush(c: *Console, utf32_value: u32, row: u32, col: u32) Rect {
     _ = c;
     const x = col * glyph_width;
     const y = row * glyph_height;
@@ -74,7 +74,7 @@ fn place_impl_no_flush(c: *Console, utf32_value: u32, row: u32, col: u32) Box {
 }
 
 fn place_impl(c: *Console, utf32_value: u32, row: u32, col: u32) void {
-    vbe.flush_buffer_area(place_impl_no_flush(c, utf32_value, row, col));
+    vbe.flush_buffer_rect(&place_impl_no_flush(c, utf32_value, row, col));
 }
 
 pub fn set_hex_color_impl(c: *Console, color: HexColor, layer: Console.Layer) void {
@@ -111,10 +111,10 @@ pub fn clear_screen_impl(c: *Console) void {
 pub fn move_cursor_impl(c: *Console, row: u32, col: u32) void {
     _ = c;
     if (show_cursor and false) { // TODO: Finish cursor
-        const pos = Box.Pos{.x = col * glyph_width, .y = row * glyph_height};
-        const size = font.bdf_font.bounds.size.as(Box.Size.Num);
-        vbe.draw_box(.{.pos = pos, .size = size.minus_int(1)}, 0xff000000);
-        vbe.flush_buffer_area(.{.pos = pos, .size = size});
+        const pos = Rect.Pos{.x = col * glyph_width, .y = row * glyph_height};
+        const size = font.bdf_font.bounds.size.as(Rect.Size.Num);
+        vbe.draw_rect(&.{.pos = pos, .size = size.minus_int(1)}, 0xff000000);
+        vbe.flush_buffer_rect(&.{.pos = pos, .size = size});
     }
 }
 

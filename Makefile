@@ -36,6 +36,9 @@ endif
 ifdef halt_when_done
 	zig_build_args+="-Dhalt_when_done=$(halt_when_done)"
 endif
+ifdef mouse
+	zig_build_args+="-Dmouse=$(mouse)"
+endif
 
 all: $(ISO) $(DISK) $(USBDRIVE)
 

@@ -8,7 +8,8 @@ const build_options = @import("build_options");
 
 const utils = @import("utils");
 const U32Point = utils.U32Point;
-pub const Box = utils.Box(u32, u32);
+const I32Point = utils.I32Point;
+const U32Rect = utils.U32Rect;
 
 const multiboot = @import("multiboot.zig");
 const pmemory = @import("memory.zig");
@@ -175,12 +176,12 @@ pub fn draw_line(a: U32Point, b: U32Point, color: u32) void {
     }
 }
 
-pub fn draw_box(box: Box, color: u32) void {
+pub fn draw_rect(rect: *const U32Rect, color: u32) void {
     // a > b
     // V   V
     // c > d
-    const a = box.pos;
-    const d = box.pos.plus_point(box.size);
+    const a = rect.pos;
+    const d = rect.pos.plus_point(rect.size);
     const b = .{.x = d.x, .y = a.y};
     const c = .{.x = a.x, .y = d.y};
     draw_line(a, b, color);
@@ -271,14 +272,14 @@ pub fn flush_buffer() void {
     buffer_clean = true;
 }
 
-pub fn flush_buffer_area(area: Box) void {
+pub fn flush_buffer_rect(rect: *const U32Rect) void {
     buffer_sync();
-    var offset = video_memory_offset(area.pos.x, area.pos.y);
-    var row = area.pos.y;
-    const end = area.pos.y + area.size.y;
-    const row_size = area.size.x * bytes_per_pixel;
-    while (row < end) {
-        const row_end = offset + row_size;
+    var offset = video_memory_offset(rect.pos.x, rect.pos.y);
+    var row = rect.pos.y;
+    const end = rect.pos.y + rect.size.y;
+    const row_size = rect.size.x * bytes_per_pixel;
+    while (row < end and offset < buffer.len) {
+        const row_end = @minimum(buffer.len, offset + row_size);
         const b = buffer[offset..row_end];
         for (video_memory[offset..row_end]) |*p, i| {
             p.* = b[i];
@@ -286,6 +287,22 @@ pub fn flush_buffer_area(area: Box) void {
         offset += mode.pitch;
         row += 1;
     }
+}
+
+pub fn fill_rect(rect: *const U32Rect, color: u32) void {
+    var x: usize = rect.pos.x;
+    const x_end = x + rect.size.x;
+    var y: usize = rect.pos.y;
+    const y_end = y + rect.size.y;
+    while (y < y_end) {
+        draw_pixel(x, y, color);
+        x += 1;
+        if (x >= x_end) {
+            x = rect.pos.x;
+            y += 1;
+        }
+    }
+    flush_buffer_rect(rect);
 }
 
 const vbe_result_ptr: u16 = 0x8000;

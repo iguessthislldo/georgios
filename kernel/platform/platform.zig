@@ -141,7 +141,7 @@ pub fn init() !void {
 
     // Setup Devices
     kernel.device_mgr.init(kernel.alloc);
-    ps2.init();
+    try ps2.init();
     pci.find_pci_devices();
     bios_int.init();
     vbe.init();

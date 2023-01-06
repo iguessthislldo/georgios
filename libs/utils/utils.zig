@@ -387,6 +387,10 @@ pub fn Point(comptime TheNum: type) type {
         pub fn abs(self: *const Self) Self {
             return .{.x = absolute(self.x), .y = absolute(self.y)};
         }
+
+        pub fn eq(self: *const Self, other: Self) bool {
+            return self.x == other.x and self.y == other.y;
+        }
     };
 }
 
@@ -431,7 +435,7 @@ pub fn Point3d(comptime TheNum: type) type {
 
 pub const I32Point3d = Point3d(i32);
 
-pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
+pub fn Rect(comptime PosNum: type, comptime SizeNum: type) type {
     return struct {
         pub const Pos = Point(PosNum);
         pub const Size = Point(SizeNum);
@@ -440,6 +444,8 @@ pub fn Box(comptime PosNum: type, comptime SizeNum: type) type {
         size: Size = .{},
     };
 }
+
+pub const U32Rect = Rect(u32, u32);
 
 pub fn any_equal(a: anytype, b: @TypeOf(a)) bool {
     const Type = @TypeOf(a);

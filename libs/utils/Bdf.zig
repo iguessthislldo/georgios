@@ -12,10 +12,10 @@ const std = @import("std");
 
 const utils = @import("utils.zig");
 const WordIterator = utils.WordIterator;
-const Box = utils.Box;
+const Rect = utils.Rect;
 const streq = utils.memory_compare;
 
-const Bounds = Box(i16, u16);
+const Bounds = Rect(i16, u16);
 
 pub const Error = error {
     BdfBadKeyword,

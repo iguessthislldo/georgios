@@ -338,6 +338,16 @@ pub fn get_key(blocking: georgios.Blocking) callconv(.Inline) ?georgios.keyboard
     return key;
 }
 
+pub fn get_mouse_event(blocking: georgios.Blocking) callconv(.Inline) ?georgios.MouseEvent {
+    var key: ?georgios.MouseEvent = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 28)),
+        [arg1] "{ebx}" (@ptrToInt(&blocking)),
+        [arg2] "{ecx}" (@ptrToInt(&key)),
+        );
+    return key;
+}
+
 pub fn print_uint(value: u32, base: u8) callconv(.Inline) void {
     asm volatile ("int $100" ::
         [syscall_number] "{eax}" (@as(u32, 7)),
@@ -518,5 +528,13 @@ pub fn get_vbe_console_info(last_scroll_count: *u32, size: *utils.U32Point, pos:
         [arg2] "{ecx}" (size),
         [arg3] "{edx}" (pos),
         [arg4] "{edi}" (glyph_size),
+        );
+}
+
+pub fn vbe_fill_rect(rect: *const utils.U32Rect, pixel: u32) callconv(.Inline) void {
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 27)),
+        [arg1] "{ebx}" (rect),
+        [arg2] "{ecx}" (pixel),
         );
 }

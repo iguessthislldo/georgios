@@ -204,3 +204,10 @@ pub fn get_console_writer() ConsoleWriter.Writer {
     const cw = ConsoleWriter{};
     return cw.writer();
 }
+
+pub const MouseEvent = struct {
+    rmb_pressed: bool,
+    mmb_pressed: bool,
+    lmb_pressed: bool,
+    delta: utils.Point(i32),
+};

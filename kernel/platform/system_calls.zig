@@ -136,6 +136,24 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             }
         },
 
+        // SYSCALL: get_mouse_event(&blocking: georgios.Blocking) key: ?georgios.MouseEvent
+        // IMPORT: georgios "georgios.zig"
+        28 => {
+            const blocking = @intToPtr(*georgios.Blocking, arg1).* == .Blocking;
+            const rv = @intToPtr(*?georgios.MouseEvent, arg2);
+            while (true) {
+                if (ps2.get_mouse_event()) |event| {
+                    rv.* = event;
+                    break;
+                } else if (blocking) {
+                    kernel.threading_mgr.wait_for_mouse();
+                } else {
+                    rv.* = null;
+                    break;
+                }
+            }
+        },
+
         // SYSCALL: print_uint(value: u32, base: u8) void
         7 => {
             switch (arg2) {
@@ -319,6 +337,13 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
             const pos = @intToPtr(*utils.U32Point, arg3);
             const glyph_size = @intToPtr(*utils.U32Point, arg4);
             vbe_console.get_info(last_scroll_count, size, pos, glyph_size);
+        },
+
+        // SYSCALL: vbe_fill_rect(rect: *const utils.U32Rect, pixel: u32) void
+        27 => {
+            const rect = @intToPtr(*utils.U32Rect, arg1);
+            const color = @truncate(u32, arg2);
+            vbe.fill_rect(rect, color);
         },
 
         else => @panic("Invalid System Call"),

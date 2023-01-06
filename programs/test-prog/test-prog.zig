@@ -3,13 +3,12 @@ const georgios = @import("georgios");
 comptime {_ = georgios;}
 const streq = georgios.utils.memory_compare;
 const system_calls = georgios.system_calls;
-const print_string = system_calls.print_string;
-const print_uint = system_calls.print_uint;
+
+const console = georgios.get_console_writer();
 
 extern var _end: u32;
 
 pub fn main() !u8 {
-    const console = georgios.get_console_writer();
     var exit_with = false;
     for (georgios.proc_info.args) |arg| {
         if (exit_with) {

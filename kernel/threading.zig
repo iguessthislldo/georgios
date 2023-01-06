@@ -269,6 +269,7 @@ pub const Manager = struct {
     next_process_id: Process.Id = 0,
     current_process: ?*Process = null,
     waiting_for_keyboard: ?*Thread = null,
+    waiting_for_mouse: ?*Thread = null,
     time_queue: TimeQueue = .{},
 
     pub fn init(self: *Manager) Error!void {
@@ -488,20 +489,34 @@ pub const Manager = struct {
         }
     }
 
-    // TODO Make this and keyboard_event_occured generic
+    // TODO Make this and keyboard_event_occurred generic
     pub fn wait_for_keyboard(self: *Manager) void {
         platform.disable_interrupts();
         self.current_thread.?.state = .Wait;
         self.waiting_for_keyboard = self.current_thread;
         self.yield();
     }
-
-    pub fn keyboard_event_occured(self: *Manager) void {
+    pub fn keyboard_event_occurred(self: *Manager) void {
         platform.disable_interrupts();
         if (self.waiting_for_keyboard) |t| {
             t.state = .Run;
             self.waiting_for_keyboard = null;
             // TODO: yield to waiting process?
+        }
+    }
+
+    // Same problems as the keyboard functions
+    pub fn wait_for_mouse(self: *Manager) void {
+        platform.disable_interrupts();
+        self.current_thread.?.state = .Wait;
+        self.waiting_for_mouse = self.current_thread;
+        self.yield();
+    }
+    pub fn mouse_event_occurred(self: *Manager) void {
+        platform.disable_interrupts();
+        if (self.waiting_for_mouse) |t| {
+            t.state = .Run;
+            self.waiting_for_mouse = null;
         }
     }
 

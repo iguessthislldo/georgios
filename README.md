@@ -2,17 +2,13 @@
 
 ![Screenshot of text mode](misc/screenshot1.png)
 
-Georgios (Greek for George, said like *GORE-GEE-OS*) is an operating system I'm
-making for fun which currently targets i386/IA-32. The purpose of this project
-is to serve as a learning experience.
+Georgios (Greek version of the name George, said like *GORE-GEE-OS*) is an
+operating system I'm making for fun which currently targets i386/IA-32. The
+purpose of this project is to serve as a learning experience.
 
 Work in progress graphics mode:
 
 https://user-images.githubusercontent.com/5941194/180702578-91270793-c91c-4f24-b7e1-f86bc2b48c53.mp4
-
-Georgios is so simplistic right that now the most impressive application is a
-snake clone. This is probably going to be the case until applications can be
-ported.
 
 ## Features
 
@@ -26,22 +22,39 @@ ported.
   - In-memory filesystem mounted at boot (read/write)
 - Basic preemptive multitasking between processes that can be loaded from ELF
   files
-- ACPI shutdown (thanks in part to [ACPICA](https://www.acpica.org/))
+- ACPI shutdown using [ACPICA](https://www.acpica.org/)
 
 ### Started on, but not really working yet
 
 - A graphics mode using VESA BIOS Extensions (VBE)
-  - This makes use of [libx86emu](https://github.com/wfeldt/libx86emu) to
-    invoke the BIOS code required to access VBE.
-  - Currently requires building with `make multiboot_vbe=true`
+  - This will use [libx86emu](https://github.com/wfeldt/libx86emu) to
+    invoke the BIOS code required to switch to VBE graphics modes. This doesn't
+    really work yet though.
+  - This can be bypassed with `make multiboot_vbe=true`, which has GRUB set a
+    fixed VBE graphics mode. This is how the demo above was ran. This is not
+    the default for a number of reasons:
+      - The major reason is the graphics are slow. This can be seen in the
+        demo, especially when the Apollo earthrise picture takes a moment to
+        get drawn on the screen.
+      - It's a fixed graphics mode when the kernel starts and so nothing gets
+        printed to the screen until the graphical console is ready. So an error
+        before this wouldn't get printed, which is a problem when running on
+        real hardware.
+      - The graphical console is mostly done but missing things like the cursor
+        and text rendering is a bit off.
 - USB 2.0 stack
 - Porting real applications written in Zig and C
-  - The applications currently written in Zig are "real", but are using the
-    freestanding target and are using system calls directly. To be able to use
-    a Zig or C hello world program without any modification, the standard
-    libraries would have to be ported and toolchains would have to be modified
-    to target Georgios properly.
+  - The applications currently written in Zig are "real" as in they are
+    compiled and ran separately from the kernel, are running in x86 ring3, and
+    can't take the whole system down (for the most part). The issue is they are
+    compiled using the freestanding target. To be able to use a Zig or C hello
+    world program without any modification, the standard libraries would have to be
+    ported and toolchains would have to be modified to target Georgios properly.
 - Freeing the OS from the need of a boot CD
+- PS/2 Mouse support
+  - Can be tried out by building with `make mouse=true` and running
+    `test-mouse`. This isn't enabled by default becuase currently the keyboard
+    and mouse cross talk when being used at the same time.
 
 ## Building
 

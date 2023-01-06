@@ -61,7 +61,7 @@ var table = table_init: {
     break :table_init entries;
 };
 
-// TODO: Bochs error for interrupt 39 is missing default error messeage, figure
+// TODO: Bochs error for interrupt 39 is missing default error message, figure
 // out why.
 const invalid_index = "Interrupt number is invalid";
 var names = names_init: {
@@ -395,7 +395,10 @@ pub const pic = struct {
     }
 
     pub fn allow_irq(irq: u8, enabled: bool) void {
-        _ = enabled; // TODO
+        // TODO
+        if (!enabled) {
+            @panic("Trying to use allow_irq(*, false)");
+        }
         var port = irq_0_7_data_port;
         if (irq >= 8) {
             port = irq_8_15_data_port;
@@ -429,11 +432,13 @@ pub const pic = struct {
         putil.out8(irq_8_15_data_port, 1);
         busywork();
 
-        // Disable All IRQs for Now
+        // Disable All IRQs for Now...
         putil.out8(irq_0_7_data_port, 0xff);
         busywork();
         putil.out8(irq_8_15_data_port, 0xff);
         busywork();
+        // Expect for 2 which chains the secondary PIC.
+        allow_irq(2, true);
 
         // Enable Interrupts
         putil.enable_interrupts();

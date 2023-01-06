@@ -56,6 +56,8 @@ pub fn build(builder: *std.build.Builder) void {
     const multiboot_vbe = b.option(bool, "multiboot_vbe",
         \\Ask the bootloader to switch to a graphics mode for us.
         ) orelse false;
+    // TODO: Change default to true when Georgios can properly switch to VBE
+    // itself.
     const vbe = b.option(bool, "vbe",
         \\Use VBE Graphics if possible.
         ) orelse multiboot_vbe;
@@ -73,6 +75,10 @@ pub fn build(builder: *std.build.Builder) void {
         ) orelse true;
     const halt_when_done = b.option(bool, "halt_when_done",
         \\Halt instead of shutting down.
+        ) orelse false;
+    // TODO: Change default to true when mouse and keyboard don't conflict.
+    const mouse = b.option(bool, "mouse",
+        \\Enable Mouse Support
         ) orelse false;
 
     target = b.standardTargetOptions(.{
@@ -116,6 +122,7 @@ pub fn build(builder: *std.build.Builder) void {
     kernel_options.addOption(bool, "direct_disk", direct_disk);
     kernel_options.addOption(bool, "run_rc", run_rc);
     kernel_options.addOption(bool, "halt_when_done", halt_when_done);
+    kernel_options.addOption(bool, "mouse", mouse);
     kernel_options.addOption(bool, "is_kernel", true);
     kernel.addOptions("build_options", kernel_options);
     // Packages
@@ -136,18 +143,14 @@ pub fn build(builder: *std.build.Builder) void {
         catch @panic("generate_builtin_font failed");
 
     // Programs
-    build_program("shell");
-    build_program("hello");
-    build_program("ls");
-    build_program("cat");
-    build_program("snake");
-    build_program("cksum");
-    build_program("img");
-    build_program("check-test-file");
-    build_program("test-prog");
-    build_program("ed");
-    // build_zig_program("hello-zig");
-    // build_c_program("hello-c");
+    var programs_dir =
+        std.fs.cwd().openDir("programs", .{.iterate = true}) catch unreachable;
+    var programs_dir_it = programs_dir.iterate();
+    while (programs_dir_it.next() catch unreachable) |entry| {
+        if (entry.kind == .Directory) {
+            build_program(entry.name);
+        }
+    }
 }
 
 const disable_ubsan = "-fsanitize-blacklist=misc/clang-sanitize-blacklist.txt";
