@@ -6,16 +6,15 @@
 //   https://www.nongnu.org/ext2-doc/ext2.html
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const utils = @import("utils");
 const georgios = @import("georgios");
 
 const kernel = @import("../kernel.zig");
-const print = @import("../print.zig");
-const Allocator = @import("../memory.zig").Allocator;
-const MemoryError = @import("../memory.zig").MemoryError;
-const io = @import("../io.zig");
-const fs = @import("../fs.zig");
+const print = kernel.print;
+const io = kernel.io;
+const fs = kernel.fs;
 const Vnode = fs.Vnode;
 const Vfilesystem = fs.Vfilesystem;
 const DirIterator = fs.DirIterator;
@@ -190,7 +189,7 @@ const DataBlockIterator = struct {
 
     fn get_level(self: *DataBlockIterator, level: *?[]u32, index: u32) Error!void {
         if (level.* == null) {
-            level.* = try self.ext2.alloc.alloc_array(
+            level.* = try self.ext2.alloc.alloc(
                 u32, self.ext2.block_size / @sizeOf(u32));
         }
         try self.ext2.get_entry_block(level.*.?, index);
@@ -308,10 +307,10 @@ const DataBlockIterator = struct {
         return dest_use[0..got];
     }
 
-    fn done(self: *DataBlockIterator) Error!void {
-        if (self.second_level != null) try self.ext2.alloc.free_array(self.second_level.?);
-        if (self.third_level != null) try self.ext2.alloc.free_array(self.third_level.?);
-        if (self.fourth_level != null) try self.ext2.alloc.free_array(self.fourth_level.?);
+    fn done(self: *DataBlockIterator) void {
+        if (self.second_level != null) self.ext2.alloc.free(self.second_level.?);
+        if (self.third_level != null) self.ext2.alloc.free(self.third_level.?);
+        if (self.fourth_level != null) self.ext2.alloc.free(self.fourth_level.?);
     }
 };
 
@@ -327,7 +326,7 @@ const DirectoryEntry = packed struct {
 const DirIteratorImpl = struct {
     ext2: *Ext2,
     node: *Node,
-    alloc: *Allocator,
+    alloc: Allocator,
     dir_iter: DirIterator,
     data_block_iter: DataBlockIterator,
     buffer: []u8,
@@ -338,13 +337,13 @@ const DirIteratorImpl = struct {
         const node = @fieldParentPtr(Node, "vnode", vnode);
         const ext2 = node.ext2;
         const inode = &node.inode;
-        var impl = try ext2.alloc.alloc(DirIteratorImpl);
+        var impl = try ext2.alloc.create(DirIteratorImpl);
         impl.* = .{
             .alloc = ext2.alloc,
             .ext2 = ext2,
             .node = node,
             .data_block_iter = DataBlockIterator{.ext2 = ext2, .inode = inode},
-            .buffer = try ext2.alloc.alloc_array(u8, ext2.block_size),
+            .buffer = try ext2.alloc.alloc(u8, ext2.block_size),
             .block_count = inode.size / ext2.block_size,
             .dir_iter = .{.dir = &node.vnode, .next_impl = next_impl, .done_impl = done_impl},
         };
@@ -382,8 +381,8 @@ const DirIteratorImpl = struct {
 
     fn done_impl(dir_it: *DirIterator) void {
         const self = @fieldParentPtr(DirIteratorImpl, "dir_iter", dir_it);
-        self.alloc.free(self.buffer) catch @panic("Ext2 DirIterator done");
-        self.alloc.free(self) catch @panic("Ext2 DirIterator done");
+        self.alloc.free(self.buffer);
+        self.alloc.destroy(self);
     }
 };
 
@@ -431,7 +430,7 @@ const Node = struct {
     fn open_new_context_impl(vnode: *Vnode, opts: OpenOpts) Error!*Context {
         const self = @fieldParentPtr(Node, "vnode", vnode);
         const alloc = self.ext2.alloc;
-        var impl = try alloc.alloc(ContextImpl);
+        var impl = try alloc.create(ContextImpl);
         impl.* = .{
             .context = .{
                 .vnode = vnode,
@@ -468,7 +467,7 @@ const ContextImpl = struct {
     fn read(file: *io.File, to: []u8) io.FileError!usize {
         const self = @fieldParentPtr(ContextImpl, "io_file", file);
         if (self.buffer == null) {
-            self.buffer = try self.node.ext2.alloc.alloc_array(u8, self.node.ext2.block_size);
+            self.buffer = try self.node.ext2.alloc.alloc(u8, self.node.ext2.block_size);
         }
         var got: usize = 0;
         while (got < to.len) {
@@ -505,9 +504,9 @@ const ContextImpl = struct {
         self.position = 0;
         const alloc = self.node.ext2.alloc;
         if (self.buffer) |buffer| {
-            alloc.free_array(buffer) catch unreachable;
+            alloc.free(buffer);
         }
-        alloc.free(self) catch unreachable;
+        alloc.destroy(self);
     }
 };
 
@@ -519,7 +518,7 @@ const second_level_start = 12;
 vfs: fs.Vfilesystem = undefined,
 node_cache: NodeCache = undefined,
 initialized: bool = false,
-alloc: *Allocator = undefined,
+alloc: Allocator = undefined,
 block_store: *io.BlockStore = undefined,
 offset: io.AddressType = 0,
 superblock: Superblock = Superblock{},
@@ -547,9 +546,9 @@ fn get_node(self: *Ext2, n: u32) Error!*Node {
         return node;
     }
 
-    var node: *Node = try self.alloc.alloc(Node);
+    var node: *Node = try self.alloc.create(Node);
     node.init(self, undefined); // On purpose, wait until we got the inode
-    errdefer self.alloc.free(node) catch unreachable;
+    errdefer self.alloc.destroy(node);
 
     // Get Inode
     var block_group: BlockGroupDescriptor = undefined;
@@ -575,13 +574,13 @@ fn get_entry_block(self: *Ext2, block: []u32, index: usize) Error!void {
         @ptrCast([*]u8, block.ptr)[0..block.len * @sizeOf(u32)], index);
 }
 
-pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!void {
+pub fn init(self: *Ext2, alloc: Allocator, block_store: *io.BlockStore) Error!void {
     self.alloc = alloc;
 
     self.vfs = .{
         .get_root_vnode_impl = get_root_vnode_impl,
     };
-    self.node_cache = NodeCache.init(alloc.std_allocator());
+    self.node_cache = NodeCache.init(alloc);
 
     self.block_store = block_store;
 
@@ -607,7 +606,7 @@ pub fn init(self: *Ext2, alloc: *Allocator, block_store: *io.BlockStore) Error!v
 fn done(self: *Ext2) void {
     var it = self.node_cache.iterator();
     while (it.next()) |kv| {
-        self.alloc.free(kv.value_ptr.*) catch unreachable;
+        self.alloc.destroy(kv.value_ptr.*);
     }
     self.node_cache.deinit();
 }
@@ -618,21 +617,25 @@ fn get_root_vnode_impl(vfs: *Vfilesystem) Error!*Vnode {
 }
 
 const Ext2Test = struct {
+    ta: utils.TestAlloc = .{},
     alloc: kernel.memory.UnitTestAllocator = .{},
     check_allocs: bool = false,
     file: std.fs.File = undefined,
     fbs: io.StdFileBlockStore = .{},
+    cache: io.MemoryBlockStore = .{},
     ext2: Ext2 = .{},
     m: fs.Manager = undefined,
 
-    fn init(self: *Ext2Test) !void {
+    fn init(self: *Ext2Test, use_cache: bool) !void {
         self.alloc.init();
-        const alloc_if = &self.alloc.allocator;
         self.file = try std.fs.cwd().openFile(
             "misc/ext2-test-disk/ext2-test-disk.img", .{.read = true});
-        self.fbs.init(alloc_if, &self.file, 1024);
-        try self.ext2.init(alloc_if, &self.fbs.block_store_if);
-        self.m.init(alloc_if, &self.ext2.vfs);
+        const std_alloc = self.ta.alloc();
+        self.fbs.init(std_alloc, &self.file, 1024);
+        self.cache.init_as_cache(self.alloc.allocator.std_allocator(), &self.fbs.block_store_if, 4);
+        try self.ext2.init(std_alloc,
+            if (use_cache) &self.cache.block_store_if else &self.fbs.block_store_if);
+        self.m.init(&self.alloc.allocator, &self.ext2.vfs);
     }
 
     fn reached_end(self: *Ext2Test) void {
@@ -641,6 +644,7 @@ const Ext2Test = struct {
 
     fn done(self: *Ext2Test) void {
         self.ext2.done();
+        self.cache.done();
         self.alloc.done_check_if(&self.check_allocs);
         self.file.close();
     }
@@ -657,9 +661,11 @@ fn test_reading(file: *io.File, comptime expected: []const u8) !void {
     }
 }
 
-test "Ext2" {
+fn ext2_test(use_cache: bool) !void {
     var t = Ext2Test{};
-    try t.init();
+    defer t.ta.deinit(.Panic);
+    errdefer t.ta.deinit(.NoPanic);
+    try t.init(use_cache);
     defer t.done();
 
     try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "lost+found", "dir", "file1"});
@@ -688,4 +694,12 @@ test "Ext2" {
     }
 
     t.reached_end();
+}
+
+test "Ext2" {
+    try ext2_test(false);
+}
+
+test "Ext2 with cache" {
+    try ext2_test(true);
 }

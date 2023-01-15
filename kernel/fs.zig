@@ -50,7 +50,7 @@ fn found_partition(block_store: *io.BlockStore) !bool {
         });
 
         var part_it = try disk.partitions();
-        defer (part_it.done() catch unreachable);
+        defer part_it.done();
         while (try part_it.next()) |part| {
             var type_guid: [Guid.string_size]u8 = undefined;
             try part.type_guid.to_string(type_guid[0..]);
@@ -89,7 +89,7 @@ fn found_partition(block_store: *io.BlockStore) !bool {
 pub fn get_root(alloc: *memory.Allocator, block_store: *io.BlockStore) ?*Vfilesystem {
     if (found_partition(block_store) catch false) {
         print.string(" - Filesystem\n");
-        root_ext2.init(alloc, block_store) catch return null;
+        root_ext2.init(alloc.std_allocator(), block_store) catch return null;
         return &root_ext2.vfs;
     } else {
         print.string(" - No Filesystem\n");

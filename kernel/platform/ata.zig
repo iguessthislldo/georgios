@@ -201,7 +201,7 @@ const Controller = struct {
         present: bool = false,
         selected: bool = false,
         alloc: *memory.Allocator = undefined,
-        block_store_interface: io.BlockStore = undefined,
+        block_store_if: io.BlockStore = undefined,
         sector_count: u64 = 0,
 
         fn get_channel(self: *Device) *Channel {
@@ -324,10 +324,12 @@ const Controller = struct {
                 log_indent ++ "    - Sector Count: {}\n", .{
                     @intCast(usize, identity.sector_count)});
             self.present = true;
-            self.block_store_interface.block_size = Sector.size;
-            self.block_store_interface.read_block_impl = Device.read_block;
-            self.block_store_interface.free_block_impl = Device.free_block;
             self.sector_count = identity.sector_count;
+            self.block_store_if = .{
+                .page_alloc = kernel.big_alloc.std_allocator(),
+                .block_size = Sector.size,
+                .read_block_impl = Device.read_block,
+            };
         }
 
         pub fn read_impl(self: *Device, address: u64, data: []u8) Error!void {
@@ -357,11 +359,9 @@ const Controller = struct {
             try self.read_impl(sector.address, sector.data[0..]);
         }
 
-        pub fn read_block(block_store: *io.BlockStore, block: *io.Block) io.FileError!void {
-            const self = @fieldParentPtr(Device, "block_store_interface", block_store);
-            if (block.data == null) {
-                block.data = try self.alloc.alloc_array(u8, Sector.size);
-            }
+        fn read_block(block_store: *io.BlockStore, block: *io.Block) io.FileError!void {
+            const self = @fieldParentPtr(Device, "block_store_if", block_store);
+            if (block.data == null) return io.FileError.NotEnoughDestination;
             self.read_impl(block.address, block.data.?[0..])
                 catch return io.FileError.Internal;
         }
@@ -550,6 +550,6 @@ pub fn init(dev: *const pci.Dev) void {
         @panic("Failure");
     };
     if (controller.primary.master.present) {
-        kernel.raw_block_store = &controller.primary.master.block_store_interface;
+        kernel.direct_disk_block_store = &controller.primary.master.block_store_if;
     }
 }

@@ -17,6 +17,20 @@ pub fn List(comptime Type: type) type {
         tail: ?*Node = null,
         len: usize = 0,
 
+        pub fn front(self: *Self) ?Type {
+            if (self.head) |node| {
+                return node.value;
+            }
+            return null;
+        }
+
+        pub fn back(self: *Self) ?Type {
+            if (self.tail) |node| {
+                return node.value;
+            }
+            return null;
+        }
+
         pub fn unlink_node(self: *Self, node_maybe: ?*Node) void {
             if (node_maybe) |node| {
                 if (node.next) |next| {

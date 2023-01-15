@@ -50,8 +50,9 @@ pub var alloc: *memory.Allocator = undefined;
 pub var big_alloc: *memory.Allocator = undefined;
 pub var console: *Console = undefined;
 pub var console_file = io.File{};
-pub var raw_block_store: ?*io.BlockStore = null;
-pub var block_store: io.CachedBlockStore = .{};
+pub var direct_disk_block_store: ?*io.BlockStore = null;
+pub var disk_cache_block_store: io.MemoryBlockStore = .{};
+pub var disk_block_store: ?*io.BlockStore = null;
 pub var builtin_font: BitmapFont = undefined;
 pub var ram_disk: fs.RamDisk = undefined;
 
@@ -62,10 +63,14 @@ fn platform_init() !void {
 }
 
 fn get_ext2_root() ?*fs.Vfilesystem {
-    if (raw_block_store) |raw| {
-        block_store.use_direct = build_options.direct_disk;
-        block_store.init(alloc, raw, 128);
-        if (fs.get_root(alloc, block_store.block_store)) |root_fs| {
+    if (direct_disk_block_store) |direct_disk| {
+        if (build_options.direct_disk) {
+            disk_block_store = direct_disk;
+        } else {
+            disk_cache_block_store.init_as_cache(alloc.std_allocator(), direct_disk, 128);
+            disk_block_store = &disk_cache_block_store.block_store_if;
+        }
+        if (fs.get_root(alloc, disk_block_store.?)) |root_fs| {
             return root_fs;
         }
     } else {

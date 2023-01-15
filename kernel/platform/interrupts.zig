@@ -112,6 +112,10 @@ pub fn PanicMessage(comptime StackType: type) type {
             const gpf = has_ec and interrupt_number == 13;
             const page_fault = has_ec and interrupt_number == 14;
 
+            // TODO: Need a better way to determine this because if the kernel
+            // jumps to userspace for whatever reason then the whole message
+            // makes no sense and exit_current_process is called, which could
+            // kill an innocent process.
             const caused_by_user = interrupt_stack.eip < 0xc000000 or
                 (page_fault and (ec & 4) > 0);
             if (caused_by_user) {

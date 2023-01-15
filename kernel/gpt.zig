@@ -73,8 +73,9 @@ pub const Disk = struct {
 
         // Check to see if there's a MBR and it says this is a GPT disk.
         var mbr_block = io.Block{.address = 0};
+        try block_store.create_block(&mbr_block);
         try block_store.read_block(&mbr_block);
-        defer (block_store.free_block(&mbr_block) catch unreachable);
+        defer block_store.destroy_block(&mbr_block);
         const mbr = try Mbr.new(mbr_block.data.?);
         if (!mbr.gpt_protective) {
             return Error.InvalidGptHeader;
@@ -82,8 +83,9 @@ pub const Disk = struct {
 
         // Get GPT Header Block
         var gpt_block = io.Block{.address = 1};
+        try block_store.create_block(&gpt_block);
         try block_store.read_block(&gpt_block);
-        defer (block_store.free_block(&gpt_block) catch unreachable);
+        defer block_store.destroy_block(&gpt_block);
         const block = gpt_block.data.?;
 
         // Check Magic
@@ -108,6 +110,7 @@ pub const Disk = struct {
             .block = io.Block{.address = self.partition_entries_lba},
             .entry_size = self.partition_entry_size,
         };
+        try self.block_store.create_block(&it.block);
         try self.block_store.read_block(&it.block);
         return it;
     }
@@ -144,8 +147,8 @@ pub const Disk = struct {
             return partition;
         }
 
-        pub fn done(self: *PartitionIterator) Error!void {
-            try self.block_store.free_block(&self.block);
+        pub fn done(self: *PartitionIterator) void {
+            self.block_store.destroy_block(&self.block);
         }
     };
 };
