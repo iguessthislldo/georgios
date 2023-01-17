@@ -67,6 +67,7 @@ $(ISO): build_georgios
 $(DISK): build_georgios
 	rm -f $(DISK)
 	mke2fs -L '' -N 0 -O none -d $(STAGE_ROOT_DIR) -r 1 -t ext2 $(DISK) 20m
+	qemu-img create disk2.img 4k
 
 $(USBDRIVE): $(DISK)
 	cp $(DISK) $(USBDRIVE)

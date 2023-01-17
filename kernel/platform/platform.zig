@@ -140,7 +140,7 @@ pub fn init() !void {
     try kernel.threading_mgr.init();
 
     // Setup Devices
-    kernel.device_mgr.init(kernel.alloc);
+    kernel.device_mgr.init(kernel.alloc.std_allocator());
     try ps2.init();
     pci.find_pci_devices();
     bios_int.init();

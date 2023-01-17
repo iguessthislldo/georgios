@@ -5,6 +5,7 @@ const no_max = std.math.maxInt(usize);
 
 const utils = @import("utils");
 const georgios = @import("georgios");
+pub const console_writer = georgios.get_console_writer();
 
 pub const platform = @import("platform.zig");
 pub const fprint = @import("fprint.zig");
@@ -50,9 +51,8 @@ pub var alloc: *memory.Allocator = undefined;
 pub var big_alloc: *memory.Allocator = undefined;
 pub var console: *Console = undefined;
 pub var console_file = io.File{};
-pub var direct_disk_block_store: ?*io.BlockStore = null;
+// TODO: This should be builtin into the disk
 pub var disk_cache_block_store: io.MemoryBlockStore = .{};
-pub var disk_block_store: ?*io.BlockStore = null;
 pub var builtin_font: BitmapFont = undefined;
 pub var ram_disk: fs.RamDisk = undefined;
 
@@ -63,19 +63,21 @@ fn platform_init() !void {
 }
 
 fn get_ext2_root() ?*fs.Vfilesystem {
-    if (direct_disk_block_store) |direct_disk| {
-        if (build_options.direct_disk) {
-            disk_block_store = direct_disk;
-        } else {
-            disk_cache_block_store.init_as_cache(alloc.std_allocator(), direct_disk, 128);
-            disk_block_store = &disk_cache_block_store.block_store_if;
+    if (device_mgr.get(([_][]const u8{"ata0", "disk0"})[0..])) |disk_dev| {
+        if (disk_dev.as_block_store()) |direct_block_store| {
+            var use_block_store: *io.BlockStore = undefined;
+            if (build_options.direct_disk) {
+                use_block_store = direct_block_store;
+            } else {
+                disk_cache_block_store.init_as_cache(alloc.std_allocator(), direct_block_store, 128);
+                use_block_store = &disk_cache_block_store.block_store_if;
+            }
+            if (fs.get_root(alloc, use_block_store)) |root_fs| {
+                return root_fs;
+            }
         }
-        if (fs.get_root(alloc, disk_block_store.?)) |root_fs| {
-            return root_fs;
-        }
-    } else {
-        print.string(" - No Disk Found\n");
     }
+    print.string(" - No Disk Found\n");
     return null;
 }
 
@@ -89,6 +91,26 @@ fn init() !void {
     filesystem_mgr.init(alloc, ext2_root orelse ram_disk_root);
     if (ext2_root != null) {
         try filesystem_mgr.mount(ram_disk_root, "/ramdisk");
+    }
+
+    // Write increasing ints to ata0/disk1
+    if (device_mgr.get(([_][]const u8{"ata0", "disk1"})[0..])) |disk_dev| {
+        if (disk_dev.as_block_store()) |bs| {
+            var block = io.Block{.address = 0};
+            try bs.create_block(&block);
+            defer bs.destroy_block(&block);
+
+            const Int = u16;
+            var int: Int = 0;
+            while (block.address < bs.max_address.?) {
+                for (std.mem.bytesAsSlice(Int, block.data.?)) |*value| {
+                    value.* = int;
+                    int += 1;
+                }
+                try bs.write_block(&block);
+                block.address += 1;
+            }
+        }
     }
 }
 
@@ -179,6 +201,8 @@ fn run() !void {
     }
     print.string("\x1bc"); // Reset Console
     // try @import("sync.zig").system_tests();
+
+    try device_mgr.print_tree(console_writer);
 
     const init_info: georgios.ProcessInfo = .{.path = "/etc/init"};
     const init_exit_info = try threading_mgr.wait_for_process(try exec(&init_info));
