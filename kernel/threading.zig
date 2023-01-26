@@ -71,6 +71,7 @@ pub const Process = struct {
     /// Current Working Directory
     cwd: ?[]const u8 = null,
     fs_submgr: kernel.fs.Submanager = undefined,
+    dispatcher: kernel.dispatching.Dispatcher = undefined,
 
     pub fn init(self: *Process, current: ?*Process) Error!void {
         // TODO: Cleanup on failure
@@ -104,6 +105,7 @@ pub const Process = struct {
         try self.set_cwd(if (current) |c| c.cwd.? else "/");
 
         self.fs_submgr.init(&kernel.filesystem_mgr, &self.cwd.?);
+        try self.dispatcher.init(kernel.memory_mgr.alloc.std_allocator(), self);
 
         try self.impl.init(self);
         self.main_thread.process = self;

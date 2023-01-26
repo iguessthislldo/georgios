@@ -22,6 +22,7 @@ pub const builtin_font_data = @import("builtin_font_data.zig");
 pub const BitmapFont = @import("BitmapFont.zig");
 pub const Console = @import("Console.zig");
 pub const List = @import("list.zig").List;
+pub const dispatching = @import("dispatching.zig");
 
 pub var panic_message: []const u8 = "";
 
@@ -91,26 +92,6 @@ fn init() !void {
     filesystem_mgr.init(alloc, ext2_root orelse ram_disk_root);
     if (ext2_root != null) {
         try filesystem_mgr.mount(ram_disk_root, "/ramdisk");
-    }
-
-    // Write increasing ints to ata0/disk1
-    if (device_mgr.get(([_][]const u8{"ata0", "disk1"})[0..])) |disk_dev| {
-        if (disk_dev.as_block_store()) |bs| {
-            var block = io.Block{.address = 0};
-            try bs.create_block(&block);
-            defer bs.destroy_block(&block);
-
-            const Int = u16;
-            var int: Int = 0;
-            while (block.address < bs.max_address.?) {
-                for (std.mem.bytesAsSlice(Int, block.data.?)) |*value| {
-                    value.* = int;
-                    int += 1;
-                }
-                try bs.write_block(&block);
-                block.address += 1;
-            }
-        }
     }
 }
 

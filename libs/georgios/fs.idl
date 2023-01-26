@@ -1,0 +1,5 @@
+@virtual_dispatch
+interface Directory {
+    void create(in string path, in georgios::fs::NodeKind kind) raises (georgios::fs::Error);
+    void unlink(in string path) raises (georgios::fs::Error);
+};

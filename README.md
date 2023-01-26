@@ -61,6 +61,9 @@ https://user-images.githubusercontent.com/5941194/180702578-91270793-c91c-4f24-b
 Building Georgios requires a Unix-like environment with:
 - [Zig](https://ziglang.org/) 0.9.1
 - Python 3
+- [Bridle](https://github.com/iguessthislldo/bridle)
+  - Is a submodule, but it needs to be installed using
+    `pip install --user scripts/codegen/bridle`.
 - GRUB2
   - Requires i686 Support (`grub-pc-bin` package on Ubuntu)
 - xorriso (`xorriso` package on Ubuntu)
@@ -85,3 +88,4 @@ it.
 - [xv6](https://github.com/mit-pdos/xv6-public)
 - [The Design and Implementation of the 4.4 BSD Operating System](https://www.amazon.com/Implementation-Operating-paperback-Addison-wesley-Systems/dp/0132317923)
 - [FYSOS: Media Storage Devices](https://www.amazon.com/dp/1514111888/)
+- [UNIX Internals: The New Frontiers](https://www.amazon.com/UNIX-Internals-Frontiers-Uresh-Vahalia/dp/0131019082)

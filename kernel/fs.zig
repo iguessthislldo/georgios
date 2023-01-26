@@ -27,6 +27,7 @@ const List = @import("list.zig").List;
 
 pub const Error = georgios.fs.Error;
 pub const OpenOpts = georgios.fs.OpenOpts;
+pub const NodeKind = georgios.fs.NodeKind;
 pub const RamDisk = @import("fs/RamDisk.zig");
 pub const Ext2 = @import("fs/Ext2.zig");
 pub const FileId = io.File.Id;
@@ -449,19 +450,16 @@ pub const Context = struct {
 };
 
 pub const Vnode = struct {
-    pub const Kind = struct {
-        file: bool = false,
-        directory: bool = false,
-    };
+    pub const Kind = NodeKind;
 
     fs: *Vfilesystem,
-    kind: Kind,
+    kind: NodeKind,
     mounted_here: ?*Vfilesystem = null,
     context_rc: usize = 0,
 
     get_dir_iter_impl: fn(*Vnode) Error!*DirIterator,
-    create_node_impl: fn(*Vnode, []const u8, Kind) Error!*Vnode,
-    unlink_impl: fn(*Vnode, []const u8) Error!void,
+    create_node_impl: ?fn(*Vnode, []const u8, Kind) Error!*Vnode = null,
+    unlink_impl: ?fn(*Vnode, []const u8) Error!void = null,
     open_new_context_impl: fn(*Vnode, OpenOpts) Error!*Context,
 
     pub fn assert_directory(self: *const Vnode) Error!void {
@@ -492,7 +490,7 @@ pub const Vnode = struct {
         return (try self.node_with_content()).dir_iter_i();
     }
 
-    fn find_in_directory_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!*Vnode {
+    fn find_in_directory_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!?*Vnode {
         var it = try self.dir_iter_i();
         defer it.done();
         while (try it.next()) |result| {
@@ -500,11 +498,15 @@ pub const Vnode = struct {
                 return result.node;
             }
         }
-        return Error.FileNotFound;
+        return null;
     }
 
-    pub fn find_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
-        return (try self.node_with_content()).find_in_directory_i(name);
+    fn assert_in_directory_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!*Vnode {
+        return (try self.find_in_directory_i(name)) orelse Error.FileNotFound;
+    }
+
+    pub fn assert_in_directory(self: *Vnode, name: []const u8) Error!*Vnode {
+        return (try self.node_with_content()).assert_in_directory_i(name);
     }
 
     fn directory_empty_i(self: *Vnode) callconv(.Inline) Error!bool {
@@ -523,8 +525,13 @@ pub const Vnode = struct {
     }
 
     fn create_node_i(self: *Vnode, name: []const u8, kind: Kind) callconv(.Inline) Error!*Vnode {
-        try self.assert_directory();
-        return self.create_node_impl(self, name, kind);
+        if ((try self.find_in_directory_i(name)) != null) {
+            return Error.AlreadyExists;
+        }
+        if (self.create_node_impl) |create_node_impl| {
+            return create_node_impl(self, name, kind);
+        }
+        return Error.Unsupported;
     }
 
     pub fn create_node(self: *Vnode, name: []const u8, kind: Kind) Error!*Vnode {
@@ -532,11 +539,14 @@ pub const Vnode = struct {
     }
 
     fn unlink_i(self: *Vnode, name: []const u8) callconv(.Inline) Error!void {
-        const vnode_to_unlink = try self.find_in_directory_i(name);
+        const vnode_to_unlink = try self.assert_in_directory_i(name);
         if (vnode_to_unlink.kind.directory and !try vnode_to_unlink.directory_empty()) {
             return Error.DirectoryNotEmpty;
         }
-        try self.unlink_impl(self, name);
+        if (self.unlink_impl) |unlink_impl| {
+            return unlink_impl(self, name);
+        }
+        return Error.Unsupported;
     }
 
     pub fn unlink(self: *Vnode, name: []const u8) Error!void {
@@ -552,6 +562,8 @@ pub const Vnode = struct {
         if (self.context_rc > 0) {
             self.context_rc -%= 1;
         }
+        // TODO: assert it can't be 0?
+        // TODO: Do something when it reaches 0?
     }
 };
 
@@ -631,7 +643,7 @@ pub const Manager = struct {
         defer (resolved_path.done() catch @panic("resolve_path_i: resolved_path.done()"));
         var it = raw_path.list.const_iterator();
         while (it.next()) |component| {
-            vnode = try vnode.find_in_directory(component);
+            vnode = try vnode.assert_in_directory(component);
             opts.set_node(vnode);
             if (streq(component, "..")) {
                 try resolved_path.pop_component();
@@ -682,7 +694,7 @@ pub const Manager = struct {
         var dnp: *Vnode = undefined;
         var opts_copy = opts.get_working_copy(&dnp);
         var path = try self.get_absolute_path(path_str, opts_copy);
-        defer (path.done() catch @panic("create_node: path.done()"));
+        defer (path.done() catch @panic("resolve_parent_directory: path.done()"));
         const child_name = try path.filename();
         try path.pop_component();
         _ = try self.resolve_path_i(&path, opts_copy);
@@ -702,6 +714,7 @@ pub const Manager = struct {
         var dnp: *Vnode = undefined;
         var opts_copy = opts.get_working_copy(&dnp);
         const child_name = try self.resolve_parent_directory(path_str, opts_copy);
+        errdefer self.alloc.free_array(child_name) catch unreachable;
         return opts_copy.get_node().create_node(child_name, kind);
     }
 
@@ -726,6 +739,7 @@ pub const Manager = struct {
     pub fn mount(self: *Manager, fs: *Vfilesystem, path: []const u8) Error!void {
         // TODO: Support mounting at any node, for example if the filesystem
         // consists of just a file.
+        // TODO: Support unmounting
         var opts = ResolvePathOpts{};
         const node = try self.resolve_directory(path, opts);
         if (node.mounted_here != null) {
@@ -770,6 +784,16 @@ pub const Submanager = struct {
             kv.value_ptr.*.close() catch unreachable; // TODO?
         }
         self.open_files.deinit();
+    }
+
+    pub fn create(self: *Submanager, name: []const u8, kind: NodeKind) Error!void {
+        const path_opts = ResolvePathOpts{.cwd = self.cwd_ptr.*};
+        _ = try self.manager.create_node(name, kind, path_opts);
+    }
+
+    pub fn unlink(self: *Submanager, name: []const u8) Error!void {
+        const path_opts = ResolvePathOpts{.cwd = self.cwd_ptr.*};
+        try self.manager.unlink(name, path_opts);
     }
 
     pub fn open(self: *Submanager, path: []const u8, opts: OpenOpts) Error!FileId {

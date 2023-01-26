@@ -411,6 +411,9 @@ test "RamDisk: Files and Directories" {
     _ = try t.m.create_node("/file1", .{.file = true}, .{});
     // And it should now be available
     try t.m.assert_directory_has("/", &[_][]const u8{".", "..", "file1"});
+    // Try to make the same file again
+    try std.testing.expectError(Error.AlreadyExists,
+        t.m.create_node("/file1", .{.file = true}, .{}));
 
     // Make a directory
     const dir = try t.m.create_node("/dir", .{.directory = true}, .{});

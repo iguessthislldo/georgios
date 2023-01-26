@@ -4,3 +4,6 @@
 [submodule "kernel/platform/bios_int/libx86emu"]
 	path = kernel/platform/bios_int/libx86emu
 	url = https://github.com/wfeldt/libx86emu
+[submodule "bridle"]
+	path = scripts/codegen/bridle
+	url = git@github.com:iguessthislldo/bridle.git

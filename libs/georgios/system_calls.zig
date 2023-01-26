@@ -29,6 +29,11 @@ const ErrorCode = enum(u32) {
     InvalidOpenOpts = 23,
     StreamTooLong = 24,
     EndOfStream = 25,
+    DispatchInvalidPort = 26,
+    DispatchInvalidMessage = 27,
+    DispatchBrokenCall = 28,
+    DispatchOpUnsupported = 29,
+    AlreadyExists = 30,
     _,
 };
 
@@ -45,6 +50,19 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
 
         pub fn set_error(self: *Self, err: ErrorType) void {
             self.* = Self{.error_code = switch (ErrorType) {
+                georgios.DispatchError => switch (err) {
+                    georgios.DispatchError.DispatchInvalidPort => ErrorCode.DispatchInvalidPort,
+                    georgios.DispatchError.DispatchInvalidMessage => ErrorCode.DispatchInvalidMessage,
+                    georgios.DispatchError.DispatchBrokenCall => ErrorCode.DispatchBrokenCall,
+                    georgios.DispatchError.DispatchOpUnsupported => ErrorCode.DispatchOpUnsupported,
+                    georgios.DispatchError.Unknown => ErrorCode.Unknown,
+                    georgios.DispatchError.OutOfBounds => ErrorCode.OutOfBounds,
+                    georgios.DispatchError.NotEnoughSource => ErrorCode.NotEnoughSource,
+                    georgios.DispatchError.NotEnoughDestination => ErrorCode.NotEnoughDestination,
+                    georgios.DispatchError.OutOfMemory => ErrorCode.OutOfMemory,
+                    georgios.DispatchError.ZeroSizedAlloc => ErrorCode.ZeroSizedAlloc,
+                    georgios.DispatchError.InvalidFree => ErrorCode.InvalidFree,
+                },
                 georgios.BasicError => switch (err) {
                     georgios.BasicError.Unknown => ErrorCode.Unknown,
                     georgios.BasicError.OutOfBounds => ErrorCode.OutOfBounds,
@@ -62,6 +80,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ExecError.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.ExecError.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
                     georgios.ExecError.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
+                    georgios.ExecError.AlreadyExists => ErrorCode.AlreadyExists,
                     georgios.ExecError.Unsupported => ErrorCode.Unsupported,
                     georgios.ExecError.Internal => ErrorCode.Internal,
                     georgios.ExecError.InvalidFileId => ErrorCode.InvalidFileId,
@@ -89,6 +108,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.fs.Error.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.fs.Error.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
                     georgios.fs.Error.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
+                    georgios.fs.Error.AlreadyExists => ErrorCode.AlreadyExists,
                     georgios.fs.Error.Unsupported => ErrorCode.Unsupported,
                     georgios.fs.Error.Internal => ErrorCode.Internal,
                     georgios.fs.Error.InvalidFileId => ErrorCode.InvalidFileId,
@@ -137,6 +157,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                     georgios.ThreadingOrFsError.InvalidFilesystem => ErrorCode.InvalidFilesystem,
                     georgios.ThreadingOrFsError.FilesystemAlreadyMountedHere => ErrorCode.FilesystemAlreadyMountedHere,
                     georgios.ThreadingOrFsError.InvalidOpenOpts => ErrorCode.InvalidOpenOpts,
+                    georgios.ThreadingOrFsError.AlreadyExists => ErrorCode.AlreadyExists,
                     georgios.ThreadingOrFsError.Unsupported => ErrorCode.Unsupported,
                     georgios.ThreadingOrFsError.Internal => ErrorCode.Internal,
                     georgios.ThreadingOrFsError.InvalidFileId => ErrorCode.InvalidFileId,
@@ -163,6 +184,20 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
             return switch (self.*) {
                 Self.value => |value| return value,
                 Self.error_code => |error_code| switch (ErrorType) {
+                    georgios.DispatchError => switch (error_code) {
+                        .DispatchInvalidPort => georgios.DispatchError.DispatchInvalidPort,
+                        .DispatchInvalidMessage => georgios.DispatchError.DispatchInvalidMessage,
+                        .DispatchBrokenCall => georgios.DispatchError.DispatchBrokenCall,
+                        .DispatchOpUnsupported => georgios.DispatchError.DispatchOpUnsupported,
+                        .Unknown => georgios.DispatchError.Unknown,
+                        .OutOfBounds => georgios.DispatchError.OutOfBounds,
+                        .NotEnoughSource => georgios.DispatchError.NotEnoughSource,
+                        .NotEnoughDestination => georgios.DispatchError.NotEnoughDestination,
+                        .OutOfMemory => georgios.DispatchError.OutOfMemory,
+                        .ZeroSizedAlloc => georgios.DispatchError.ZeroSizedAlloc,
+                        .InvalidFree => georgios.DispatchError.InvalidFree,
+                        else => georgios.BasicError.Unknown,
+                    },
                     georgios.BasicError => switch (error_code) {
                         .Unknown => georgios.BasicError.Unknown,
                         .OutOfBounds => georgios.BasicError.OutOfBounds,
@@ -181,6 +216,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidFilesystem => georgios.ExecError.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.ExecError.FilesystemAlreadyMountedHere,
                         .InvalidOpenOpts => georgios.ExecError.InvalidOpenOpts,
+                        .AlreadyExists => georgios.ExecError.AlreadyExists,
                         .Unsupported => georgios.ExecError.Unsupported,
                         .Internal => georgios.ExecError.Internal,
                         .InvalidFileId => georgios.ExecError.InvalidFileId,
@@ -199,7 +235,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidElfFile => georgios.ExecError.InvalidElfFile,
                         .InvalidElfObjectType => georgios.ExecError.InvalidElfObjectType,
                         .InvalidElfPlatform => georgios.ExecError.InvalidElfPlatform,
-                        _ => georgios.BasicError.Unknown,
+                        else => georgios.BasicError.Unknown,
                     },
                     georgios.fs.Error => switch (error_code) {
                         .FileNotFound => georgios.fs.Error.FileNotFound,
@@ -209,6 +245,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidFilesystem => georgios.fs.Error.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.fs.Error.FilesystemAlreadyMountedHere,
                         .InvalidOpenOpts => georgios.fs.Error.InvalidOpenOpts,
+                        .AlreadyExists => georgios.fs.Error.AlreadyExists,
                         .Unsupported => georgios.fs.Error.Unsupported,
                         .Internal => georgios.fs.Error.Internal,
                         .InvalidFileId => georgios.fs.Error.InvalidFileId,
@@ -260,6 +297,7 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
                         .InvalidFilesystem => georgios.ThreadingOrFsError.InvalidFilesystem,
                         .FilesystemAlreadyMountedHere => georgios.ThreadingOrFsError.FilesystemAlreadyMountedHere,
                         .InvalidOpenOpts => georgios.ThreadingOrFsError.InvalidOpenOpts,
+                        .AlreadyExists => georgios.ThreadingOrFsError.AlreadyExists,
                         .Unsupported => georgios.ThreadingOrFsError.Unsupported,
                         .Internal => georgios.ThreadingOrFsError.Internal,
                         .InvalidFileId => georgios.ThreadingOrFsError.InvalidFileId,
@@ -286,6 +324,39 @@ pub fn ValueOrError(comptime ValueType: type, comptime ErrorType: type) type {
     };
 }
 
+
+pub fn send(dispatch: georgios.Dispatch, opts: georgios.SendOpts) callconv(.Inline) georgios.DispatchError!void {
+    var rv: ValueOrError(void, georgios.DispatchError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 100)),
+        [arg1] "{ebx}" (@ptrToInt(&dispatch)),
+        [arg2] "{ecx}" (@ptrToInt(&opts)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
+pub fn recv(dst: georgios.PortId, opts: georgios.RecvOpts) callconv(.Inline) georgios.DispatchError!?georgios.Dispatch {
+    var rv: ValueOrError(?georgios.Dispatch, georgios.DispatchError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 101)),
+        [arg1] "{ebx}" (dst),
+        [arg2] "{ecx}" (@ptrToInt(&opts)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
+
+pub fn call(dispatch: georgios.Dispatch, opts: georgios.CallOpts) callconv(.Inline) georgios.DispatchError!georgios.Dispatch {
+    var rv: ValueOrError(georgios.Dispatch, georgios.DispatchError) = undefined;
+    asm volatile ("int $100" ::
+        [syscall_number] "{eax}" (@as(u32, 102)),
+        [arg1] "{ebx}" (@ptrToInt(&dispatch)),
+        [arg2] "{ecx}" (@ptrToInt(&opts)),
+        [arg3] "{edx}" (@ptrToInt(&rv)),
+        );
+    return rv.get();
+}
 
 pub fn print_string(s: []const u8) callconv(.Inline) void {
     asm volatile ("int $100" ::

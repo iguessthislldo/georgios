@@ -1,7 +1,6 @@
 const georgios = @import("georgios");
 comptime {_ = georgios;}
-const system_calls = georgios.system_calls;
-const print_string = system_calls.print_string;
+const console = georgios.get_console_writer();
 
 pub fn main() u8 {
     var path: []const u8 = ".";
@@ -10,9 +9,7 @@ pub fn main() u8 {
     }
 
     var dir_file = georgios.fs.open(path, .{.ReadOnly = .{.dir = true}}) catch |e| {
-        print_string("ls: open error: ");
-        print_string(@errorName(e));
-        print_string("\n");
+        try console.print("ls: open error: {s}\n", .{@errorName(e)});
         return 1;
     };
     defer dir_file.close() catch unreachable;
@@ -20,14 +17,11 @@ pub fn main() u8 {
     var entry_buffer: [256]u8 = undefined;
     while (true) {
         const read = dir_file.read(entry_buffer[0..]) catch |e| {
-            print_string("ls: read error: ");
-            print_string(@errorName(e));
-            print_string("\n");
+            try console.print("ls: read error: {s}\n", .{@errorName(e)});
             return 1;
         };
         if (read == 0) break;
-        system_calls.print_string(entry_buffer[0..read]);
-        system_calls.print_string("\n");
+        try console.print("{s}\n", .{entry_buffer[0..read]});
     }
 
     return 0;

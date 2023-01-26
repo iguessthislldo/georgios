@@ -133,6 +133,14 @@ pub fn build(builder: *std.build.Builder) void {
         "scripts/codegen/generate_system_calls.py"
     });
     kernel.step.dependOn(&generate_system_calls_step.step);
+    // IDL Files
+    const idl_files = [_][]const u8 {
+        "libs/georgios/fs.idl",
+    };
+    for (idl_files) |idl_file| {
+        const step = b.addSystemCommand(&[_][]const u8{"scripts/codegen/genif.py", idl_file});
+        kernel.step.dependOn(&step.step);
+    }
     // bios_int/libx86emu
     build_bios_int();
     // ACPICA

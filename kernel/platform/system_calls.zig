@@ -70,6 +70,57 @@ pub fn handle(_: u32, interrupt_stack: *const interrupts.Stack) void {
         // TODO: Documentation Comments
         // TODO: C alternative interface syscalls?
 
+        // SYSCALL: send(&dispatch: georgios.Dispatch, &opts: georgios.SendOpts) georgios.DispatchError!void
+        100 => {
+            const E = georgios.DispatchError;
+            const ValueOrError = ValueOrErrorT(void, E);
+            const dispatch = @intToPtr(*georgios.Dispatch, arg1);
+            const opts = @intToPtr(*georgios.SendOpts, arg2);
+            const rv = @intToPtr(*ValueOrError, arg3);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.dispatcher.send(dispatch.*, opts.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
+            } else {
+                rv.set_error(E.Unknown);
+            }
+        },
+
+        // SYSCALL: recv(dst: georgios.PortId, &opts: georgios.RecvOpts) georgios.DispatchError!?georgios.Dispatch
+        101 => {
+            const E = georgios.DispatchError;
+            const ValueOrError = ValueOrErrorT(?georgios.Dispatch, E);
+            const dst = arg1;
+            const opts = @intToPtr(*georgios.RecvOpts, arg2);
+            const rv = @intToPtr(*ValueOrError, arg3);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.dispatcher.recv(dst, opts.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
+            } else {
+                rv.set_error(E.Unknown);
+            }
+        },
+
+        // SYSCALL: call(&dispatch: georgios.Dispatch, &opts: georgios.CallOpts) georgios.DispatchError!georgios.Dispatch
+        102 => {
+            const E = georgios.DispatchError;
+            const ValueOrError = ValueOrErrorT(georgios.Dispatch, E);
+            const dispatch = @intToPtr(*georgios.Dispatch, arg1);
+            const opts = @intToPtr(*georgios.CallOpts, arg2);
+            const rv = @intToPtr(*ValueOrError, arg3);
+            if (kernel.threading_mgr.current_process) |p| {
+                rv.set_value(p.dispatcher.call(dispatch.*, opts.*) catch |e| {
+                    rv.set_error(e);
+                    return;
+                });
+            } else {
+                rv.set_error(E.Unknown);
+            }
+        },
+
         // SYSCALL: print_string(&s: []const u8) void
         0 => print.string(@intToPtr(*[]const u8, arg1).*),
 

@@ -4,11 +4,15 @@ const builtin = @import("builtin");
 pub const utils = @import("utils");
 
 pub const system_calls = @import("system_calls.zig");
+pub const send = system_calls.send;
+pub const recv = system_calls.recv;
+pub const call = system_calls.call;
 pub const start = @import("start.zig");
 pub const keyboard = @import("keyboard.zig");
 pub const io = @import("io.zig");
 pub const memory = @import("memory.zig");
 pub const ImgFile = @import("ImgFile.zig");
+pub const Directory = @import("fs.zig").Directory;
 
 pub var page_allocator: std.mem.Allocator = undefined;
 
@@ -62,6 +66,7 @@ pub const fs = struct {
         InvalidFilesystem,
         FilesystemAlreadyMountedHere,
         InvalidOpenOpts,
+        AlreadyExists,
     } || io.FileError;
 
     pub const OpenOptsKind = enum {
@@ -150,6 +155,11 @@ pub const fs = struct {
     pub fn fopen(path: []const u8, mode: []const u8) Error!io.File {
         return open(path, try OpenOpts.from_fopen_mode(mode));
     }
+
+    pub const NodeKind = struct {
+        file: bool = false,
+        directory: bool = false,
+    };
 };
 
 pub const BasicError = utils.Error || memory.MemoryError;
@@ -211,3 +221,48 @@ pub const MouseEvent = struct {
     lmb_pressed: bool,
     delta: utils.Point(i32),
 };
+
+pub const DispatchError = error {
+    DispatchInvalidPort,
+    DispatchInvalidMessage,
+    DispatchBrokenCall,
+    DispatchOpUnsupported,
+} || BasicError;
+
+pub const PortId = u32;
+pub const MetaPort: PortId = 1;
+pub const FirstDynamicPort = MetaPort;
+
+pub const Dispatch = struct {
+    msg: []const u8,
+    dst: PortId = 0,
+    src: PortId = 0,
+};
+
+pub const Blocks = union (enum) {
+    NonBlocking,
+    Blocking: ?u32,
+};
+
+pub const SendOpts = struct {
+    blocks: Blocks = .{.Blocking = null},
+};
+
+pub const RecvOpts = struct {
+    blocks: Blocks = .{.Blocking = null},
+};
+
+pub const CallOpts = struct {
+    blocks: Blocks = .{.Blocking = null},
+};
+
+pub fn msg_cast(comptime T: type, dispatch: Dispatch) DispatchError!*const T {
+    if (dispatch.msg.len == @sizeOf(T)) {
+        return @alignCast(@alignOf(T), &std.mem.bytesAsSlice(T, dispatch.msg)[0]);
+    }
+    return DispatchError.DispatchInvalidMessage;
+}
+
+pub fn send_value(value: anytype, dst: PortId, opts: SendOpts) DispatchError!void {
+    try send(.{.msg = std.mem.asBytes(value), .dst = dst}, opts);
+}

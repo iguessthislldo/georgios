@@ -4,5 +4,6 @@
 /*.img.lock
 /bochslog.txt
 /bx_enh_dbg.ini
+/.venv
 zig-cache
 zig-out

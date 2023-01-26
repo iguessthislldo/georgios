@@ -16,7 +16,9 @@ jobs:
                   submodules: true
 
             - name: Install Packages
-              run: sudo apt-get install grub-pc-bin
+              run: |
+                sudo apt-get install grub-pc-bin
+                pip install --user ./scripts/codegen/bridle
 
             - name: Get Zig
               run: |
