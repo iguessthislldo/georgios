@@ -2,13 +2,15 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 pub const Error = Allocator.Error;
 
+const utils = @import("utils.zig");
+
 pub fn List(comptime Type: type) type {
     return struct {
         const Self = @This();
 
         pub const Node = struct {
-            next: ?*Node,
-            prev: ?*Node,
+            next: ?*Node = null,
+            prev: ?*Node = null,
             value: Type,
         };
 
@@ -71,10 +73,14 @@ pub fn List(comptime Type: type) type {
             self.len += 1;
         }
 
-        pub fn push_front(self: *Self, value: Type) Error!void {
+        pub fn create_node(self: *Self, value: Type) Error!*Node{
             const node = try self.alloc.create(Node);
-            node.value = value;
-            self.push_front_node(node);
+            node.* = .{.value = value};
+            return node;
+        }
+
+        pub fn push_front(self: *Self, value: Type) Error!void {
+            self.push_front_node(try self.create_node(value));
         }
 
         pub fn pop_front_node(self: *Self) ?*Node {
@@ -114,9 +120,7 @@ pub fn List(comptime Type: type) type {
         }
 
         pub fn push_back(self: *Self, value: Type) Error!void {
-            const node = try self.alloc.create(Node);
-            node.value = value;
-            self.push_back_node(node);
+            self.push_back_node(try self.create_node(value));
         }
 
         pub fn pop_back_node(self: *Self) ?*Node {
@@ -142,6 +146,54 @@ pub fn List(comptime Type: type) type {
             self.push_back_node(node);
         }
 
+        pub fn insert_node_before(self: *Self, before_maybe: ?*Node, insert: *Node) void {
+            if (before_maybe == null) {
+                self.push_back_node(insert);
+                return;
+            }
+            const before = before_maybe.?;
+            if (before.prev == insert) {
+                return;
+            }
+            insert.prev = before.prev;
+            insert.next = before;
+            before.prev = insert;
+            if (insert.prev) |after| {
+                after.next = insert;
+            } else {
+                self.head = insert;
+            }
+            self.len += 1;
+        }
+
+        pub fn insert_before(self: *Self, before: ?*Node, value: Type) Error!void {
+            self.insert_node_before(before, try self.create_node(value));
+        }
+
+        pub fn insert_node_after(self: *Self, after_maybe: ?*Node, insert: *Node) void {
+            if (after_maybe == null) {
+                self.push_front_node(insert);
+                return;
+            }
+            const after = after_maybe.?;
+            if (after.next == insert) {
+                return;
+            }
+            insert.prev = after;
+            insert.next = after.next;
+            after.next = insert;
+            if (insert.next) |before| {
+                before.prev = insert;
+            } else {
+                self.tail = insert;
+            }
+            self.len += 1;
+        }
+
+        pub fn insert_after(self: *Self, after: ?*Node, value: Type) Error!void {
+            self.insert_node_after(after, try self.create_node(value));
+        }
+
         pub fn push_back_list(self: *Self, other: *Self) void {
             if (other.head) |other_head| {
                 other_head.prev = self.tail;
@@ -157,6 +209,17 @@ pub fn List(comptime Type: type) type {
                 other.tail = null;
                 other.len = 0;
             }
+        }
+
+        pub fn to_slice(self: *Self) Error![]Type {
+            const slice = try self.alloc.alloc(Type, self.len);
+            var it = self.iterator();
+            var i: usize = 0;
+            while (it.next()) |value| {
+                slice[i] = value;
+                i += 1;
+            }
+            return slice;
         }
 
         pub fn clear(self: *Self) void {
@@ -211,9 +274,10 @@ pub fn List(comptime Type: type) type {
 test "List" {
     const equal = std.testing.expectEqual;
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const alloc = arena.allocator();
-    defer arena.deinit();
+    var ta = utils.TestAlloc{};
+    defer ta.deinit(.Panic);
+    errdefer ta.deinit(.NoPanic);
+    const alloc = ta.alloc();
 
     const UsizeList = List(usize);
     var list = UsizeList{.alloc = alloc};
@@ -258,19 +322,40 @@ test "List" {
     try equal(niln, list.head);
     try equal(niln, list.tail);
 
-    // Push Some Values
-    try list.push_front(1);
+    // Push and insert values
+    try list.push_front(20);
+    // Now: >20<
+    const n20 = list.head;
     try equal(@as(usize, 1), list.len);
-    try list.push_back(2);
-    try list.push_front(3);
+    try list.push_back(3);
+    // Now: 20 >3<
+    const n3 = list.tail;
     try list.push_front(10);
-    try equal(@as(usize, 4), list.len);
+    // Now: >10< 20 3
+    try list.insert_after(null, 1);
+    // Now: >1< 10 20 3
+    try list.insert_after(n3, 4);
+    // Now: 1 10 20 3 >4<
+    try list.insert_before(list.head, 0);
+    // Now: >0< 1 10 20 3 4
+    try list.insert_after(n3, 30);
+    // Now: 0 1 10 20 3 >30< 4
+    try list.insert_before(null, 999);
+    // Now: 0 1 10 20 3 30 4 >999<
+    try list.insert_before(n20, 11);
+    // Now: 0 1 10 >11< 20 3 30 4 999
+    try list.insert_before(list.tail, 40);
+    // Now: 0 1 10 20 3 30 4 >40< 999
 
-    // pop_back The Values
-    try equal(@as(usize, 10), list.pop_front().?);
-    try equal(@as(usize, 3), list.pop_front().?);
-    try equal(@as(usize, 1), list.pop_front().?);
-    try equal(@as(usize, 2), list.pop_front().?);
+    // Test to_slice and using pop_front
+    const expected2 = [_]usize{0, 1, 10, 11, 20, 3, 30, 4, 40, 999};
+    try equal(@as(usize, expected2.len), list.len);
+    const slice = try list.to_slice();
+    defer alloc.free(slice);
+    for (expected2) |val, n| {
+        try equal(expected2[n], val);
+        try equal(expected2[n], list.pop_front().?);
+    }
 
     // It's empty yet again
     try equal(@as(usize, 0), list.len);
