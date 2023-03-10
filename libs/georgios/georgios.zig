@@ -13,6 +13,7 @@ pub const io = @import("io.zig");
 pub const memory = @import("memory.zig");
 pub const ImgFile = @import("ImgFile.zig");
 pub const Directory = @import("fs.zig").Directory;
+pub const Console = @import("Console.zig");
 
 pub var page_allocator: std.mem.Allocator = undefined;
 

@@ -6,6 +6,7 @@ const no_max = std.math.maxInt(usize);
 const utils = @import("utils");
 const georgios = @import("georgios");
 pub const console_writer = georgios.get_console_writer();
+pub const Console = georgios.Console;
 
 pub const platform = @import("platform.zig");
 pub const fprint = @import("fprint.zig");
@@ -20,7 +21,6 @@ pub const sync = @import("sync.zig");
 pub const keys = @import("keys.zig");
 pub const builtin_font_data = @import("builtin_font_data.zig");
 pub const BitmapFont = @import("BitmapFont.zig");
-pub const Console = @import("Console.zig");
 pub const List = @import("list.zig").List;
 pub const dispatching = @import("dispatching.zig");
 
