@@ -11,7 +11,6 @@ pub const start = @import("start.zig");
 pub const keyboard = @import("keyboard.zig");
 pub const io = @import("io.zig");
 pub const memory = @import("memory.zig");
-pub const ImgFile = @import("ImgFile.zig");
 pub const Directory = @import("fs.zig").Directory;
 pub const Console = @import("Console.zig");
 
