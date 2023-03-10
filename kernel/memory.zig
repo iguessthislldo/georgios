@@ -6,6 +6,7 @@ const utils = @import("utils");
 const kernel = @import("kernel.zig");
 const print = @import("print.zig");
 const MinBuddyAllocator = @import("buddy_allocator.zig").MinBuddyAllocator;
+const console_writer = kernel.console_writer;
 
 const platform = @import("platform.zig");
 
@@ -224,6 +225,7 @@ pub const Manager = struct {
     const AllocImplType = MinBuddyAllocator(alloc_size);
 
     impl: platform.MemoryMgrImpl = .{},
+    total_frame_count: usize = 0,
     free_frame_count: usize = 0,
     alloc_range: Range = undefined,
     alloc_impl_range: Range = undefined,
@@ -286,14 +288,10 @@ pub const Manager = struct {
         kernel.big_alloc = self.big_alloc;
     }
 
-    pub fn free_pmem(self: *Manager, frame: usize) void {
-        self.impl.push_frame(frame);
-        self.free_frame_count += 1;
-    }
-
-    pub fn alloc_pmem(self: *Manager) AllocError!usize {
-        const frame = try self.impl.pop_frame();
-        self.free_frame_count -= 1;
-        return frame;
+    pub fn print_status(self: *Manager) void {
+        const free_size = std.fmt.fmtIntSizeBin(self.free_frame_count * platform.frame_size);
+        const total_size = std.fmt.fmtIntSizeBin(self.total_frame_count * platform.frame_size);
+        try console_writer.print("{}/{} free frames totaling {}/{}\n",
+            .{self.free_frame_count, self.total_frame_count, free_size, total_size});
     }
 };

@@ -198,7 +198,7 @@ pub fn quick_debug() void {
     print.string("\nSTART QUICK DEBUG =============================================================\n");
     print.format("{} processes {} threads\n",
         .{threading_mgr.process_list.len(), threading_mgr.thread_list.len()});
-    // TODO: More info like memory usage
+    memory_mgr.print_status();
     print.string("END QUICK DEBUG ===============================================================\n");
 }
 

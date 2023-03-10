@@ -282,15 +282,15 @@ pub const ManagerImpl = struct {
         page_table_frame_access_slot.init();
         page_frame_access_slot.init();
 
-        // var total_count: usize = 0;
         for (memory_map.frame_groups[0..memory_map.frame_group_count]) |*i| {
-            // total_count += i.frame_count;
+            parent.total_frame_count += i.frame_count;
             var frame: usize = 0;
             while (frame < i.frame_count) {
                 self.push_frame(i.start + frame * frame_size);
                 frame += 1;
             }
         }
+        parent.free_frame_count = parent.total_frame_count;
 
         // var counted: usize = 0;
         // while (true) {
@@ -316,6 +316,7 @@ pub const ManagerImpl = struct {
         access.done();
         // Point to that frame.
         self.next_free_frame = frame;
+        self.parent.free_frame_count += 1;
     }
 
     pub fn pop_frame(self: *ManagerImpl) AllocError!usize {
@@ -326,6 +327,7 @@ pub const ManagerImpl = struct {
             const access = access_free_frame(frame);
             self.next_free_frame = access.get().*;
             access.done();
+            self.parent.free_frame_count -= 1;
             // Return the previous next_free_frame
             return prev;
         }
