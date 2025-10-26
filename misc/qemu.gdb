@@ -20,7 +20,6 @@ target remote | qemu-system-i386 \
     -no-reboot \
     -D tmp/qemu.log \
     -d int,cpu_reset,guest_errors \
-    -soundhw pcspk \
     -usb \
     -device usb-ehci,id=ehci \
     -drive if=none,id=flashdrive,file=usbdrive.img,format=raw \

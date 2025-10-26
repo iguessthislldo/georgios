@@ -63,7 +63,7 @@ version_regex = r'({f})\.({f})\.({f})(?:-dev\.(\d+))?'.format(f=field)
 version_re = re.compile(version_regex)
 current_re = re.compile(
     r'(.*\[Zig\]\(https:\/\/ziglang.org\/\) )(?P<ver>{}.*)$'.format(version_regex))
-zig_name_re = re.compile('zig-([\w-]+)-(?P<ver>{}.*)$'.format(version_regex))
+zig_name_re = re.compile(r'zig-([\w-]+)-(?P<ver>{}.*)$'.format(version_regex))
 
 
 @functools.total_ordering
